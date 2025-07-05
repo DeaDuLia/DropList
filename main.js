@@ -14,8 +14,6 @@ db.exec(`
 db.exec(`
   INSERT OR IGNORE INTO game_ratings (game_rating)
   VALUES
-  ('completed'),
-  ('Now playing'),
   ('0'),
   ('1'),
   ('2'),
@@ -30,6 +28,21 @@ db.exec(`
 `);
 
 db.exec(`
+  CREATE TABLE IF NOT EXISTS game_statuses (
+    status TEXT PRIMARY KEY
+  )
+`);
+
+db.exec(`
+  INSERT OR IGNORE INTO game_statuses (status)
+  VALUES
+  ('Не играл'),
+  ('Играл'),
+  ('Играю сейчас'),
+  ('Пройдено')
+`);
+
+db.exec(`
   CREATE TABLE IF NOT EXISTS game_tags (
     tag_name TEXT PRIMARY KEY
   )
@@ -41,6 +54,7 @@ db.exec(`
     game_ico_url TEXT,
     game_video_url TEXT,
     game_rating TEXT,
+    game_status TEXT,
     FOREIGN KEY (game_rating)  REFERENCES game_ratings (game_rating)
   )
 `);
@@ -60,10 +74,7 @@ function createWindow() {
         width: 800,
         height: 600,
         webPreferences: {
-            partition: 'youtube-partition',
-            webSecurity: true,
             nodeIntegration: false,
-            contextIsolation: true,
             preload: path.join(__dirname, 'preload.js')
         }
     });
@@ -80,7 +91,8 @@ ipcMain.handle('get-games-with-tags', () => {
       game_name as gameName,
       game_ico_url as icoUrl,
       game_video_url as videoUrl,
-      game_rating as gameRating
+      game_rating as gameRating,
+      game_status as gameStatus
     FROM games
   `).all();
 });
@@ -88,14 +100,15 @@ ipcMain.handle('get-games-with-tags', () => {
 ipcMain.handle('add-game', (event, gameData) => {
     const stmt = db.prepare(`
     INSERT OR REPLACE INTO games 
-    (game_name, game_ico_url, game_video_url, game_rating) 
-    VALUES (?, ?, ?, ?)
+    (game_name, game_ico_url, game_video_url, game_rating, game_status) 
+    VALUES (?, ?, ?, ?, ?)
   `);
     return stmt.run(
         gameData.name,
         gameData.icoUrl || null,
         gameData.videoUrl || null,
-        gameData.rating
+        gameData.rating,
+        gameData.status || 'Не играл'
     );
 });
 
@@ -103,4 +116,15 @@ ipcMain.handle('get-game-ratings', () => {
     return db.prepare('SELECT game_rating FROM game_ratings')
         .all()
         .map(row => row.game_rating);
+});
+
+ipcMain.handle('get-game-statuses', () => {
+    return db.prepare('SELECT status FROM game_statuses')
+        .all()
+        .map(row => row.status);
+});
+
+ipcMain.handle('delete-game', (event, gameName) => {
+    const stmt = db.prepare('DELETE FROM games WHERE game_name = ?');
+    return stmt.run(gameName);
 });
