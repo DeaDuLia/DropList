@@ -2,7 +2,11 @@ const { app, BrowserWindow, ipcMain } = require('electron');
 const path = require('path');
 const Database = require('better-sqlite3');
 
-const db = new Database('database.db');
+const db = new Database('database.db', {
+    verbose: console.log, // для отладки
+    timeout: 5000 // увеличить таймаут ожидания
+});
+db.pragma('journal_mode = WAL');
 
 // Создаём таблицы при запуске
 db.exec(`
@@ -36,10 +40,12 @@ db.exec(`
 db.exec(`
   INSERT OR IGNORE INTO statuses (status)
   VALUES
-  ('Не играл'),
-  ('Играл'),
-  ('Играю сейчас'),
-  ('Завершено')
+  ('Уточнить'),
+  ('Смотрел'),
+  ('В планах'),
+  ('В процессе'),
+  ('Завершено'),
+  ('Избранное')
 `);
 
 db.exec(`
@@ -71,6 +77,20 @@ db.exec(`
   )
 `);
 
+const statements = {
+    getGames: db.prepare(`
+        SELECT name as gameName, ico_url as icoUrl, 
+               rating as gameRating, status as gameStatus 
+        FROM games`),
+    addGame: db.prepare(`
+        INSERT OR REPLACE INTO games 
+        (name, ico_url, rating, status) 
+        VALUES (?, ?, ?, ?)`),
+    deleteGame: db.prepare('DELETE FROM games WHERE name = ?'),
+    updateRating: db.prepare('UPDATE games SET rating = ? WHERE name = ?'),
+    updateStatus: db.prepare('UPDATE games SET status = ? WHERE name = ?')
+};
+
 function createWindow() {
     const win = new BrowserWindow({
         width: 800,
@@ -87,29 +107,28 @@ function createWindow() {
 
 app.whenReady().then(createWindow);
 
+app.on('before-quit', () => {
+    db.pragma('wal_checkpoint(FULL)');
+    db.close();
+});
+
+setInterval(() => {
+    db.pragma('wal_checkpoint(RESTART)');
+}, 30000);
+
 ipcMain.handle('get-games-with-tags', () => {
-    return db.prepare(`
-    SELECT 
-      name as gameName,
-      ico_url as icoUrl,
-      rating as gameRating,
-      status as gameStatus
-    FROM games
-  `).all();
+    return statements.getGames.all();
 });
 
 ipcMain.handle('add-game', (event, gameData) => {
-    const stmt = db.prepare(`
-    INSERT OR REPLACE INTO games 
-    (name, ico_url, rating, status) 
-    VALUES (?, ?, ?, ?)
-  `);
-    return stmt.run(
-        gameData.name,
-        gameData.icoUrl || null,
-        gameData.rating,
-        gameData.status || 'Не играл'
-    );
+    return db.transaction(() => {
+        return statements.addGame.run(
+            gameData.name,
+            gameData.icoUrl || null,
+            gameData.rating,
+            gameData.status || 'Не играл'
+        );
+    })();
 });
 
 ipcMain.handle('get-game-ratings', () => {

@@ -42,6 +42,7 @@
         const errorModal = document.getElementById('errorModal');
         const modalMessage = document.getElementById('modalMessage');
         const modalClose = document.getElementById('modalClose');
+        let isAddingGame = false;
 
         // Функция отображения ошибок
         function showError(message) {
@@ -123,6 +124,8 @@
 
         // Добавление новой игры
         async function addNewGame() {
+            if (isAddingGame) return;
+            isAddingGame = true;
             const nameInput = document.getElementById('nameInput');
             const icoInput = document.getElementById('icoInput');
             const ratingSelect = document.getElementById('ratingSelect');
@@ -149,6 +152,8 @@
             } catch (error) {
                 console.error('Ошибка при добавлении игры:', error);
                 await showError(`Ошибка при добавлении игры: ${error.message}`);
+            } finally {
+                isAddingGame = false;
             }
         }
 
@@ -200,42 +205,71 @@
 
         async function renderSection(section, data) {
             const contentSection = document.getElementById('contentSection');
-            let title = '';
-            let content = '';
+            if (!contentSection) return;
 
-            switch(section) {
-                case 'games':
-                    title = '🎮 Игры';
-                    content = `
-                        ${getAddFormHTML()}
-                        ${renderGamesList(data)}
-                    `;
-                    break;
-                // ... остальные разделы
-            }
+            // Создаем карту для хранения функций рендеринга каждого раздела
+            const sectionRenderers = {
+                games: () => renderGamesSection(data),
+                // Добавьте другие разделы по мере необходимости
+            };
 
+            // Получаем соответствующий рендерер или используем заглушку
+            const renderer = sectionRenderers[section] || (() => `<h1>Раздел "${section}" в разработке</h1>`);
+
+            // Рендерим контент
             contentSection.innerHTML = `
-        <h1 class="section-title">${title}</h1>
-        ${content}
+        <h1 class="section-title">${getSectionTitle(section)}</h1>
+        ${await renderer()}
     `;
 
+            // Инициализация только для нужного раздела
             if (section === 'games') {
-                await loadRatings();
-                await loadStatuses();
-                setupDeleteButtons();
-                setupEditableFields();
-                setupEventListeners();
-                setupAddFormToggle();
+                await initGamesSection();
+            }
 
-                // Всегда скрываем форму после рендеринга
-                const addForm = document.getElementById('addForm');
-                if (addForm) {
-                    addForm.classList.remove('visible');
-                }
-                const toggleBtn = document.getElementById('toggleAddFormBtn');
-                if (toggleBtn) {
-                    toggleBtn.textContent = '+ Добавить';
-                }
+            // Всегда скрываем форму добавления
+            hideAddForm();
+        }
+
+        // Вспомогательные функции
+        function getSectionTitle(section) {
+            const titles = {
+                games: '🎮 Игры',
+                movies: '🎬 Кино',
+                series: '📺 Сериалы',
+                anime: '🌸 Аниме',
+                books: '📚 Книги'
+            };
+            return titles[section] || section;
+        }
+
+        async function renderGamesSection(games) {
+            return `
+                ${getAddFormHTML()}
+                ${renderGamesList(games)}
+            `;
+        }
+
+        async function initGamesSection() {
+            await Promise.all([
+                loadRatings(),
+                loadStatuses()
+            ]);
+
+            setupDeleteButtons();
+            setupEditableFields();
+            setupEventListeners();
+            setupAddFormToggle();
+        }
+
+        function hideAddForm() {
+            const addForm = document.getElementById('addForm');
+            if (addForm) {
+                addForm.classList.remove('visible');
+            }
+            const toggleBtn = document.getElementById('toggleAddFormBtn');
+            if (toggleBtn) {
+                toggleBtn.textContent = '+ Добавить';
             }
         }
 
@@ -299,6 +333,11 @@
         }
 
         function setupDeleteButtons() {
+            const oldButtons = document.querySelectorAll('.delete-btn');
+            oldButtons.forEach(btn => {
+                btn.replaceWith(btn.cloneNode(true)); // Это удалит все привязанные обработчики
+            });
+
             document.querySelectorAll('.delete-btn').forEach(btn => {
                 btn.addEventListener('click', async (e) => {
                     e.stopPropagation(); // Предотвращаем всплытие события
@@ -316,6 +355,11 @@
         }
 
         function setupEditableFields() {
+            const oldFields = document.querySelectorAll('.editable-field');
+            oldFields.forEach(field => {
+                field.replaceWith(field.cloneNode(true)); // Это удалит все привязанные обработчики
+            });
+
             document.querySelectorAll('.editable-field').forEach(field => {
                 // Меняем курсор при наведении
                 field.style.cursor = 'pointer';

@@ -23,6 +23,8 @@
     --rating-played: #a29bfe;
     --rating-playing: #1abc9c; /* Фиолетовый */
     --rating-completed: #27ae60; /* Бирюзовый */
+    --rating-pined: #aa8f02; /* Бирюзовый */
+    --rating-planed: #0296aa; /* Бирюзовый */
 }
 
 body {
@@ -109,22 +111,26 @@ h1 {
 }
 
 /* Специальные статусы */
-.game-status[data-status="Не играл"] {
+.game-status[data-status="Уточнить"] {
     background-color: var(--rating-not-played);
 }
-.game-status[data-status="Играл"] {
+.game-status[data-status="Смотрел"] {
     background-color: var(--rating-played);
-    animation: pulse 2s infinite;
 }
-.game-status[data-status="Играю сейчас"] {
+.game-status[data-status="В процессе"] {
     background-color: var(--rating-playing);
-    animation: pulse 2s infinite;
+}
+.game-status[data-status="В планах"] {
+    background-color: var(--rating-planed);
 }
 .game-status[data-status="Завершено"] {
     background-color: var(--rating-completed);
     animation: pulse 2s infinite;
 }
-
+.game-status[data-status="Избранное"] {
+    background-color: var(--rating-pined);
+    animation: pulse 2s infinite;
+}
 .game-status[data-status="Завершено"] {
     background-color: var(--rating-completed);
     position: relative;
@@ -132,6 +138,19 @@ h1 {
 }
 .game-status[data-status="Завершено"]::before {
     content: "✓";
+    position: absolute;
+    left: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.game-status[data-status="Избранное"] {
+    background-color: var(--rating-pined);
+    position: relative;
+    padding-left: 25px;
+}
+.game-status[data-status="Избранное"]::before {
+    content: "⭐";
     position: absolute;
     left: 8px;
     top: 50%;
