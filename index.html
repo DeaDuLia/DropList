@@ -6,41 +6,31 @@
     <link rel="stylesheet" href="game_styles.css">
 </head>
 <body>
-    <h1>🎮 Game Collection</h1>
-    <div class="add-game-form">
-        <div class="form-group">
-            <label for="nameInput">Название игры</label>
-            <input id="nameInput" placeholder="Введите название игры">
-        </div>
+    <header class="main-header">
+        <nav class="main-nav">
+            <ul class="nav-list">
+                <li class="nav-item active" data-section="games">
+                    <span>🎮 Игры</span>
+                </li>
+                <li class="nav-item" data-section="movies">
+                    <span>🎬 Кино</span>
+                </li>
+                <li class="nav-item" data-section="series">
+                    <span>📺 Сериалы</span>
+                </li>
+                <li class="nav-item" data-section="anime">
+                    <span>🌸 Аниме</span>
+                </li>
+                <li class="nav-item" data-section="books">
+                    <span>📚 Книги</span>
+                </li>
+            </ul>
+        </nav>
+        <button id="toggleAddFormBtn" class="add-button">+ Добавить</button>
+    </header>
+    <div id="contentSection" class="content-section">
 
-        <div class="form-group">
-            <label for="icoInput">Обложка игры</label>
-            <input id="icoInput" placeholder="https://example.com/icon.jpg">
-        </div>
-
-        <div class="form-group">
-            <label for="videoInput">Трейлер игры</label>
-            <input id="videoInput" placeholder="https://youtu.be/example">
-        </div>
-
-        <div class="form-group">
-            <label for="ratingSelect">Рейтинг</label>
-            <select id="ratingSelect">
-                <option value="0">Рейтинг</option>
-            </select>
-        </div>
-
-        <div class="form-group">
-            <label for="statusSelect">Статус</label>
-            <select id="statusSelect">
-                <option value="Не играл">Не играл</option>
-            </select>
-        </div>
-
-        <button id="addBtn">Add Game</button>
     </div>
-
-    <div id="gamesList" class="games-grid"></div>
     <div id="errorModal" class="modal">
         <div class="modal-content">
             <p id="modalMessage"></p>
@@ -69,7 +59,11 @@
         document.addEventListener('DOMContentLoaded', async () => {
             await loadRatings();
             await loadStatuses();
-            await loadGames();
+
+            // Загружаем игры по умолчанию
+            const games = await window.electronAPI.getGamesWithTags();
+            await renderSection('games', games);
+
             setupEventListeners();
         });
 
@@ -77,10 +71,13 @@
         async function loadRatings() {
             try {
                 const ratings = await window.electronAPI.getGameRatings();
-                ratingSelect.innerHTML = `
-                <option value="0">Рейтинг</option>
-                ${ratings.map(r => `<option value="${r}">${r}</option>`).join('')}
-                `;
+                const ratingSelect = document.getElementById('ratingSelect');
+                if (ratingSelect) {
+                    ratingSelect.innerHTML = `
+            <option value="0">Рейтинг</option>
+            ${ratings.map(r => `<option value="${r}">${r}</option>`).join('')}
+            `;
+                }
             } catch (error) {
                 console.error('Error loading ratings:', error);
                 await showError('Failed to load ratings');
@@ -90,9 +87,12 @@
         async function loadStatuses() {
             try {
                 const statuses = await window.electronAPI.getGameStatuses();
-                statusSelect.innerHTML = `
-                ${statuses.map(s => `<option value="${s}">${s}</option>`).join('')}
-                `;
+                const statusSelect = document.getElementById('statusSelect');
+                if (statusSelect) {
+                    statusSelect.innerHTML = `
+            ${statuses.map(s => `<option value="${s}">${s}</option>`).join('')}
+            `;
+                }
             } catch (error) {
                 console.error('Error loading statuses:', error);
             }
@@ -108,34 +108,41 @@
                 await showError('Failed to load games');
             }
         }
-
         // Отрисовка игр
         function renderGames(games) {
-            gamesList.innerHTML = games.map(game => `
-                <div class="game-card" data-game-name="${game.gameName}">
-                    <button class="delete-btn" data-game="${game.gameName}">🗑️</button>
-                    ${getGameIconHTML(game)}
-                    <div class="game-info">
-                        <h3 class="game-title">${game.gameName}</h3>
-                        <div class="game-ratings-container">
-                            <span class="game-rating rating-value editable-field"
-                                  data-rating="${game.gameRating}"
-                                  data-game="${game.gameName}"
-                                  title="Редактировать">
-                                ${game.gameRating || 'Не оценено'}
-                            </span>
-                            <span class="game-status status-value editable-field"
-                                  data-status="${game.gameStatus}"
-                                  data-game="${game.gameName}"
-                                  title="Редактировать">
-                                ${game.gameStatus || 'Не играл'}
-                            </span>
+            const contentSection = document.getElementById('contentSection');
+
+            // Очищаем секцию и добавляем заголовок и контейнер для игр
+            contentSection.innerHTML = `
+                <h1 class="section-title">🎮 Игры</h1>
+                <div id="gamesList" class="games-grid">
+                    ${games.map(game => `
+                        <div class="game-card" data-game-name="${game.gameName}">
+                            <button class="delete-btn" data-game="${game.gameName}">🗑️</button>
+                            ${getGameIconHTML(game)}
+                            <div class="game-info">
+                                <h3 class="game-title">${game.gameName}</h3>
+                                <div class="game-ratings-container">
+                                    <span class="game-rating rating-value editable-field"
+                                          data-rating="${game.gameRating}"
+                                          data-game="${game.gameName}"
+                                          title="Редактировать">
+                                        ${game.gameRating || 'Не оценено'}
+                                    </span>
+                                    <span class="game-status status-value editable-field"
+                                          data-status="${game.gameStatus}"
+                                          data-game="${game.gameName}"
+                                          title="Редактировать">
+                                        ${game.gameStatus || 'Не играл'}
+                                    </span>
+                                </div>
+                            </div>
                         </div>
-                    </div>
+                    `).join('')}
                 </div>
-            `).join('');
+            `;
             setupDeleteButtons();
-            setupEditableFields(); // Добавляем обработчики для редактируемых полей
+            setupEditableFields();
         }
 
         function setupDeleteButtons() {
@@ -255,6 +262,12 @@
 
         // Добавление новой игры
         async function addNewGame() {
+            const nameInput = document.getElementById('nameInput');
+            const icoInput = document.getElementById('icoInput');
+            const videoInput = document.getElementById('videoInput');
+            const ratingSelect = document.getElementById('ratingSelect');
+            const statusSelect = document.getElementById('statusSelect');
+
             const gameData = {
                 name: nameInput.value.trim(),
                 icoUrl: icoInput.value.trim(),
@@ -278,7 +291,8 @@
             try {
                 await window.electronAPI.addGame(gameData);
                 resetForm();
-                await loadGames();
+                const games = await window.electronAPI.getGamesWithTags();
+                await renderSection('games', games);
             } catch (error) {
                 console.error('Ошибка при добавлении игры:', error);
                 await showError(`Ошибка при добавлении игры: ${error.message}`);
@@ -287,18 +301,169 @@
 
         // Сброс формы
         function resetForm() {
-            nameInput.value = '';
-            icoInput.value = '';
-            videoInput.value = '';
-            ratingSelect.value = '0';
-            statusSelect.value = 'Не играл';
+            const nameInput = document.getElementById('nameInput');
+            const icoInput = document.getElementById('icoInput');
+            const videoInput = document.getElementById('videoInput');
+            const ratingSelect = document.getElementById('ratingSelect');
+            const statusSelect = document.getElementById('statusSelect');
+            const toggleBtn = document.getElementById('toggleAddFormBtn');
+            const addForm = document.getElementById('addGameForm');
+
+            if (nameInput) nameInput.value = '';
+            if (icoInput) icoInput.value = '';
+            if (videoInput) videoInput.value = '';
+            if (ratingSelect) ratingSelect.value = '0';
+            if (statusSelect) statusSelect.value = 'Не играл';
+
+            if (toggleBtn && addForm) {
+                if (addForm.classList.contains('visible')) {
+                    addForm.classList.toggle('visible');
+                    toggleBtn.textContent = '+ Добавить';
+                }
+            }
         }
 
         // Настройка обработчиков событий
         function setupEventListeners() {
-            addBtn.addEventListener('click', addNewGame);
+            const addBtn = document.getElementById('addBtn');
+            if (addBtn) {
+                addBtn.addEventListener('click', addNewGame);
+            }
         }
 
+        // Навигация между разделами
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', async function() {
+                // Удаляем активный класс у всех элементов
+                document.querySelectorAll('.nav-item').forEach(navItem => {
+                    navItem.classList.remove('active');
+                });
+
+                // Добавляем активный класс текущему элементу
+                this.classList.add('active');
+
+                // Получаем выбранный раздел
+                const section = this.dataset.section;
+
+                try {
+                    switch(section) {
+                        case 'games':
+                            const games = await window.electronAPI.getGamesWithTags();
+                            await renderSection('games', games);
+                            break;
+                        case 'movies':
+                            // const movies = await window.electronAPI.getMovies();
+                            // await renderSection('movies', movies);
+                            break;
+                        // Остальные разделы
+                    }
+                } catch (error) {
+                    console.error(`Ошибка загрузки раздела ${section}:`, error);
+                    await showError(`Не удалось загрузить раздел ${section}`);
+                }
+            });
+        });
+
+        async function renderSection(section, data) {
+            const contentSection = document.getElementById('contentSection');
+            let title = '';
+            let content = '';
+
+            switch(section) {
+                case 'games':
+                    title = '🎮 Игры';
+                    content = `
+                        <div id="addGameForm" class="add-game-form">
+                            <div class="form-group">
+                                <label for="nameInput">Название игры</label>
+                                <input id="nameInput" placeholder="Введите название игры">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="icoInput">Обложка игры</label>
+                                <input id="icoInput" placeholder="https://example.com/icon.jpg">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="videoInput">Трейлер игры</label>
+                                <input id="videoInput" placeholder="https://youtu.be/example">
+                            </div>
+
+                            <div class="form-group">
+                                <label for="ratingSelect">Рейтинг</label>
+                                <select id="ratingSelect">
+                                    <option value="0">Рейтинг</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label for="statusSelect">Статус</label>
+                                <select id="statusSelect">
+                                    <option value="Не играл">Не играл</option>
+                                </select>
+                            </div>
+
+                            <button id="addBtn">Add Game</button>
+                        </div>
+                        <div id="gamesList" class="games-grid">
+                            ${data.map(game => `
+                                <div class="game-card" data-game-name="${game.gameName}">
+                                    <button class="delete-btn" data-game="${game.gameName}">🗑️</button>
+                                    ${getGameIconHTML(game)}
+                                    <div class="game-info">
+                                        <h3 class="game-title">${game.gameName}</h3>
+                                        <div class="game-ratings-container">
+                                            <span class="game-rating rating-value editable-field"
+                                                  data-rating="${game.gameRating}"
+                                                  data-game="${game.gameName}"
+                                                  title="Редактировать">
+                                                ${game.gameRating || 'Не оценено'}
+                                            </span>
+                                            <span class="game-status status-value editable-field"
+                                                  data-status="${game.gameStatus}"
+                                                  data-game="${game.gameName}"
+                                                  title="Редактировать">
+                                                ${game.gameStatus || 'Не играл'}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </div>
+                            `).join('')}
+                        </div>
+                    `;
+                    break;
+                // ... остальные разделы
+            }
+
+            contentSection.innerHTML = `
+                <h1 class="section-title">${title}</h1>
+                ${content}
+            `;
+
+            if (section === 'games') {
+                await loadRatings();
+                await loadStatuses();
+                setupDeleteButtons();
+                setupEditableFields();
+                setupEventListeners();
+                setupAddFormToggle(); // Добавляем обработчик для кнопки добавления
+            }
+        }
+        function setupAddFormToggle() {
+            const toggleBtn = document.getElementById('toggleAddFormBtn');
+            const addForm = document.getElementById('addGameForm');
+
+            if (toggleBtn && addForm) {
+                toggleBtn.addEventListener('click', () => {
+                    addForm.classList.toggle('visible');
+                    if (addForm.classList.contains('visible')) {
+                        toggleBtn.textContent = '− Скрыть';
+                    } else {
+                        toggleBtn.textContent = '+ Добавить';
+                    }
+                });
+            }
+        }
     </script>
 </body>
 </html>

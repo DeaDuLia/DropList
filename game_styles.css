@@ -181,6 +181,19 @@ h1 {
     max-width: 600px;
     margin-left: auto;
     margin-right: auto;
+    transition: all 0.3s ease;
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+.add-game-form.visible {
+    max-height: 1000px;
+    opacity: 1;
+    padding: 25px;
+    margin-bottom: 30px;
 }
 
 .form-group {
@@ -329,4 +342,122 @@ button:hover {
 
 .modal-button:hover {
     opacity: 0.8;
+}
+
+/* Стили для шапки */
+.main-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: var(--primary-color);
+    color: white;
+    padding: 0 20px;
+    margin-bottom: 30px;
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+}
+
+.add-button {
+    background-color: var(--primary-color);
+    color: white;
+    border: 2px solid white;
+    border-radius: 50px;
+    padding: 8px 20px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    margin-left: 20px;
+    white-space: nowrap;
+}
+
+.add-button:hover {
+    background-color: white;
+    color: var(--primary-color);
+}
+
+.main-nav {
+    display: flex;
+    justify-content: center;
+}
+
+.nav-list {
+    display: flex;
+    list-style: none;
+    padding: 0;
+    margin: 0;
+    width: 100%;
+    justify-content: space-around;
+}
+
+.nav-item {
+    padding: 15px 20px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    text-align: center;
+    flex-grow: 1;
+    position: relative;
+}
+
+.nav-item:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.nav-item.active {
+    background-color: rgba(255, 255, 255, 0.2);
+    font-weight: 600;
+}
+
+.nav-item.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background-color: white;
+}
+
+.nav-item span {
+    display: inline-block;
+    padding: 0 5px;
+}
+
+@media (max-width: 768px) {
+    .nav-list {
+        flex-direction: column;
+    }
+
+    .nav-item {
+        padding: 10px;
+    }
+}
+
+@media (max-width: 768px) {
+    .main-header {
+        flex-direction: column;
+        padding: 15px;
+    }
+
+    .add-button {
+        margin: 15px 0 0 0;
+        width: 100%;
+    }
+}
+
+/* Стили для основного контента */
+.content-section {
+    background: var(--card-bg);
+    padding: 25px;
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    margin-bottom: 30px;
+}
+
+.section-title {
+    color: var(--primary-color);
+    text-align: center;
+    margin-bottom: 30px;
+    font-size: 2.2rem;
+    padding-bottom: 15px;
+    border-bottom: 2px solid var(--secondary-color);
 }

@@ -6,13 +6,13 @@ const db = new Database('database.db');
 
 // Создаём таблицы при запуске
 db.exec(`
-  CREATE TABLE IF NOT EXISTS game_ratings (
-    game_rating TEXT PRIMARY KEY
+  CREATE TABLE IF NOT EXISTS ratings (
+    rating TEXT PRIMARY KEY
   )
 `);
 
 db.exec(`
-  INSERT OR IGNORE INTO game_ratings (game_rating)
+  INSERT OR IGNORE INTO ratings (rating)
   VALUES
   ('0'),
   ('1'),
@@ -55,7 +55,7 @@ db.exec(`
     game_video_url TEXT,
     game_rating TEXT,
     game_status TEXT,
-    FOREIGN KEY (game_rating)  REFERENCES game_ratings (game_rating)
+    FOREIGN KEY (game_rating)  REFERENCES ratings (rating)
   )
 `);
 
@@ -113,9 +113,9 @@ ipcMain.handle('add-game', (event, gameData) => {
 });
 
 ipcMain.handle('get-game-ratings', () => {
-    return db.prepare('SELECT game_rating FROM game_ratings')
+    return db.prepare('SELECT rating FROM ratings')
         .all()
-        .map(row => row.game_rating);
+        .map(row => row.rating);
 });
 
 ipcMain.handle('get-game-statuses', () => {
