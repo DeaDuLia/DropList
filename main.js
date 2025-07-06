@@ -128,3 +128,23 @@ ipcMain.handle('delete-game', (event, gameName) => {
     const stmt = db.prepare('DELETE FROM games WHERE game_name = ?');
     return stmt.run(gameName);
 });
+
+ipcMain.handle('update-game-rating', async (event, gameName, rating) => {
+    try {
+        const stmt = db.prepare('UPDATE games SET game_rating = ? WHERE game_name = ?');
+        return stmt.run(rating, gameName);
+    } catch (error) {
+        console.error('Error updating rating:', error);
+        throw error;
+    }
+});
+
+ipcMain.handle('update-game-status', async (event, gameName, status) => {
+    try {
+        const stmt = db.prepare('UPDATE games SET game_status = ? WHERE game_name = ?');
+        return stmt.run(status, gameName);
+    } catch (error) {
+        console.error('Error updating status:', error);
+        throw error;
+    }
+});

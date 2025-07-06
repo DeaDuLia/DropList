@@ -4,16 +4,48 @@
   "main": "main.js",
   "scripts": {
     "start": "electron .",
-    "rebuild": "electron-rebuild -f -w better-sqlite3"
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "rebuild": "electron-rebuild -f -w better-sqlite3",
+    "build": "electron-builder --win",
+    "build-all": "electron-builder --win --x64 --ia32"
+  },
+  "build": {
+    "appId": "com.yourname.gamecatalog",
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "build/icon.ico",
+      "requestedExecutionLevel": "asInvoker"
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "deleteAppDataOnUninstall": true
+    },
+    "extraResources": [
+      {
+        "from": "database.db",
+        "to": "../",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ]
   },
   "keywords": [],
   "author": "",
   "license": "ISC",
   "description": "",
   "dependencies": {
-    "better-sqlite3": "^12.2.0"
+    "better-sqlite3": "^12.2.0",
+    "sqlite3": "^5.1.7"
   },
   "devDependencies": {
+    "electron": "^37.2.0",
     "electron-builder": "^26.0.12",
     "electron-rebuild": "^3.2.9"
   }

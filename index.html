@@ -118,17 +118,24 @@
                     <div class="game-info">
                         <h3 class="game-title">${game.gameName}</h3>
                         <div class="game-ratings-container">
-                            <span class="game-rating rating-value" data-rating="${game.gameRating}" data-game="${game.gameName}">
+                            <span class="game-rating rating-value editable-field"
+                                  data-rating="${game.gameRating}"
+                                  data-game="${game.gameName}"
+                                  title="Редактировать">
                                 ${game.gameRating || 'Не оценено'}
                             </span>
-                            <span class="game-status status-value" data-status="${game.gameStatus}" data-game="${game.gameName}">
+                            <span class="game-status status-value editable-field"
+                                  data-status="${game.gameStatus}"
+                                  data-game="${game.gameName}"
+                                  title="Редактировать">
                                 ${game.gameStatus || 'Не играл'}
                             </span>
                         </div>
                     </div>
                 </div>
             `).join('');
-            setupDeleteButtons(); // Добавляем обработчики для кнопок удаления
+            setupDeleteButtons();
+            setupEditableFields(); // Добавляем обработчики для редактируемых полей
         }
 
         function setupDeleteButtons() {
@@ -144,6 +151,81 @@
                         console.error('Не удалось удалить игру:', error);
                         await showError('Не удалось удалить игру');
                     }
+                });
+            });
+        }
+
+        function setupEditableFields() {
+            document.querySelectorAll('.editable-field').forEach(field => {
+                // Меняем курсор при наведении
+                field.style.cursor = 'pointer';
+
+                // Обработчик клика
+                field.addEventListener('click', async function(e) {
+                    e.stopPropagation();
+                    const gameName = this.dataset.game;
+                    const isRating = this.classList.contains('rating-value');
+                    const currentValue = isRating ? this.dataset.rating : this.dataset.status;
+
+                    // Получаем возможные значения
+                    let values, title;
+                    if (isRating) {
+                        values = await window.electronAPI.getGameRatings();
+                        title = 'Выберите рейтинг';
+                    } else {
+                        values = await window.electronAPI.getGameStatuses();
+                        title = 'Выберите статус';
+                    }
+
+                    // Создаем модальное окно с селектором
+                    const modal = document.createElement('div');
+                    modal.className = 'modal';
+                    modal.style.display = 'block';
+                    modal.innerHTML = `
+                    <div class="modal-content" style="max-width: 300px;">
+                        <h3>${title}</h3>
+                        <select class="edit-select">
+                            ${values.map(v => `<option value="${v}" ${v === currentValue ? 'selected' : ''}>${v}</option>`).join('')}
+                        </select>
+                        <div style="margin-top: 20px; display: flex; justify-content: space-between;">
+                            <button class="modal-button cancel-btn">Отмена</button>
+                            <button class="modal-button confirm-btn">Сохранить</button>
+                        </div>
+                    </div>
+                `;
+
+                    document.body.appendChild(modal);
+
+                    // Обработчики для кнопок
+                    modal.querySelector('.cancel-btn').addEventListener('click', () => {
+                        document.body.removeChild(modal);
+                    });
+
+                    modal.querySelector('.confirm-btn').addEventListener('click', async () => {
+                        const newValue = modal.querySelector('.edit-select').value;
+                        try {
+                            if (isRating) {
+                                await window.electronAPI.updateGameRating(gameName, newValue);
+                                this.dataset.rating = newValue;
+                                this.textContent = newValue || 'Не оценено';
+                            } else {
+                                await window.electronAPI.updateGameStatus(gameName, newValue);
+                                this.dataset.status = newValue;
+                                this.textContent = newValue || 'Не играл';
+                            }
+                            document.body.removeChild(modal);
+                        } catch (error) {
+                            console.error('Ошибка при обновлении:', error);
+                            showError('Не удалось обновить значение');
+                        }
+                    });
+
+                    // Закрытие при клике вне модального окна
+                    modal.addEventListener('click', (e) => {
+                        if (e.target === modal) {
+                            document.body.removeChild(modal);
+                        }
+                    });
                 });
             });
         }

@@ -301,3 +301,32 @@ button:hover {
     background-color: #c0392b;
     transform: scale(1.1);
 }
+
+/* Редактор параметров */
+.editable-field:hover {
+    text-decoration: underline;
+}
+
+.edit-select {
+    width: 100%;
+    padding: 8px;
+    font-size: 16px;
+    margin: 10px 0;
+}
+
+.modal-button {
+    padding: 8px 16px;
+    background-color: #4CAF50;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+}
+
+.modal-button.cancel-btn {
+    background-color: #f44336;
+}
+
+.modal-button:hover {
+    opacity: 0.8;
+}
