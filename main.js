@@ -28,18 +28,18 @@ db.exec(`
 `);
 
 db.exec(`
-  CREATE TABLE IF NOT EXISTS game_statuses (
+  CREATE TABLE IF NOT EXISTS statuses (
     status TEXT PRIMARY KEY
   )
 `);
 
 db.exec(`
-  INSERT OR IGNORE INTO game_statuses (status)
+  INSERT OR IGNORE INTO statuses (status)
   VALUES
   ('Не играл'),
   ('Играл'),
   ('Играю сейчас'),
-  ('Пройдено')
+  ('Завершено')
 `);
 
 db.exec(`
@@ -50,12 +50,14 @@ db.exec(`
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS games (
-    game_name TEXT PRIMARY KEY,
-    game_ico_url TEXT,
-    game_video_url TEXT,
-    game_rating TEXT,
-    game_status TEXT,
-    FOREIGN KEY (game_rating)  REFERENCES ratings (rating)
+    name TEXT PRIMARY KEY,
+    ico_url TEXT,
+    video_url TEXT,
+    rating TEXT,
+    status TEXT,
+    FOREIGN KEY (rating)  REFERENCES ratings (rating),
+    FOREIGN KEY (status)  REFERENCES statuses (status)
+    
   )
 `);
 
@@ -64,7 +66,7 @@ db.exec(`
     game_name TEXT,
     tag_name TEXT,
     PRIMARY KEY (game_name, tag_name),
-    FOREIGN KEY (game_name) REFERENCES games (game_name),
+    FOREIGN KEY (game_name) REFERENCES games (name),
     FOREIGN KEY (tag_name) REFERENCES game_tags (tag_name)
   )
 `);
@@ -88,11 +90,10 @@ app.whenReady().then(createWindow);
 ipcMain.handle('get-games-with-tags', () => {
     return db.prepare(`
     SELECT 
-      game_name as gameName,
-      game_ico_url as icoUrl,
-      game_video_url as videoUrl,
-      game_rating as gameRating,
-      game_status as gameStatus
+      name as gameName,
+      ico_url as icoUrl,
+      rating as gameRating,
+      status as gameStatus
     FROM games
   `).all();
 });
@@ -100,13 +101,12 @@ ipcMain.handle('get-games-with-tags', () => {
 ipcMain.handle('add-game', (event, gameData) => {
     const stmt = db.prepare(`
     INSERT OR REPLACE INTO games 
-    (game_name, game_ico_url, game_video_url, game_rating, game_status) 
-    VALUES (?, ?, ?, ?, ?)
+    (name, ico_url, rating, status) 
+    VALUES (?, ?, ?, ?)
   `);
     return stmt.run(
         gameData.name,
         gameData.icoUrl || null,
-        gameData.videoUrl || null,
         gameData.rating,
         gameData.status || 'Не играл'
     );
@@ -119,19 +119,19 @@ ipcMain.handle('get-game-ratings', () => {
 });
 
 ipcMain.handle('get-game-statuses', () => {
-    return db.prepare('SELECT status FROM game_statuses')
+    return db.prepare('SELECT status FROM statuses')
         .all()
         .map(row => row.status);
 });
 
 ipcMain.handle('delete-game', (event, gameName) => {
-    const stmt = db.prepare('DELETE FROM games WHERE game_name = ?');
+    const stmt = db.prepare('DELETE FROM games WHERE name = ?');
     return stmt.run(gameName);
 });
 
 ipcMain.handle('update-game-rating', async (event, gameName, rating) => {
     try {
-        const stmt = db.prepare('UPDATE games SET game_rating = ? WHERE game_name = ?');
+        const stmt = db.prepare('UPDATE games SET rating = ? WHERE name = ?');
         return stmt.run(rating, gameName);
     } catch (error) {
         console.error('Error updating rating:', error);
@@ -141,7 +141,7 @@ ipcMain.handle('update-game-rating', async (event, gameName, rating) => {
 
 ipcMain.handle('update-game-status', async (event, gameName, status) => {
     try {
-        const stmt = db.prepare('UPDATE games SET game_status = ? WHERE game_name = ?');
+        const stmt = db.prepare('UPDATE games SET status = ? WHERE name = ?');
         return stmt.run(status, gameName);
     } catch (error) {
         console.error('Error updating status:', error);

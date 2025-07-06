@@ -43,7 +43,7 @@
         const modalMessage = document.getElementById('modalMessage');
         const modalClose = document.getElementById('modalClose');
 
-        // Функция закрытия меню
+        // Функция отображения ошибок
         function showError(message) {
             modalMessage.textContent = message;
             errorModal.style.display = 'block';
@@ -83,7 +83,7 @@
                 await showError('Failed to load ratings');
             }
         }
-
+        // Загрузка статусов
         async function loadStatuses() {
             try {
                 const statuses = await window.electronAPI.getGameStatuses();
@@ -98,51 +98,204 @@
             }
         }
 
-        // Загрузка списка игр
-        async function loadGames() {
+        // Генерация HTML для иконки игры
+        function getGameIconHTML(game) {
+            let iconUrl = 'https://apptor.studio/assets/cache/images/600-856x600-629.png';
+
+            // Проверяем URL обложки
+            if (game.icoUrl) {
+                try {
+                    new URL(game.icoUrl); // Проверяем, что это валидный URL
+                    iconUrl = game.icoUrl;
+                } catch (e) {
+                    // Если URL невалидный, используем заглушку
+                    iconUrl = 'https://apptor.studio/assets/cache/images/600-856x600-629.png';
+                }
+            }
+
+            return `
+            <img src="${iconUrl}"
+                 alt="${game.gameName}"
+                 class="game-icon"
+                 onerror="this.src='https://apptor.studio/assets/cache/images/600-856x600-629.png'">
+            `;
+        }
+
+        // Добавление новой игры
+        async function addNewGame() {
+            const nameInput = document.getElementById('nameInput');
+            const icoInput = document.getElementById('icoInput');
+            const ratingSelect = document.getElementById('ratingSelect');
+            const statusSelect = document.getElementById('statusSelect');
+
+            const gameData = {
+                name: nameInput.value.trim(),
+                icoUrl: icoInput.value.trim(),
+                rating: ratingSelect.value,
+                status: statusSelect.value
+            };
+
+            if (!gameData.name) {
+                await showError('Пожалуйста, введите название игры');
+                nameInput.focus();
+                return;
+            }
+
             try {
+                await window.electronAPI.addGame(gameData);
+                resetForm();
                 const games = await window.electronAPI.getGamesWithTags();
-                renderGames(games);
+                await renderSection('games', games);
             } catch (error) {
-                console.error('Error loading games:', error);
-                await showError('Failed to load games');
+                console.error('Ошибка при добавлении игры:', error);
+                await showError(`Ошибка при добавлении игры: ${error.message}`);
             }
         }
-        // Отрисовка игр
-        function renderGames(games) {
-            const contentSection = document.getElementById('contentSection');
 
-            // Очищаем секцию и добавляем заголовок и контейнер для игр
+        // Сброс формы
+        function resetForm() {
+            const nameInput = document.getElementById('nameInput');
+            const icoInput = document.getElementById('icoInput');
+            const ratingSelect = document.getElementById('ratingSelect');
+            const statusSelect = document.getElementById('statusSelect');
+
+            if (nameInput) nameInput.value = '';
+            if (icoInput) icoInput.value = '';
+            if (ratingSelect) ratingSelect.value = '0';
+            if (statusSelect) statusSelect.value = 'Не играл';
+        }
+
+        // Навигация между разделами
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', async function() {
+                // Удаляем активный класс у всех элементов
+                document.querySelectorAll('.nav-item').forEach(navItem => {
+                    navItem.classList.remove('active');
+                });
+
+                // Добавляем активный класс текущему элементу
+                this.classList.add('active');
+
+                // Получаем выбранный раздел
+                const section = this.dataset.section;
+
+                try {
+                    switch(section) {
+                        case 'games':
+                            const games = await window.electronAPI.getGamesWithTags();
+                            await renderSection('games', games);
+                            break;
+                        case 'movies':
+                            // const movies = await window.electronAPI.getMovies();
+                            // await renderSection('movies', movies);
+                            break;
+                        // Остальные разделы
+                    }
+                } catch (error) {
+                    console.error(`Ошибка загрузки раздела ${section}:`, error);
+                    await showError(`Не удалось загрузить раздел ${section}`);
+                }
+            });
+        });
+
+        async function renderSection(section, data) {
+            const contentSection = document.getElementById('contentSection');
+            let title = '';
+            let content = '';
+
+            switch(section) {
+                case 'games':
+                    title = '🎮 Игры';
+                    content = `
+                        ${getAddFormHTML()}
+                        ${renderGamesList(data)}
+                    `;
+                    break;
+                // ... остальные разделы
+            }
+
             contentSection.innerHTML = `
-                <h1 class="section-title">🎮 Игры</h1>
-                <div id="gamesList" class="games-grid">
-                    ${games.map(game => `
-                        <div class="game-card" data-game-name="${game.gameName}">
-                            <button class="delete-btn" data-game="${game.gameName}">🗑️</button>
-                            ${getGameIconHTML(game)}
-                            <div class="game-info">
-                                <h3 class="game-title">${game.gameName}</h3>
-                                <div class="game-ratings-container">
-                                    <span class="game-rating rating-value editable-field"
-                                          data-rating="${game.gameRating}"
-                                          data-game="${game.gameName}"
-                                          title="Редактировать">
-                                        ${game.gameRating || 'Не оценено'}
-                                    </span>
-                                    <span class="game-status status-value editable-field"
-                                          data-status="${game.gameStatus}"
-                                          data-game="${game.gameName}"
-                                          title="Редактировать">
-                                        ${game.gameStatus || 'Не играл'}
-                                    </span>
-                                </div>
+        <h1 class="section-title">${title}</h1>
+        ${content}
+    `;
+
+            if (section === 'games') {
+                await loadRatings();
+                await loadStatuses();
+                setupDeleteButtons();
+                setupEditableFields();
+                setupEventListeners();
+                setupAddFormToggle();
+
+                // Всегда скрываем форму после рендеринга
+                const addForm = document.getElementById('addForm');
+                if (addForm) {
+                    addForm.classList.remove('visible');
+                }
+                const toggleBtn = document.getElementById('toggleAddFormBtn');
+                if (toggleBtn) {
+                    toggleBtn.textContent = '+ Добавить';
+                }
+            }
+        }
+
+        function getAddFormHTML() {
+            return `
+            <div id="addForm" class="add-form">
+                <div class="form-group">
+                    <input id="nameInput" placeholder="Введите название">
+                </div>
+
+                <div class="form-group">
+                    <input id="icoInput" placeholder="https://example.com/icon.jpg">
+                </div>
+
+                <div class="form-group">
+                    <select id="ratingSelect">
+                        <option value="0">Рейтинг</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <select id="statusSelect">
+                        <option value="Не играл">Не играл</option>
+                    </select>
+                </div>
+
+                <button id="addBtn">Добавить</button>
+            </div>
+        `;
+        }
+
+        // Всё, что связано с games
+        function renderGamesList(games) {
+            return `
+            <div id="gamesList" class="games-grid">
+                ${games.map(game => `
+                    <div class="game-card" data-game-name="${game.gameName}">
+                        <button class="delete-btn" data-game="${game.gameName}">🗑️</button>
+                        ${getGameIconHTML(game)}
+                        <div class="game-info">
+                            <h3 class="game-title">${game.gameName}</h3>
+                            <div class="game-ratings-container">
+                                <span class="game-rating rating-value editable-field"
+                                      data-rating="${game.gameRating}"
+                                      data-game="${game.gameName}"
+                                      title="Редактировать">
+                                    ${game.gameRating || 'Не оценено'}
+                                </span>
+                                <span class="game-status status-value editable-field"
+                                      data-status="${game.gameStatus}"
+                                      data-game="${game.gameName}"
+                                      title="Редактировать">
+                                    ${game.gameStatus || 'Не играл'}
+                                </span>
                             </div>
                         </div>
-                    `).join('')}
-                </div>
-            `;
-            setupDeleteButtons();
-            setupEditableFields();
+                    </div>
+                `).join('')}
+            </div>
+        `;
         }
 
         function setupDeleteButtons() {
@@ -237,233 +390,33 @@
             });
         }
 
-        // Генерация HTML для иконки игры
-        function getGameIconHTML(game) {
-            let iconUrl = 'https://apptor.studio/assets/cache/images/600-856x600-629.png';
-
-            // Проверяем URL обложки
-            if (game.icoUrl) {
-                try {
-                    new URL(game.icoUrl); // Проверяем, что это валидный URL
-                    iconUrl = game.icoUrl;
-                } catch (e) {
-                    // Если URL невалидный, используем заглушку
-                    iconUrl = 'https://apptor.studio/assets/cache/images/600-856x600-629.png';
-                }
-            }
-
-            return `
-            <img src="${iconUrl}"
-                 alt="${game.gameName}"
-                 class="game-icon"
-                 onerror="this.src='https://apptor.studio/assets/cache/images/600-856x600-629.png'">
-            `;
-        }
-
-        // Добавление новой игры
-        async function addNewGame() {
-            const nameInput = document.getElementById('nameInput');
-            const icoInput = document.getElementById('icoInput');
-            const videoInput = document.getElementById('videoInput');
-            const ratingSelect = document.getElementById('ratingSelect');
-            const statusSelect = document.getElementById('statusSelect');
-
-            const gameData = {
-                name: nameInput.value.trim(),
-                icoUrl: icoInput.value.trim(),
-                videoUrl: videoInput.value.trim(),
-                rating: ratingSelect.value,
-                status: statusSelect.value
-            };
-
-            if (!gameData.name) {
-                await showError('Пожалуйста, введите название игры');
-                nameInput.focus();
-                return;
-            }
-
-            if (!gameData.rating) {
-                await showError('Пожалуйста, выберите рейтинг');
-                ratingSelect.focus();
-                return;
-            }
-
-            try {
-                await window.electronAPI.addGame(gameData);
-                resetForm();
-                const games = await window.electronAPI.getGamesWithTags();
-                await renderSection('games', games);
-            } catch (error) {
-                console.error('Ошибка при добавлении игры:', error);
-                await showError(`Ошибка при добавлении игры: ${error.message}`);
-            }
-        }
-
-        // Сброс формы
-        function resetForm() {
-            const nameInput = document.getElementById('nameInput');
-            const icoInput = document.getElementById('icoInput');
-            const videoInput = document.getElementById('videoInput');
-            const ratingSelect = document.getElementById('ratingSelect');
-            const statusSelect = document.getElementById('statusSelect');
+        function setupAddFormToggle() {
             const toggleBtn = document.getElementById('toggleAddFormBtn');
-            const addForm = document.getElementById('addGameForm');
-
-            if (nameInput) nameInput.value = '';
-            if (icoInput) icoInput.value = '';
-            if (videoInput) videoInput.value = '';
-            if (ratingSelect) ratingSelect.value = '0';
-            if (statusSelect) statusSelect.value = 'Не играл';
+            const addForm = document.getElementById('addForm');
 
             if (toggleBtn && addForm) {
-                if (addForm.classList.contains('visible')) {
+                toggleBtn.onclick = () => {
                     addForm.classList.toggle('visible');
-                    toggleBtn.textContent = '+ Добавить';
-                }
+                    toggleBtn.textContent = addForm.classList.contains('visible') ? '− Скрыть' : '+ Добавить';
+                    if (addForm.classList.contains('visible')) {
+                        document.getElementById('nameInput')?.focus();
+                    }
+                };
             }
         }
 
         // Настройка обработчиков событий
         function setupEventListeners() {
-            const addBtn = document.getElementById('addBtn');
-            if (addBtn) {
-                addBtn.addEventListener('click', addNewGame);
-            }
-        }
-
-        // Навигация между разделами
-        document.querySelectorAll('.nav-item').forEach(item => {
-            item.addEventListener('click', async function() {
-                // Удаляем активный класс у всех элементов
-                document.querySelectorAll('.nav-item').forEach(navItem => {
-                    navItem.classList.remove('active');
-                });
-
-                // Добавляем активный класс текущему элементу
-                this.classList.add('active');
-
-                // Получаем выбранный раздел
-                const section = this.dataset.section;
-
-                try {
-                    switch(section) {
-                        case 'games':
-                            const games = await window.electronAPI.getGamesWithTags();
-                            await renderSection('games', games);
-                            break;
-                        case 'movies':
-                            // const movies = await window.electronAPI.getMovies();
-                            // await renderSection('movies', movies);
-                            break;
-                        // Остальные разделы
+            document.addEventListener('click', async (e) => {
+                if (e.target && e.target.id === 'addBtn') {
+                    const section = document.querySelector('.nav-item.active')?.dataset.section;
+                    if (section === 'games') {
+                        await addNewGame();
                     }
-                } catch (error) {
-                    console.error(`Ошибка загрузки раздела ${section}:`, error);
-                    await showError(`Не удалось загрузить раздел ${section}`);
                 }
             });
-        });
-
-        async function renderSection(section, data) {
-            const contentSection = document.getElementById('contentSection');
-            let title = '';
-            let content = '';
-
-            switch(section) {
-                case 'games':
-                    title = '🎮 Игры';
-                    content = `
-                        <div id="addGameForm" class="add-game-form">
-                            <div class="form-group">
-                                <label for="nameInput">Название игры</label>
-                                <input id="nameInput" placeholder="Введите название игры">
-                            </div>
-
-                            <div class="form-group">
-                                <label for="icoInput">Обложка игры</label>
-                                <input id="icoInput" placeholder="https://example.com/icon.jpg">
-                            </div>
-
-                            <div class="form-group">
-                                <label for="videoInput">Трейлер игры</label>
-                                <input id="videoInput" placeholder="https://youtu.be/example">
-                            </div>
-
-                            <div class="form-group">
-                                <label for="ratingSelect">Рейтинг</label>
-                                <select id="ratingSelect">
-                                    <option value="0">Рейтинг</option>
-                                </select>
-                            </div>
-
-                            <div class="form-group">
-                                <label for="statusSelect">Статус</label>
-                                <select id="statusSelect">
-                                    <option value="Не играл">Не играл</option>
-                                </select>
-                            </div>
-
-                            <button id="addBtn">Add Game</button>
-                        </div>
-                        <div id="gamesList" class="games-grid">
-                            ${data.map(game => `
-                                <div class="game-card" data-game-name="${game.gameName}">
-                                    <button class="delete-btn" data-game="${game.gameName}">🗑️</button>
-                                    ${getGameIconHTML(game)}
-                                    <div class="game-info">
-                                        <h3 class="game-title">${game.gameName}</h3>
-                                        <div class="game-ratings-container">
-                                            <span class="game-rating rating-value editable-field"
-                                                  data-rating="${game.gameRating}"
-                                                  data-game="${game.gameName}"
-                                                  title="Редактировать">
-                                                ${game.gameRating || 'Не оценено'}
-                                            </span>
-                                            <span class="game-status status-value editable-field"
-                                                  data-status="${game.gameStatus}"
-                                                  data-game="${game.gameName}"
-                                                  title="Редактировать">
-                                                ${game.gameStatus || 'Не играл'}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-                            `).join('')}
-                        </div>
-                    `;
-                    break;
-                // ... остальные разделы
-            }
-
-            contentSection.innerHTML = `
-                <h1 class="section-title">${title}</h1>
-                ${content}
-            `;
-
-            if (section === 'games') {
-                await loadRatings();
-                await loadStatuses();
-                setupDeleteButtons();
-                setupEditableFields();
-                setupEventListeners();
-                setupAddFormToggle(); // Добавляем обработчик для кнопки добавления
-            }
         }
-        function setupAddFormToggle() {
-            const toggleBtn = document.getElementById('toggleAddFormBtn');
-            const addForm = document.getElementById('addGameForm');
 
-            if (toggleBtn && addForm) {
-                toggleBtn.addEventListener('click', () => {
-                    addForm.classList.toggle('visible');
-                    if (addForm.classList.contains('visible')) {
-                        toggleBtn.textContent = '− Скрыть';
-                    } else {
-                        toggleBtn.textContent = '+ Добавить';
-                    }
-                });
-            }
-        }
     </script>
 </body>
 </html>

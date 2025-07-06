@@ -120,17 +120,17 @@ h1 {
     background-color: var(--rating-playing);
     animation: pulse 2s infinite;
 }
-.game-status[data-status="Пройдено"] {
+.game-status[data-status="Завершено"] {
     background-color: var(--rating-completed);
     animation: pulse 2s infinite;
 }
 
-.game-status[data-status="Пройдено"] {
+.game-status[data-status="Завершено"] {
     background-color: var(--rating-completed);
     position: relative;
     padding-left: 25px;
 }
-.game-status[data-status="Пройдено"]::before {
+.game-status[data-status="Завершено"]::before {
     content: "✓";
     position: absolute;
     left: 8px;
@@ -172,7 +172,7 @@ h1 {
     font-weight: 500;
 }
 
-.add-game-form {
+.add-form {
     background: var(--card-bg);
     padding: 25px;
     border-radius: 12px;
@@ -189,7 +189,7 @@ h1 {
     padding-bottom: 0;
 }
 
-.add-game-form.visible {
+.add-form.visible {
     max-height: 1000px;
     opacity: 1;
     padding: 25px;
@@ -248,7 +248,7 @@ button:hover {
         aspect-ratio: 16/9;
     }
 
-    .add-game-form {
+    .add-form {
         padding: 15px;
     }
 }
