@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain } = require('electron');
+const { app, BrowserWindow, ipcMain, shell } = require('electron');
 const path = require('path');
 const Database = require('better-sqlite3');
 
@@ -421,4 +421,8 @@ ipcMain.handle('update-book-status', async (event, name, status) => {
     return db.transaction(() => {
         return statements.updateBookStatus.run(status, name);
     })();
+});
+
+ipcMain.on('open-external', (event, url) => {
+    shell.openExternal(url);
 });

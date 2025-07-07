@@ -33,5 +33,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     addBook: (data) => ipcRenderer.invoke('add-book', data),
     deleteBook: (name) => ipcRenderer.invoke('delete-book', name),
     updateBookRating: (name, rating) => ipcRenderer.invoke('update-book-rating', name, rating),
-    updateBookStatus: (name, status) => ipcRenderer.invoke('update-book-status', name, status)
+    updateBookStatus: (name, status) => ipcRenderer.invoke('update-book-status', name, status),
+    openExternal: (url) => ipcRenderer.send('open-external', url)
 });
