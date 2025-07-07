@@ -15,7 +15,7 @@
                 <li class="nav-item" data-section="movies">
                     <span>🎬 Кино</span>
                 </li>
-                <li class="nav-item" data-section="series">
+                <li class="nav-item" data-section="serials">
                     <span>📺 Сериалы</span>
                 </li>
                 <li class="nav-item" data-section="anime">
@@ -42,6 +42,7 @@
         const errorModal = document.getElementById('errorModal');
         const modalMessage = document.getElementById('modalMessage');
         const modalClose = document.getElementById('modalClose');
+        let isAddingGame = false;
 
         // Функция отображения ошибок
         function showError(message) {
@@ -70,7 +71,7 @@
         // Загрузка рейтингов
         async function loadRatings() {
             try {
-                const ratings = await window.electronAPI.getGameRatings();
+                const ratings = await window.electronAPI.getRatings();
                 const ratingSelect = document.getElementById('ratingSelect');
                 if (ratingSelect) {
                     ratingSelect.innerHTML = `
@@ -86,7 +87,7 @@
         // Загрузка статусов
         async function loadStatuses() {
             try {
-                const statuses = await window.electronAPI.getGameStatuses();
+                const statuses = await window.electronAPI.getStatuses();
                 const statusSelect = document.getElementById('statusSelect');
                 if (statusSelect) {
                     statusSelect.innerHTML = `
@@ -99,7 +100,7 @@
         }
 
         // Генерация HTML для иконки игры
-        function getGameIconHTML(game) {
+        function getCardIconHTML(game) {
             let iconUrl = 'https://apptor.studio/assets/cache/images/600-856x600-629.png';
 
             // Проверяем URL обложки
@@ -115,41 +116,10 @@
 
             return `
             <img src="${iconUrl}"
-                 alt="${game.gameName}"
+                 alt="${game.name}"
                  class="game-icon"
                  onerror="this.src='https://apptor.studio/assets/cache/images/600-856x600-629.png'">
             `;
-        }
-
-        // Добавление новой игры
-        async function addNewGame() {
-            const nameInput = document.getElementById('nameInput');
-            const icoInput = document.getElementById('icoInput');
-            const ratingSelect = document.getElementById('ratingSelect');
-            const statusSelect = document.getElementById('statusSelect');
-
-            const gameData = {
-                name: nameInput.value.trim(),
-                icoUrl: icoInput.value.trim(),
-                rating: ratingSelect.value,
-                status: statusSelect.value
-            };
-
-            if (!gameData.name) {
-                await showError('Пожалуйста, введите название игры');
-                nameInput.focus();
-                return;
-            }
-
-            try {
-                await window.electronAPI.addGame(gameData);
-                resetForm();
-                const games = await window.electronAPI.getGamesWithTags();
-                await renderSection('games', games);
-            } catch (error) {
-                console.error('Ошибка при добавлении игры:', error);
-                await showError(`Ошибка при добавлении игры: ${error.message}`);
-            }
         }
 
         // Сброс формы
@@ -165,77 +135,58 @@
             if (statusSelect) statusSelect.value = 'Не играл';
         }
 
-        // Навигация между разделами
-        document.querySelectorAll('.nav-item').forEach(item => {
-            item.addEventListener('click', async function() {
-                // Удаляем активный класс у всех элементов
-                document.querySelectorAll('.nav-item').forEach(navItem => {
-                    navItem.classList.remove('active');
-                });
-
-                // Добавляем активный класс текущему элементу
-                this.classList.add('active');
-
-                // Получаем выбранный раздел
-                const section = this.dataset.section;
-
-                try {
-                    switch(section) {
-                        case 'games':
-                            const games = await window.electronAPI.getGamesWithTags();
-                            await renderSection('games', games);
-                            break;
-                        case 'movies':
-                            // const movies = await window.electronAPI.getMovies();
-                            // await renderSection('movies', movies);
-                            break;
-                        // Остальные разделы
-                    }
-                } catch (error) {
-                    console.error(`Ошибка загрузки раздела ${section}:`, error);
-                    await showError(`Не удалось загрузить раздел ${section}`);
-                }
-            });
-        });
-
         async function renderSection(section, data) {
             const contentSection = document.getElementById('contentSection');
-            let title = '';
-            let content = '';
-
-            switch(section) {
-                case 'games':
-                    title = '🎮 Игры';
-                    content = `
-                        ${getAddFormHTML()}
-                        ${renderGamesList(data)}
-                    `;
-                    break;
-                // ... остальные разделы
-            }
-
+            if (!contentSection) return;
+            // Рендерим контент
             contentSection.innerHTML = `
-        <h1 class="section-title">${title}</h1>
-        ${content}
-    `;
+                <h1 class="section-title">${getSectionTitle(section)}</h1>
+                ${await renderCardSection(data)}
+            `;
+            await initCardSection();
+            // Всегда скрываем форму добавления
+            hideAddForm();
+        }
 
-            if (section === 'games') {
-                await loadRatings();
-                await loadStatuses();
-                setupDeleteButtons();
-                setupEditableFields();
-                setupEventListeners();
-                setupAddFormToggle();
+        // Вспомогательные функции
+        function getSectionTitle(section) {
+            const titles = {
+                games: '🎮 Игры',
+                movies: '🎬 Кино',
+                serials: '📺 Сериалы',
+                anime: '🌸 Аниме',
+                books: '📚 Книги'
+            };
+            return titles[section] || section;
+        }
 
-                // Всегда скрываем форму после рендеринга
-                const addForm = document.getElementById('addForm');
-                if (addForm) {
-                    addForm.classList.remove('visible');
-                }
-                const toggleBtn = document.getElementById('toggleAddFormBtn');
-                if (toggleBtn) {
-                    toggleBtn.textContent = '+ Добавить';
-                }
+        async function renderCardSection(data) {
+            return `
+                ${getAddFormHTML()}
+                ${renderCardList(data)}
+            `;
+        }
+
+        async function initCardSection() {
+            await Promise.all([
+                loadRatings(),
+                loadStatuses()
+            ]);
+
+            setupDeleteButtons();
+            setupEditableFields();
+            setupEventListeners();
+            setupAddFormToggle();
+        }
+
+        function hideAddForm() {
+            const addForm = document.getElementById('addForm');
+            if (addForm) {
+                addForm.classList.remove('visible');
+            }
+            const toggleBtn = document.getElementById('toggleAddFormBtn');
+            if (toggleBtn) {
+                toggleBtn.textContent = '+ Добавить';
             }
         }
 
@@ -258,7 +209,7 @@
 
                 <div class="form-group">
                     <select id="statusSelect">
-                        <option value="Не играл">Не играл</option>
+                        <option value="Уточнить">Уточнить</option>
                     </select>
                 </div>
 
@@ -267,55 +218,163 @@
         `;
         }
 
-        // Всё, что связано с games
-        function renderGamesList(games) {
+        function renderCardList(cards) {
             return `
-            <div id="gamesList" class="games-grid">
-                ${games.map(game => `
-                    <div class="game-card" data-game-name="${game.gameName}">
-                        <button class="delete-btn" data-game="${game.gameName}">🗑️</button>
-                        ${getGameIconHTML(game)}
-                        <div class="game-info">
-                            <h3 class="game-title">${game.gameName}</h3>
-                            <div class="game-ratings-container">
-                                <span class="game-rating rating-value editable-field"
-                                      data-rating="${game.gameRating}"
-                                      data-game="${game.gameName}"
+            <div id="dataList" class="data-grid">
+                ${cards.map(card => `
+                    <div class="data-card" data-name="${card.name}">
+                        <button class="delete-btn" data-name="${card.name}">🗑️</button>
+                        ${getCardIconHTML(card)}
+                        <div class="data-info">
+                            <h3 class="data-title">${card.name}</h3>
+                            <div class="data-ratings-container">
+                                <span class="card-rating rating-value editable-field"
+                                      data-rating="${card.rating}"
+                                      data-name="${card.name}"
                                       title="Редактировать">
-                                    ${game.gameRating || 'Не оценено'}
+                                    ${card.rating || '0'}
                                 </span>
-                                <span class="game-status status-value editable-field"
-                                      data-status="${game.gameStatus}"
-                                      data-game="${game.gameName}"
+                                <span class="card-status status-value editable-field"
+                                      data-status="${card.status}"
+                                      data-name="${card.name}"
                                       title="Редактировать">
-                                    ${game.gameStatus || 'Не играл'}
+                                    ${card.status || 'Уточнить'}
                                 </span>
                             </div>
                         </div>
                     </div>
                 `).join('')}
             </div>
-        `;
+            `;
         }
 
-        function setupDeleteButtons() {
-            document.querySelectorAll('.delete-btn').forEach(btn => {
-                btn.addEventListener('click', async (e) => {
-                    e.stopPropagation(); // Предотвращаем всплытие события
-                    const gameName = btn.dataset.game;
+        function setupAddFormToggle() {
+            const toggleBtn = document.getElementById('toggleAddFormBtn');
+            const addForm = document.getElementById('addForm');
 
-                    try {
-                        await window.electronAPI.deleteGame(gameName);
-                        btn.closest('.game-card').remove(); // Перезагружаем список игр после удаления
-                    } catch (error) {
-                        console.error('Не удалось удалить игру:', error);
-                        await showError('Не удалось удалить игру');
+            if (toggleBtn && addForm) {
+                toggleBtn.onclick = () => {
+                    addForm.classList.toggle('visible');
+                    toggleBtn.textContent = addForm.classList.contains('visible') ? '− Скрыть' : '+ Добавить';
+                    if (addForm.classList.contains('visible')) {
+                        document.getElementById('nameInput')?.focus();
                     }
-                });
+                };
+            }
+        }
+
+        // Настройка обработчиков событий, при добавлении секций редактировать ЗДЕСЬ (Всё, что ниже)
+        function setupEventListeners() {
+            document.addEventListener('click', async (e) => {
+                if (e.target && e.target.id === 'addBtn') {
+                    const section = document.querySelector('.nav-item.active')?.dataset.section;
+                    await addNewData(section);
+                }
             });
         }
 
+        // Навигация между разделами
+        document.querySelectorAll('.nav-item').forEach(item => {
+            item.addEventListener('click', async function() {
+                // Удаляем активный класс у всех элементов
+                document.querySelectorAll('.nav-item').forEach(navItem => {
+                    navItem.classList.remove('active');
+                });
+
+                // Добавляем активный класс текущему элементу
+                this.classList.add('active');
+
+                // Получаем выбранный раздел
+                const section = this.dataset.section;
+
+                try {
+                    let data;
+                    switch(section) {
+                        case 'games':
+                            data = await window.electronAPI.getGamesWithTags();
+                            break;
+                        case 'movies':
+                            data = await window.electronAPI.getMoviesWithTags();
+                            break;
+                        case 'serials':
+                            data = await window.electronAPI.getSerialsWithTags();
+                            break;
+                        case 'anime':
+                            data = await window.electronAPI.getAnimeWithTags();
+                            break;
+                        case 'books':
+                            data = await window.electronAPI.getBooksWithTags();
+                            break;
+                    }
+                    await renderSection(section, data);
+                } catch (error) {
+                    console.error(`Ошибка загрузки раздела ${section}:`, error);
+                    await showError(`Не удалось загрузить раздел ${section}`);
+                }
+            });
+        });
+
+        async function addNewData(section) {
+            if (isAddingGame) return;
+            isAddingGame = true;
+            const nameInput = document.getElementById('nameInput');
+            const icoInput = document.getElementById('icoInput');
+            const ratingSelect = document.getElementById('ratingSelect');
+            const statusSelect = document.getElementById('statusSelect');
+
+            const cardData = {
+                name: nameInput.value.trim(),
+                icoUrl: icoInput.value.trim(),
+                rating: ratingSelect.value,
+                status: statusSelect.value
+            };
+
+            if (!cardData.name) {
+                await showError('Пожалуйста, введите название');
+                nameInput.focus();
+                return;
+            }
+
+            try {
+                let data;
+                switch (section) {
+                    case "games":
+                        await window.electronAPI.addGame(cardData);
+                        data = await window.electronAPI.getGamesWithTags();
+                        break;
+                    case "movies":
+                        await window.electronAPI.addMovie(cardData);
+                        data = await window.electronAPI.getMoviesWithTags();
+                        break;
+                    case "serials":
+                        await window.electronAPI.addSerial(cardData);
+                        data = await window.electronAPI.getSerialsWithTags();
+                        break;
+                    case "anime":
+                        await window.electronAPI.addAnime(cardData);
+                        data = await window.electronAPI.getAnimeWithTags();
+                        break;
+                    case "books":
+                        await window.electronAPI.addBook(cardData);
+                        data = await window.electronAPI.getBooksWithTags();
+                        break;
+                }
+                resetForm();
+                await renderSection(section, data);
+            } catch (error) {
+                console.error('Ошибка при добавлении:', error);
+                await showError(`Ошибка при добавлении: ${error.message}`);
+            } finally {
+                isAddingGame = false;
+            }
+        }
+
         function setupEditableFields() {
+            const oldFields = document.querySelectorAll('.editable-field');
+            oldFields.forEach(field => {
+                field.replaceWith(field.cloneNode(true)); // Это удалит все привязанные обработчики
+            });
+
             document.querySelectorAll('.editable-field').forEach(field => {
                 // Меняем курсор при наведении
                 field.style.cursor = 'pointer';
@@ -323,17 +382,17 @@
                 // Обработчик клика
                 field.addEventListener('click', async function(e) {
                     e.stopPropagation();
-                    const gameName = this.dataset.game;
+                    const itemName = this.dataset.name;
                     const isRating = this.classList.contains('rating-value');
                     const currentValue = isRating ? this.dataset.rating : this.dataset.status;
 
                     // Получаем возможные значения
                     let values, title;
                     if (isRating) {
-                        values = await window.electronAPI.getGameRatings();
+                        values = await window.electronAPI.getRatings();
                         title = 'Выберите рейтинг';
                     } else {
-                        values = await window.electronAPI.getGameStatuses();
+                        values = await window.electronAPI.getStatuses();
                         title = 'Выберите статус';
                     }
 
@@ -364,12 +423,33 @@
                     modal.querySelector('.confirm-btn').addEventListener('click', async () => {
                         const newValue = modal.querySelector('.edit-select').value;
                         try {
+                            const section = document.querySelector('.nav-item.active')?.dataset.section;
                             if (isRating) {
-                                await window.electronAPI.updateGameRating(gameName, newValue);
+                                if (section === 'games') {
+                                    await window.electronAPI.updateGameRating(itemName, newValue);
+                                } else if (section === 'movies') {
+                                    await window.electronAPI.updateMovieRating(itemName, newValue);
+                                } else if (section === 'serials') {
+                                    await window.electronAPI.updateMovieRating(itemName, newValue);
+                                } else if (section === 'anime') {
+                                    await window.electronAPI.updateAnimeRating(itemName, newValue);
+                                } else if (section === 'books') {
+                                    await window.electronAPI.updateBookRating(itemName, newValue);
+                                }
                                 this.dataset.rating = newValue;
                                 this.textContent = newValue || 'Не оценено';
                             } else {
-                                await window.electronAPI.updateGameStatus(gameName, newValue);
+                                if (section === 'games') {
+                                    await window.electronAPI.updateGameStatus(itemName, newValue);
+                                } else if (section === 'movies') {
+                                    await window.electronAPI.updateMovieStatus(itemName, newValue);
+                                } else if (section === 'serials') {
+                                    await window.electronAPI.updateSerialStatus(itemName, newValue);
+                                } else if (section === 'anime') {
+                                    await window.electronAPI.updateAnimeStatus(itemName, newValue);
+                                } else if (section === 'books') {
+                                    await window.electronAPI.updateBookStatus(itemName, newValue);
+                                }
                                 this.dataset.status = newValue;
                                 this.textContent = newValue || 'Не играл';
                             }
@@ -390,30 +470,36 @@
             });
         }
 
-        function setupAddFormToggle() {
-            const toggleBtn = document.getElementById('toggleAddFormBtn');
-            const addForm = document.getElementById('addForm');
+        function setupDeleteButtons() {
+            const oldButtons = document.querySelectorAll('.delete-btn');
+            oldButtons.forEach(btn => {
+                btn.replaceWith(btn.cloneNode(true));
+            });
 
-            if (toggleBtn && addForm) {
-                toggleBtn.onclick = () => {
-                    addForm.classList.toggle('visible');
-                    toggleBtn.textContent = addForm.classList.contains('visible') ? '− Скрыть' : '+ Добавить';
-                    if (addForm.classList.contains('visible')) {
-                        document.getElementById('nameInput')?.focus();
-                    }
-                };
-            }
-        }
+            document.querySelectorAll('.delete-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const itemName = btn.dataset.name; // Используем data-name
 
-        // Настройка обработчиков событий
-        function setupEventListeners() {
-            document.addEventListener('click', async (e) => {
-                if (e.target && e.target.id === 'addBtn') {
-                    const section = document.querySelector('.nav-item.active')?.dataset.section;
-                    if (section === 'games') {
-                        await addNewGame();
+                    try {
+                        const section = document.querySelector('.nav-item.active')?.dataset.section;
+                        if (section === 'games') {
+                            await window.electronAPI.deleteGame(itemName);
+                        } else if (section === 'movies') {
+                            await window.electronAPI.deleteMovie(itemName);
+                        } else if (section === 'serials') {
+                            await window.electronAPI.deleteSerial(itemName);
+                        } else if (section === 'anime') {
+                            await window.electronAPI.deleteAnime(itemName);
+                        } else if (section === 'books') {
+                            await window.electronAPI.deleteBook(itemName);
+                        }
+                        btn.closest('.data-card').remove();
+                    } catch (error) {
+                        console.error('Не удалось удалить:', error);
+                        await showError('Не удалось удалить');
                     }
-                }
+                });
             });
         }
 

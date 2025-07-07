@@ -23,6 +23,8 @@
     --rating-played: #a29bfe;
     --rating-playing: #1abc9c; /* Фиолетовый */
     --rating-completed: #27ae60; /* Бирюзовый */
+    --rating-pined: #aa8f02; /* Бирюзовый */
+    --rating-planed: #0296aa; /* Бирюзовый */
 }
 
 body {
@@ -41,14 +43,14 @@ h1 {
     font-size: 2.2rem;
 }
 
-.games-grid {
+.data-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
     gap: 20px;
     margin-top: 30px;
 }
 
-.game-card {
+.data-card {
     position: relative;
     background: var(--card-bg);
     border-radius: 12px;
@@ -58,7 +60,7 @@ h1 {
     aspect-ratio: 16/9;
 }
 
-.game-card:hover {
+.data-card:hover {
     transform: translateY(-5px);
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
 }
@@ -72,7 +74,7 @@ h1 {
     z-index: 2;
 }
 
-.game-rating, .game-status {
+.card-rating, .card-status {
     display: inline-block;
     padding: 4px 12px;
     border-radius: 20px;
@@ -83,17 +85,17 @@ h1 {
 }
 
 /* Цвета для числовых рейтингов */
-.game-rating[data-rating="5"] { background-color: var(--rating-5); }
-.game-rating[data-rating="4"] { background-color: var(--rating-4); }
-.game-rating[data-rating="3"] { background-color: var(--rating-3); }
-.game-rating[data-rating="2"] { background-color: var(--rating-2); color: var(--text-color); text-shadow: none; }
-.game-rating[data-rating="1"] { background-color: var(--rating-1); }
-.game-rating[data-rating="0"] { background-color: var(--rating-0); }
-.game-rating[data-rating="-1"] { background-color: var(--rating--1); }
-.game-rating[data-rating="-2"] { background-color: var(--rating--2); }
-.game-rating[data-rating="-3"] { background-color: var(--rating--3); }
-.game-rating[data-rating="-4"] { background-color: var(--rating--4); }
-.game-rating[data-rating="-5"] { background-color: var(--rating--5); }
+.card-rating[data-rating="5"] { background-color: var(--rating-5); }
+.card-rating[data-rating="4"] { background-color: var(--rating-4); }
+.card-rating[data-rating="3"] { background-color: var(--rating-3); }
+.card-rating[data-rating="2"] { background-color: var(--rating-2); color: var(--text-color); text-shadow: none; }
+.card-rating[data-rating="1"] { background-color: var(--rating-1); }
+.card-rating[data-rating="0"] { background-color: var(--rating-0); }
+.card-rating[data-rating="-1"] { background-color: var(--rating--1); }
+.card-rating[data-rating="-2"] { background-color: var(--rating--2); }
+.card-rating[data-rating="-3"] { background-color: var(--rating--3); }
+.card-rating[data-rating="-4"] { background-color: var(--rating--4); }
+.card-rating[data-rating="-5"] { background-color: var(--rating--5); }
 
 .youtube-preview {
     position: absolute;
@@ -109,29 +111,46 @@ h1 {
 }
 
 /* Специальные статусы */
-.game-status[data-status="Не играл"] {
+.card-status[data-status="Уточнить"] {
     background-color: var(--rating-not-played);
 }
-.game-status[data-status="Играл"] {
+.card-status[data-status="Смотрел"] {
     background-color: var(--rating-played);
-    animation: pulse 2s infinite;
 }
-.game-status[data-status="Играю сейчас"] {
+.card-status[data-status="В процессе"] {
     background-color: var(--rating-playing);
-    animation: pulse 2s infinite;
 }
-.game-status[data-status="Завершено"] {
+.card-status[data-status="В планах"] {
+    background-color: var(--rating-planed);
+}
+.card-status[data-status="Завершено"] {
     background-color: var(--rating-completed);
     animation: pulse 2s infinite;
 }
-
-.game-status[data-status="Завершено"] {
+.card-status[data-status="Избранное"] {
+    background-color: var(--rating-pined);
+    animation: pulse 2s infinite;
+}
+.card-status[data-status="Завершено"] {
     background-color: var(--rating-completed);
     position: relative;
     padding-left: 25px;
 }
-.game-status[data-status="Завершено"]::before {
+.card-status[data-status="Завершено"]::before {
     content: "✓";
+    position: absolute;
+    left: 8px;
+    top: 50%;
+    transform: translateY(-50%);
+}
+
+.card-status[data-status="Избранное"] {
+    background-color: var(--rating-pined);
+    position: relative;
+    padding-left: 25px;
+}
+.card-status[data-status="Избранное"]::before {
+    content: "⭐";
     position: absolute;
     left: 8px;
     top: 50%;
@@ -145,7 +164,7 @@ h1 {
     100% { opacity: 0.8; }
 }
 
-.game-info {
+.data-info {
     position: absolute;
     bottom: 0;
     left: 0;
@@ -156,13 +175,13 @@ h1 {
     color: white;
 }
 
-.game-title {
+.data-title {
     font-size: 1.2rem;
     font-weight: 600;
     margin: 0 0 5px 0;
 }
 
-.game-rating {
+.card-rating {
     display: inline-block;
     background-color: var(--primary-color);
     color: white;
@@ -240,11 +259,11 @@ button:hover {
 }
 
 @media (max-width: 768px) {
-    .games-grid {
+    .data-grid {
         grid-template-columns: 1fr;
     }
 
-    .game-card {
+    .data-card {
         aspect-ratio: 16/9;
     }
 
@@ -282,7 +301,7 @@ button:hover {
         display: none !important;
     }
 
-    .game-card:hover .game-icon {
+    .data-card:hover .game-icon {
         opacity: 1;
     }
 }
@@ -306,7 +325,7 @@ button:hover {
     justify-content: center;
 }
 
-.game-card:hover .delete-btn {
+.data-card:hover .delete-btn {
     opacity: 1;
 }
 
