@@ -827,7 +827,7 @@
                 e.stopPropagation();
                 const itemName = btn.dataset.name;
                 if (itemName) {
-                    const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(itemName)}`;
+                    const searchUrl = `https://yandex.ru/images/search?text=${encodeURIComponent(itemName)}`;
                     window.electronAPI.openExternal(searchUrl);
                 }
             });
@@ -846,7 +846,7 @@
                 const nameInput = document.getElementById('nameInput');
                 if (nameInput && nameInput.value.trim()) {
                     const searchQuery = encodeURIComponent(nameInput.value.trim() + ' cover');
-                    const searchUrl = `https://www.google.com/search?tbm=isch&q=${searchQuery}`;
+                    const searchUrl = `https://yandex.ru/images/search?text=${searchQuery}`;
                     window.electronAPI.openExternal(searchUrl);
                 } else {
                     showError('Введите название перед поиском иконки');

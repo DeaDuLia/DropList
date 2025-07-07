@@ -424,5 +424,162 @@ ipcMain.handle('update-book-status', async (event, name, status) => {
 });
 
 ipcMain.on('open-external', (event, url) => {
-    shell.openExternal(url);
+    const externalWindow = new BrowserWindow({
+        width: 1000,
+        height: 800,
+        webPreferences: {
+            nodeIntegration: false,
+            contextIsolation: true
+        }
+    });
+
+    externalWindow.loadURL(url);
+
+    // Блокируем навигацию
+    externalWindow.webContents.on('will-navigate', (event, navigationUrl) => {
+        if (new URL(navigationUrl).origin !== new URL(url).origin) {
+            event.preventDefault();
+        }
+    });
+
+    externalWindow.webContents.setWindowOpenHandler(() => {
+        return { action: 'deny' };
+    });
+
+    externalWindow.webContents.on('did-finish-load', () => {
+        externalWindow.webContents.executeJavaScript(`
+            // Стиль для подсветки div с jsname и их изображений
+            const style = document.createElement('style');
+            style.textContent = \`
+                div[jsname]:hover {
+                    cursor: pointer;
+                    position: relative;
+                }
+                div[jsname]:hover::after {
+                    content: '';
+                    position: absolute;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    outline: 2px solid #6c5ce7;
+                    pointer-events: none;
+                }
+                div[jsname]:hover img {
+                    opacity: 0.9;
+                }
+                a {
+                    pointer-events: none;
+                }
+            \`;
+            document.head.appendChild(style);
+
+            // Обработчик кликов по div с jsname
+            document.addEventListener('click', function(e) {
+                // Ищем ближайший div с атрибутом jsname
+                const img = e.target.querySelector('img');
+                    
+                    if (img && img.src) {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        handleImageClick(img);
+                        return;
+                    }
+                if (targetDiv) {
+                    // Ищем первое изображение в любом уровне вложенности
+                    
+                }
+                
+                // Дополнительно: обработка прямого клика по изображению
+                if (e.target.tagName === 'IMG' && e.target.src) {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleImageClick(e.target);
+                }
+            });
+
+            function handleImageClick(imgElement) {
+                const isDataUrl = imgElement.src.startsWith('data:');
+                
+                navigator.clipboard.writeText(imgElement.src)
+                    .then(() => {
+                        showNotification(
+                            isDataUrl 
+                                ? 'Data-URL изображения скопирована' 
+                                : 'Ссылка на изображение скопирована',
+                            isDataUrl ? 'data' : 'url'
+                        );
+                        
+                        // Закрываем окно после успешного копирования
+                        setTimeout(() => {
+                            window.close();
+                        }, 1000); // Даем время увидеть уведомление
+                    })
+                    .catch(err => {
+                        console.error('Ошибка:', err);
+                        showNotification('Не удалось скопировать ссылку', 'error');
+                    });
+            }
+
+            function showNotification(message, type = 'info') {
+                // Удаляем предыдущие уведомления
+                const existing = document.querySelector('.img-copy-notification');
+                if (existing) existing.remove();
+                
+                // Настройки стилей для разных типов
+                const styles = {
+                    info: { bg: '#6c5ce7', icon: '📋' },
+                    data: { bg: '#00b894', icon: '🖼️' },
+                    error: { bg: '#d63031', icon: '⚠️' }
+                };
+                
+                const style = styles[type] || styles.info;
+                
+                // Создаем уведомление
+                const notification = document.createElement('div');
+                notification.className = 'img-copy-notification';
+                
+                Object.assign(notification.style, {
+                    position: 'fixed',
+                    bottom: '20px',
+                    right: '20px',
+                    backgroundColor: style.bg,
+                    color: 'white',
+                    padding: '12px 24px',
+                    borderRadius: '8px',
+                    zIndex: '9999',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+                    maxWidth: '90vw',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis'
+                });
+                
+                // Добавляем иконку
+                const icon = document.createElement('span');
+                icon.textContent = style.icon;
+                notification.appendChild(icon);
+                
+                // Добавляем текст
+                const text = document.createElement('span');
+                text.textContent = message;
+                notification.appendChild(text);
+                
+                document.body.appendChild(notification);
+                
+                // Автоматическое скрытие
+                setTimeout(() => {
+                    notification.remove();
+                    
+                }, 1000);
+            }
+
+            // Блокируем стандартное поведение ссылок
+            document.querySelectorAll('a').forEach(link => {
+                link.onclick = (e) => e.preventDefault();
+            });
+        `);
+    });
 });
