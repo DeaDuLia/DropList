@@ -37,12 +37,40 @@
             <button class="modal-button" id="modalClose">OK</button>
         </div>
     </div>
+    <button id="scrollToTopBtn" class="scroll-to-top" title="Наверх">↑</button>
     <script>
         // Глобальные переменные
         const errorModal = document.getElementById('errorModal');
         const modalMessage = document.getElementById('modalMessage');
         const modalClose = document.getElementById('modalClose');
         let isAddingGame = false;
+        const scrollToTopBtn = document.getElementById('scrollToTopBtn');
+
+        let currentPage = 1;
+        const itemsPerPage = 20; // Количество элементов на странице
+        let isLoading = false;
+        let allItemsLoaded = false;
+
+        let currentFilters = {
+            searchQuery: '',
+            statusFilter: 'Все'
+        };
+
+
+        window.addEventListener('scroll', () => {
+            if (window.pageYOffset > 300) {
+                scrollToTopBtn.classList.add('visible');
+            } else {
+                scrollToTopBtn.classList.remove('visible');
+            }
+        });
+
+        scrollToTopBtn.addEventListener('click', () => {
+            window.scrollTo({
+                top: 0,
+                behavior: 'smooth'
+            });
+        });
 
         // Функция отображения ошибок
         function showError(message) {
@@ -135,17 +163,232 @@
             if (statusSelect) statusSelect.value = 'Не играл';
         }
 
-        async function renderSection(section, data) {
+        async function renderSection(section, data, resetPagination = true, preserveFilters = false) {
             const contentSection = document.getElementById('contentSection');
             if (!contentSection) return;
+
+            if (resetPagination) {
+                currentPage = 1;
+                allItemsLoaded = false;
+            }
+
+            // Сохраняем все данные для фильтрации и пагинации
+            window.allSectionData = data;
+
+            // Применяем текущие фильтры, если не указано preserveFilters = false
+            if (preserveFilters) {
+                window.filteredData = filterData(data, currentFilters.searchQuery, currentFilters.statusFilter);
+            } else {
+                window.filteredData = data;
+                currentFilters = { searchQuery: '', statusFilter: 'Все' }; // Сбрасываем фильтры
+            }
+
             // Рендерим контент
             contentSection.innerHTML = `
-                <h1 class="section-title">${getSectionTitle(section)}</h1>
-                ${await renderCardSection(data)}
-            `;
+        <div class="section-header">
+            <h1 class="section-title">${getSectionTitle(section)}</h1>
+            <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+                <div class="filter-container">
+                    <select id="statusFilter">
+                        <option value="Все">Все статусы</option>
+                    </select>
+                </div>
+                <div class="search-container">
+                    <input type="text" id="searchInput" placeholder="Поиск..." value="${currentFilters.searchQuery}">
+                    <div id="searchSuggestions" class="search-suggestions"></div>
+                    <button id="searchBtn">🔍</button>
+                </div>
+            </div>
+        </div>
+        ${getAddFormHTML()}
+        <div id="dataList" class="data-grid"></div>
+        <div id="loadingIndicator" class="loading-indicator" style="display: none;">
+            <div class="loading-spinner"></div>
+            <p>Загрузка...</p>
+        </div>
+    `;
+
             await initCardSection();
-            // Всегда скрываем форму добавления
             hideAddForm();
+            setupSearchInput();
+
+            // Устанавливаем сохранённое значение фильтра статуса
+            const statusFilter = document.getElementById('statusFilter');
+            if (statusFilter && currentFilters.statusFilter) {
+                statusFilter.value = currentFilters.statusFilter;
+            }
+
+            loadMoreItems(); // Загружаем первую страницу
+
+            // Добавляем обработчик прокрутки
+            window.addEventListener('scroll', handleScroll);
+        }
+
+        function filterData(data, searchQuery, statusFilter) {
+            const queryLower = (searchQuery || '').toLowerCase();
+            return data.filter(item => {
+                const nameMatches = !queryLower || item.name.toLowerCase().includes(queryLower);
+                const statusMatches = statusFilter === 'Все' || item.status === statusFilter;
+                return nameMatches && statusMatches;
+            });
+        }
+
+        function handleScroll() {
+            if (isLoading || allItemsLoaded) return;
+
+            const scrollPosition = window.innerHeight + window.scrollY;
+            const pageHeight = document.body.offsetHeight;
+            const threshold = 500; // Загружать заранее за 500px до конца
+
+            if (scrollPosition > pageHeight - threshold) {
+                loadMoreItems();
+            }
+        }
+
+        async function loadMoreItems() {
+            if (isLoading || allItemsLoaded) return;
+
+            isLoading = true;
+            const loadingIndicator = document.getElementById('loadingIndicator');
+            if (loadingIndicator) loadingIndicator.style.display = 'block';
+
+            // Получаем данные для текущей страницы
+            const startIndex = (currentPage - 1) * itemsPerPage;
+            const endIndex = startIndex + itemsPerPage;
+            const itemsToRender = window.filteredData.slice(startIndex, endIndex);
+
+            if (itemsToRender.length === 0) {
+                allItemsLoaded = true;
+                isLoading = false;
+                if (loadingIndicator) loadingIndicator.style.display = 'none';
+                return;
+            }
+
+            // Рендерим карточки
+            const dataList = document.getElementById('dataList');
+            if (dataList) {
+                dataList.innerHTML += renderCardList(itemsToRender);
+            }
+
+            // Обновляем состояние
+            currentPage++;
+            isLoading = false;
+            if (loadingIndicator) loadingIndicator.style.display = 'none';
+
+            // Инициализируем кнопки и поля для новых карточек
+            setupDeleteButtons();
+            setupEditableFields();
+            setupSearchButtons();
+        }
+
+        async function loadStatusFilter() {
+            try {
+                const statuses = await window.electronAPI.getStatuses();
+                const statusFilter = document.getElementById('statusFilter');
+                if (statusFilter) {
+                    statusFilter.innerHTML = `
+                <option value="Все">Все статусы</option>
+                ${statuses.map(s => `<option value="${s}">${s}</option>`).join('')}
+            `;
+
+                    // Добавляем обработчик изменения фильтра
+                    statusFilter.addEventListener('change', () => {
+                        filterCards();
+                    });
+                }
+            } catch (error) {
+                console.error('Error loading statuses for filter:', error);
+            }
+        }
+
+        function setupSearchInput() {
+            const searchInput = document.getElementById('searchInput');
+            const searchBtn = document.getElementById('searchBtn');
+            const searchSuggestions = document.getElementById('searchSuggestions');
+
+            if (!searchInput || !searchBtn) return;
+
+            function updateSuggestions(query) {
+                const queryLower = query.toLowerCase();
+                searchSuggestions.innerHTML = '';
+
+                if (query.length < 2) {
+                    searchSuggestions.style.display = 'none';
+                    return;
+                }
+
+                const matches = window.allSectionData.filter(item =>
+                    item.name.toLowerCase().includes(queryLower)
+                ).slice(0, 5);
+
+                if (matches.length > 0) {
+                    searchSuggestions.innerHTML = matches.map(item => `
+                <div class="suggestion-item">${item.name}</div>
+            `).join('');
+                    searchSuggestions.style.display = 'block';
+                } else {
+                    searchSuggestions.style.display = 'none';
+                }
+            }
+
+            // Обработчик ввода текста
+            searchInput.addEventListener('input', (e) => {
+                updateSuggestions(e.target.value);
+            });
+
+            // Обработчик клика по подсказке
+            searchSuggestions.addEventListener('click', (e) => {
+                if (e.target.classList.contains('suggestion-item')) {
+                    searchInput.value = e.target.textContent;
+                    searchSuggestions.style.display = 'none';
+                    filterCards(e.target.textContent);
+                }
+            });
+
+            // Обработчик кнопки поиска
+            searchBtn.addEventListener('click', () => {
+                // Показываем подсказки при клике, если есть текст в поле поиска
+                if (searchInput.value.length >= 2) {
+                    updateSuggestions(searchInput.value);
+                }
+                filterCards(searchInput.value);
+            });
+
+            // Обработчик нажатия Enter
+            searchInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    filterCards(searchInput.value);
+                }
+            });
+
+            // Скрытие подсказок при клике вне
+            document.addEventListener('click', (e) => {
+                if (!searchInput.contains(e.target) &&
+                    !searchBtn.contains(e.target) &&
+                    !searchSuggestions.contains(e.target)) {
+                    searchSuggestions.style.display = 'none';
+                }
+            });
+        }
+
+        function filterCards(query = '') {
+            const statusFilter = document.getElementById('statusFilter');
+            const selectedStatus = statusFilter ? statusFilter.value : 'Все';
+
+            // Сохраняем текущие фильтры
+            currentFilters = {
+                searchQuery: query,
+                statusFilter: selectedStatus
+            };
+
+            window.filteredData = filterData(window.allSectionData, query, selectedStatus);
+
+            // Сбрасываем пагинацию и перерисовываем
+            const dataList = document.getElementById('dataList');
+            if (dataList) dataList.innerHTML = '';
+            currentPage = 1;
+            allItemsLoaded = false;
+            loadMoreItems();
         }
 
         // Вспомогательные функции
@@ -170,11 +413,13 @@
         async function initCardSection() {
             await Promise.all([
                 loadRatings(),
-                loadStatuses()
+                loadStatuses(),
+                loadStatusFilter()
             ]);
 
             setupDeleteButtons();
             setupEditableFields();
+            setupSearchButtons();
             setupEventListeners();
             setupAddFormToggle();
         }
@@ -219,33 +464,30 @@
         }
 
         function renderCardList(cards) {
-            return `
-            <div id="dataList" class="data-grid">
-                ${cards.map(card => `
-                    <div class="data-card" data-name="${card.name}">
-                        <button class="delete-btn" data-name="${card.name}">🗑️</button>
-                        ${getCardIconHTML(card)}
-                        <div class="data-info">
-                            <h3 class="data-title">${card.name}</h3>
-                            <div class="data-ratings-container">
-                                <span class="card-rating rating-value editable-field"
-                                      data-rating="${card.rating}"
-                                      data-name="${card.name}"
-                                      title="Редактировать">
-                                    ${card.rating || '0'}
-                                </span>
-                                <span class="card-status status-value editable-field"
-                                      data-status="${card.status}"
-                                      data-name="${card.name}"
-                                      title="Редактировать">
-                                    ${card.status || 'Уточнить'}
-                                </span>
-                            </div>
+            return cards.map(card => `
+                <div class="data-card" data-name="${card.name}" style="display: block;">
+                    <button class="delete-btn" data-name="${card.name}">🗑️</button>
+                    <button class="search-btn" data-name="${card.name}" title="Найти в интернете">🔍</button>
+                    ${getCardIconHTML(card)}
+                    <div class="data-info">
+                        <h3 class="data-title">${card.name}</h3>
+                        <div class="data-ratings-container">
+                            <span class="card-rating rating-value editable-field"
+                                  data-rating="${card.rating}"
+                                  data-name="${card.name}"
+                                  title="Редактировать">
+                                ${card.rating || '0'}
+                            </span>
+                            <span class="card-status status-value editable-field"
+                                  data-status="${card.status}"
+                                  data-name="${card.name}"
+                                  title="Редактировать">
+                                ${card.status || 'Уточнить'}
+                            </span>
                         </div>
                     </div>
-                `).join('')}
-            </div>
-            `;
+                </div>
+            `).join('');
         }
 
         function setupAddFormToggle() {
@@ -276,6 +518,9 @@
         // Навигация между разделами
         document.querySelectorAll('.nav-item').forEach(item => {
             item.addEventListener('click', async function() {
+                // Удаляем обработчик прокрутки предыдущего раздела
+                window.removeEventListener('scroll', handleScroll);
+
                 // Удаляем активный класс у всех элементов
                 document.querySelectorAll('.nav-item').forEach(navItem => {
                     navItem.classList.remove('active');
@@ -306,7 +551,7 @@
                             data = await window.electronAPI.getBooksWithTags();
                             break;
                     }
-                    await renderSection(section, data);
+                    await renderSection(section, data, true, false);
                 } catch (error) {
                     console.error(`Ошибка загрузки раздела ${section}:`, error);
                     await showError(`Не удалось загрузить раздел ${section}`);
@@ -332,35 +577,50 @@
             if (!cardData.name) {
                 await showError('Пожалуйста, введите название');
                 nameInput.focus();
+                isAddingGame = false;
                 return;
             }
 
             try {
-                let data;
                 switch (section) {
                     case "games":
                         await window.electronAPI.addGame(cardData);
-                        data = await window.electronAPI.getGamesWithTags();
                         break;
                     case "movies":
                         await window.electronAPI.addMovie(cardData);
-                        data = await window.electronAPI.getMoviesWithTags();
                         break;
                     case "serials":
                         await window.electronAPI.addSerial(cardData);
-                        data = await window.electronAPI.getSerialsWithTags();
                         break;
                     case "anime":
                         await window.electronAPI.addAnime(cardData);
-                        data = await window.electronAPI.getAnimeWithTags();
                         break;
                     case "books":
                         await window.electronAPI.addBook(cardData);
-                        data = await window.electronAPI.getBooksWithTags();
                         break;
                 }
                 resetForm();
-                await renderSection(section, data);
+
+                // Перезагружаем данные и рендерим раздел заново
+                let data;
+                switch (section) {
+                    case "games":
+                        data = await window.electronAPI.getGamesWithTags();
+                        break;
+                    case "movies":
+                        data = await window.electronAPI.getMoviesWithTags();
+                        break;
+                    case "serials":
+                        data = await window.electronAPI.getSerialsWithTags();
+                        break;
+                    case "anime":
+                        data = await window.electronAPI.getAnimeWithTags();
+                        break;
+                    case "books":
+                        data = await window.electronAPI.getBooksWithTags();
+                        break;
+                }
+                await renderSection(section, data, true);
             } catch (error) {
                 console.error('Ошибка при добавлении:', error);
                 await showError(`Ошибка при добавлении: ${error.message}`);
@@ -401,17 +661,17 @@
                     modal.className = 'modal';
                     modal.style.display = 'block';
                     modal.innerHTML = `
-                    <div class="modal-content" style="max-width: 300px;">
-                        <h3>${title}</h3>
-                        <select class="edit-select">
-                            ${values.map(v => `<option value="${v}" ${v === currentValue ? 'selected' : ''}>${v}</option>`).join('')}
-                        </select>
-                        <div style="margin-top: 20px; display: flex; justify-content: space-between;">
-                            <button class="modal-button cancel-btn">Отмена</button>
-                            <button class="modal-button confirm-btn">Сохранить</button>
-                        </div>
+                <div class="modal-content" style="max-width: 300px;">
+                    <h3>${title}</h3>
+                    <select class="edit-select">
+                        ${values.map(v => `<option value="${v}" ${v === currentValue ? 'selected' : ''}>${v}</option>`).join('')}
+                    </select>
+                    <div style="margin-top: 20px; display: flex; justify-content: space-between;">
+                        <button class="modal-button cancel-btn">Отмена</button>
+                        <button class="modal-button confirm-btn">Сохранить</button>
                     </div>
-                `;
+                </div>
+            `;
 
                     document.body.appendChild(modal);
 
@@ -424,35 +684,51 @@
                         const newValue = modal.querySelector('.edit-select').value;
                         try {
                             const section = document.querySelector('.nav-item.active')?.dataset.section;
+                            let data;
+
                             if (isRating) {
                                 if (section === 'games') {
                                     await window.electronAPI.updateGameRating(itemName, newValue);
+                                    data = await window.electronAPI.getGamesWithTags();
                                 } else if (section === 'movies') {
                                     await window.electronAPI.updateMovieRating(itemName, newValue);
+                                    data = await window.electronAPI.getMoviesWithTags();
                                 } else if (section === 'serials') {
-                                    await window.electronAPI.updateMovieRating(itemName, newValue);
+                                    await window.electronAPI.updateSerialRating(itemName, newValue);
+                                    data = await window.electronAPI.getSerialsWithTags();
                                 } else if (section === 'anime') {
                                     await window.electronAPI.updateAnimeRating(itemName, newValue);
+                                    data = await window.electronAPI.getAnimeWithTags();
                                 } else if (section === 'books') {
                                     await window.electronAPI.updateBookRating(itemName, newValue);
+                                    data = await window.electronAPI.getBooksWithTags();
                                 }
                                 this.dataset.rating = newValue;
                                 this.textContent = newValue || 'Не оценено';
                             } else {
                                 if (section === 'games') {
                                     await window.electronAPI.updateGameStatus(itemName, newValue);
+                                    data = await window.electronAPI.getGamesWithTags();
                                 } else if (section === 'movies') {
                                     await window.electronAPI.updateMovieStatus(itemName, newValue);
+                                    data = await window.electronAPI.getMoviesWithTags();
                                 } else if (section === 'serials') {
                                     await window.electronAPI.updateSerialStatus(itemName, newValue);
+                                    data = await window.electronAPI.getSerialsWithTags();
                                 } else if (section === 'anime') {
                                     await window.electronAPI.updateAnimeStatus(itemName, newValue);
+                                    data = await window.electronAPI.getAnimeWithTags();
                                 } else if (section === 'books') {
                                     await window.electronAPI.updateBookStatus(itemName, newValue);
+                                    data = await window.electronAPI.getBooksWithTags();
                                 }
                                 this.dataset.status = newValue;
                                 this.textContent = newValue || 'Не играл';
                             }
+
+                            // Перерисовываем раздел с обновленными данными
+                            await renderSection(section, data, true, true);
+
                             document.body.removeChild(modal);
                         } catch (error) {
                             console.error('Ошибка при обновлении:', error);
@@ -479,25 +755,76 @@
             document.querySelectorAll('.delete-btn').forEach(btn => {
                 btn.addEventListener('click', async (e) => {
                     e.stopPropagation();
-                    const itemName = btn.dataset.name; // Используем data-name
+                    const itemName = btn.dataset.name;
 
-                    try {
-                        const section = document.querySelector('.nav-item.active')?.dataset.section;
-                        if (section === 'games') {
-                            await window.electronAPI.deleteGame(itemName);
-                        } else if (section === 'movies') {
-                            await window.electronAPI.deleteMovie(itemName);
-                        } else if (section === 'serials') {
-                            await window.electronAPI.deleteSerial(itemName);
-                        } else if (section === 'anime') {
-                            await window.electronAPI.deleteAnime(itemName);
-                        } else if (section === 'books') {
-                            await window.electronAPI.deleteBook(itemName);
+                    // Создаем модальное окно подтверждения
+                    const confirmModal = document.createElement('div');
+                    confirmModal.className = 'modal';
+                    confirmModal.style.display = 'block';
+                    confirmModal.innerHTML = `
+                <div class="modal-content" style="max-width: 300px;">
+                    <h3>Подтверждение удаления</h3>
+                    <p>Вы уверены, что хотите удалить "${itemName}"?</p>
+                    <div style="margin-top: 20px; display: flex; justify-content: space-between;">
+                        <button class="modal-button cancel-btn">Отмена</button>
+                        <button class="modal-button confirm-btn" style="background-color: #e74c3c;">Удалить</button>
+                    </div>
+                </div>
+            `;
+
+                    document.body.appendChild(confirmModal);
+
+                    // Обработчики для кнопок
+                    confirmModal.querySelector('.cancel-btn').addEventListener('click', () => {
+                        document.body.removeChild(confirmModal);
+                    });
+
+                    confirmModal.querySelector('.confirm-btn').addEventListener('click', async () => {
+                        try {
+                            const section = document.querySelector('.nav-item.active')?.dataset.section;
+                            if (section === 'games') {
+                                await window.electronAPI.deleteGame(itemName);
+                            } else if (section === 'movies') {
+                                await window.electronAPI.deleteMovie(itemName);
+                            } else if (section === 'serials') {
+                                await window.electronAPI.deleteSerial(itemName);
+                            } else if (section === 'anime') {
+                                await window.electronAPI.deleteAnime(itemName);
+                            } else if (section === 'books') {
+                                await window.electronAPI.deleteBook(itemName);
+                            }
+                            btn.closest('.data-card').remove();
+                            document.body.removeChild(confirmModal);
+                        } catch (error) {
+                            console.error('Не удалось удалить:', error);
+                            await showError('Не удалось удалить');
+                            document.body.removeChild(confirmModal);
                         }
-                        btn.closest('.data-card').remove();
-                    } catch (error) {
-                        console.error('Не удалось удалить:', error);
-                        await showError('Не удалось удалить');
+                    });
+
+                    // Закрытие при клике вне модального окна
+                    confirmModal.addEventListener('click', (e) => {
+                        if (e.target === confirmModal) {
+                            document.body.removeChild(confirmModal);
+                        }
+                    });
+                });
+            });
+        }
+
+        function setupSearchButtons() {
+            const oldButtons = document.querySelectorAll('.search-btn');
+            oldButtons.forEach(btn => {
+                btn.replaceWith(btn.cloneNode(true));
+            });
+
+            document.querySelectorAll('.search-btn').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const itemName = btn.dataset.name;
+                    if (itemName) {
+                        const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(itemName)}`;
+                        window.electronAPI.openExternal(searchUrl);
                     }
                 });
             });
