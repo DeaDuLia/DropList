@@ -26,7 +26,11 @@
             </li>
         </ul>
     </nav>
-    <button id="toggleAddFormBtn" class="add-button">+ Добавить</button>
+    <div class="header-buttons">
+        <button id="importBtn" class="header-button" title="Импорт данных">📥 Импорт</button>
+        <button id="exportBtn" class="header-button" title="Экспорт данных">📤 Экспорт</button>
+        <button id="toggleAddFormBtn" class="add-button">+ Добавить</button>
+    </div>
 </header>
 <div id="contentSection" class="content-section">
 
@@ -92,8 +96,6 @@
         // Загружаем игры по умолчанию
         const games = await window.electronAPI.getGamesWithTags();
         await renderSection('games', games);
-
-        setupEventListeners();
     });
 
     // Загрузка рейтингов
@@ -260,7 +262,8 @@
         window.removeEventListener('scroll', handleScroll);
         const interactiveElements = [
             '#searchInput', '#searchBtn', '#statusFilter',
-            '.editable-field', '.delete-btn', '.search-btn'
+            '.editable-field', '.delete-btn', '.search-btn',
+            '#exportBtn', '#importBtn'
         ];
 
         interactiveElements.forEach(selector => {
@@ -563,6 +566,46 @@
                 await addNewData(section);
             }
         });
+        document.getElementById('exportBtn').addEventListener('click', async () => {
+            try {
+                const result = await window.electronAPI.exportData();
+                if (result.success) {
+                    await showError(result.message);
+                } else if (result.message !== 'Экспорт отменен') {
+                    await showError(result.message);
+                }
+            } catch (error) {
+                console.error('Export error:', error);
+                await showError('Ошибка при экспорте данных');
+            }
+        });
+        document.getElementById('importBtn').addEventListener('click', async () => {
+            try {
+                const result = await window.electronAPI.importData();
+                if (result.success) {
+                    await showError(result.message);
+                    // Перезагружаем текущий раздел
+                    const section = document.querySelector('.nav-item.active')?.dataset.section;
+                    if (section) {
+                        let data;
+                        switch(section) {
+                            case 'games': data = await window.electronAPI.getGamesWithTags(); break;
+                            case 'movies': data = await window.electronAPI.getMoviesWithTags(); break;
+                            case 'serials': data = await window.electronAPI.getSerialsWithTags(); break;
+                            case 'anime': data = await window.electronAPI.getAnimeWithTags(); break;
+                            case 'books': data = await window.electronAPI.getBooksWithTags(); break;
+                        }
+                        await renderSection(section, data, true);
+                    }
+                } else if (result.message !== 'Импорт отменен') {
+                    await showError(result.message);
+                }
+            } catch (error) {
+                console.error('Import error:', error);
+                await showError('Ошибка при импорте данных');
+            }
+        });
+
     }
 
     // Навигация между разделами

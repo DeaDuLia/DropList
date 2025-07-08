@@ -1,4 +1,6 @@
 const { app, BrowserWindow, ipcMain, shell } = require('electron');
+const { dialog } = require('electron');
+const fs = require('fs');
 const path = require('path');
 const Database = require('better-sqlite3');
 
@@ -248,7 +250,7 @@ const statements = {
 function createWindow() {
     const win = new BrowserWindow({
         title: 'DECatalog',
-        width: 800,
+        width: 1000,
         height: 600,
         icon: path.join(__dirname, 'icon.ico'),
         webPreferences: {
@@ -617,4 +619,144 @@ ipcMain.handle('update-book', async (event, oldName, newName, newIcoUrl) => {
     return db.transaction(() => {
         return statements.updateBook.run(newName, newIcoUrl, oldName);
     })();
+});
+
+ipcMain.handle('export-data', async () => {
+    const win = BrowserWindow.getFocusedWindow();
+
+    try {
+        // Получаем все данные из БД
+        const data = {
+            games: statements.getGames.all(),
+            movies: statements.getMovies.all(),
+            serials: statements.getSerials.all(),
+            anime: statements.getAnime.all(),
+            books: statements.getBooks.all(),
+            ratings: statements.getRatings.all().map(r => r.rating),
+            statuses: statements.getStatuses.all().map(s => s.status)
+        };
+
+        // Показываем диалог сохранения
+        const { filePath } = await dialog.showSaveDialog(win, {
+            title: 'Экспорт данных',
+            defaultPath: 'decatalog_export.json',
+            filters: [
+                { name: 'JSON Files', extensions: ['json'] },
+                { name: 'All Files', extensions: ['*'] }
+            ]
+        });
+
+        if (filePath) {
+            fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+            return { success: true, message: 'Данные успешно экспортированы' };
+        }
+        return { success: false, message: 'Экспорт отменен' };
+    } catch (error) {
+        console.error('Export error:', error);
+        return { success: false, message: 'Ошибка при экспорте данных' };
+    }
+});
+
+ipcMain.handle('import-data', async () => {
+    const win = BrowserWindow.getFocusedWindow();
+
+    try {
+        // Показываем диалог выбора файла
+        const { filePaths } = await dialog.showOpenDialog(win, {
+            title: 'Импорт данных',
+            filters: [
+                { name: 'JSON Files', extensions: ['json'] },
+                { name: 'All Files', extensions: ['*'] }
+            ],
+            properties: ['openFile']
+        });
+
+        if (filePaths.length === 0) {
+            return { success: false, message: 'Импорт отменен' };
+        }
+
+        const filePath = filePaths[0];
+        const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+
+        // Импортируем данные в транзакции
+        await db.transaction(() => {
+            // Импорт рейтингов и статусов
+            if (data.ratings) {
+                data.ratings.forEach(rating => {
+                    db.prepare('INSERT OR IGNORE INTO ratings (rating) VALUES (?)').run(rating);
+                });
+            }
+
+            if (data.statuses) {
+                data.statuses.forEach(status => {
+                    db.prepare('INSERT OR IGNORE INTO statuses (status) VALUES (?)').run(status);
+                });
+            }
+
+            // Импорт игр
+            if (data.games) {
+                data.games.forEach(game => {
+                    statements.addGame.run(
+                        game.name,
+                        game.icoUrl || null,
+                        game.rating || '0',
+                        game.status || 'Уточнить'
+                    );
+                });
+            }
+
+            // Импорт фильмов
+            if (data.movies) {
+                data.movies.forEach(movie => {
+                    statements.addMovie.run(
+                        movie.name,
+                        movie.icoUrl || null,
+                        movie.rating || '0',
+                        movie.status || 'Уточнить'
+                    );
+                });
+            }
+
+            // Импорт сериалов
+            if (data.serials) {
+                data.serials.forEach(serial => {
+                    statements.addSerial.run(
+                        serial.name,
+                        serial.icoUrl || null,
+                        serial.rating || '0',
+                        serial.status || 'Уточнить'
+                    );
+                });
+            }
+
+            // Импорт аниме
+            if (data.anime) {
+                data.anime.forEach(anime => {
+                    statements.addAnime.run(
+                        anime.name,
+                        anime.icoUrl || null,
+                        anime.rating || '0',
+                        anime.status || 'Уточнить'
+                    );
+                });
+            }
+
+            // Импорт книг
+            if (data.books) {
+                data.books.forEach(book => {
+                    statements.addBook.run(
+                        book.name,
+                        book.icoUrl || null,
+                        book.rating || '0',
+                        book.status || 'Уточнить'
+                    );
+                });
+            }
+        })();
+
+        return { success: true, message: 'Данные успешно импортированы' };
+    } catch (error) {
+        console.error('Import error:', error);
+        return { success: false, message: 'Ошибка при импорте данных' };
+    }
 });

@@ -39,5 +39,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     updateMovie: (oldName, newName, newIcoUrl) => ipcRenderer.invoke('update-movie', oldName, newName, newIcoUrl),
     updateSerial: (oldName, newName, newIcoUrl) => ipcRenderer.invoke('update-serial', oldName, newName, newIcoUrl),
     updateAnime: (oldName, newName, newIcoUrl) => ipcRenderer.invoke('update-anime', oldName, newName, newIcoUrl),
-    updateBook: (oldName, newName, newIcoUrl) => ipcRenderer.invoke('update-book', oldName, newName, newIcoUrl)
+    updateBook: (oldName, newName, newIcoUrl) => ipcRenderer.invoke('update-book', oldName, newName, newIcoUrl),
+    exportData: () => ipcRenderer.invoke('export-data'),
+    importData: () => ipcRenderer.invoke('import-data'),
+    showSaveDialog: (options) => ipcRenderer.invoke('show-save-dialog', options),
+    showOpenDialog: (options) => ipcRenderer.invoke('show-open-dialog', options)
 });
