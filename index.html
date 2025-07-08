@@ -207,6 +207,7 @@
                     <input type="text" id="searchInput" placeholder="Поиск..." value="${currentFilters.searchQuery}">
                     <div id="searchSuggestions" class="search-suggestions"></div>
                     <button id="searchBtn">🔍</button>
+                    <button id="clearSearchBtn" class="clear-search-btn" ${currentFilters.searchQuery ? '' : 'style="display: none;"'}>✕</button>
                 </div>
             </div>
         </div>
@@ -358,9 +359,21 @@
             }
         }
 
+        const clearSearchBtn = document.getElementById('clearSearchBtn');
+        if (clearSearchBtn) {
+            clearSearchBtn.addEventListener('click', () => {
+                searchInput.value = '';
+                clearSearchBtn.style.display = 'none';
+                filterCards('');
+            });
+        }
+
         // Обработчик ввода текста
         searchInput.addEventListener('input', (e) => {
             updateSuggestions(e.target.value);
+            if (clearSearchBtn) {
+                clearSearchBtn.style.display = e.target.value ? 'block' : 'none';
+            }
         });
 
         // Обработчик клика по подсказке
@@ -401,12 +414,17 @@
     function filterCards(query = '') {
         const statusFilter = document.getElementById('statusFilter');
         const selectedStatus = statusFilter ? statusFilter.value : 'Все';
+        const clearSearchBtn = document.getElementById('clearSearchBtn');
 
         // Сохраняем текущие фильтры
         currentFilters = {
             searchQuery: query,
             statusFilter: selectedStatus
         };
+
+        if (clearSearchBtn) {
+            clearSearchBtn.style.display = query ? 'block' : 'none';
+        }
 
         window.filteredData = filterData(window.allSectionData, query, selectedStatus);
 
