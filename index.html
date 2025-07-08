@@ -166,7 +166,9 @@
     async function renderSection(section, data, resetPagination = true, preserveFilters = false) {
         const contentSection = document.getElementById('contentSection');
         if (!contentSection) return;
-        window.removeEventListener('scroll', handleScroll);
+
+        // Очистка перед рендером
+        cleanupSection();
 
         if (resetPagination) {
             currentPage = 1;
@@ -241,16 +243,30 @@
         });
     }
 
+    let scrollTimeout;
     function handleScroll() {
-        if (isLoading || allItemsLoaded) return;
+        clearTimeout(scrollTimeout);
+        scrollTimeout = setTimeout(() => {
+            if (isLoading || allItemsLoaded) return;
+            const scrollPosition = window.innerHeight + window.scrollY;
+            if (scrollPosition > document.body.offsetHeight - 500) {
+                loadMoreItems();
+            }
+        }, 100);
+    }
 
-        const scrollPosition = window.innerHeight + window.scrollY;
-        const pageHeight = document.body.offsetHeight;
-        const threshold = 500; // Загружать заранее за 500px до конца
+    function cleanupSection() {
+        window.removeEventListener('scroll', handleScroll);
+        const interactiveElements = [
+            '#searchInput', '#searchBtn', '#statusFilter',
+            '.editable-field', '.delete-btn', '.search-btn'
+        ];
 
-        if (scrollPosition > pageHeight - threshold) {
-            loadMoreItems();
-        }
+        interactiveElements.forEach(selector => {
+            document.querySelectorAll(selector).forEach(el => {
+                el.replaceWith(el.cloneNode(true));
+            });
+        });
     }
 
     async function loadMoreItems() {
