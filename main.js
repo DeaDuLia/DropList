@@ -250,8 +250,8 @@ const statements = {
 function createWindow() {
     const win = new BrowserWindow({
         title: 'DECatalog',
-        width: 1000,
-        height: 600,
+        width: 1280,
+        height: 800,
         icon: path.join(__dirname, 'icon.ico'),
         webPreferences: {
             nodeIntegration: false,
