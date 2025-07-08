@@ -334,11 +334,6 @@ button:hover {
     transform: scale(1.1);
 }
 
-/* Редактор параметров */
-.editable-field:hover {
-    text-decoration: underline;
-}
-
 .edit-select {
     width: 100%;
     padding: 8px;
@@ -355,9 +350,39 @@ button:hover {
     cursor: pointer;
 }
 
-.modal-button.cancel-btn {
-    background-color: #f44336;
+.modal-button.confirm-btn {
+    background-color: #42bc08;
 }
+.modal-button.confirm-btn:hover {
+    background-color: #4de801 !important;
+}
+.modal-button.cancel-btn {
+    background-color: #aaaaaa !important;
+    opacity: 1 !important;
+}
+.modal-button.cancel-btn:hover {
+    background-color: #bcbbbb !important;
+    opacity: 1 !important;
+}
+/* Для удаления */
+.modal-button.cancel-btn.delete-bt {
+    background-color: #aaaaaa !important;
+}
+.modal-button.cancel-btn.delete-bt:hover {
+    background-color: #4c8000 !important;
+    opacity: 1 !important;
+}
+.modal-button.confirm-btn.delete-bt {
+    background-color: #c13300 !important;
+}
+.modal-button.confirm-btn.delete-bt:hover {
+    background-color: #a32f1e !important;
+    opacity: 1 !important;
+}
+
+
+
+
 
 .modal-button:hover {
     opacity: 0.8;
@@ -538,23 +563,7 @@ button:hover {
     transform: scale(1.1);
 }
 
-.modal-button.confirm-btn {
-    background-color: #c13300 !important;
-}
 
-.modal-button.confirm-btn:hover {
-    background-color: #a32f1e !important;
-    opacity: 1 !important;
-}
-
-.modal-button.cancel-btn {
-    background-color: #aaaaaa !important;
-}
-
-.modal-button.cancel-btn:hover {
-    background-color: #4c8000 !important;
-    opacity: 1 !important;
-}
 
 .section-header {
     display: flex;
@@ -740,4 +749,39 @@ button:hover {
 
 .search-icon-btn:hover {
     background-color: #2980b9;
+}
+
+.data-title {
+    transition: color 0.2s;
+    margin: 0;
+    padding: 5px 0;
+    word-break: break-word;
+}
+
+.card-rating:hover, .card-status:hover, .data-title:hover {
+    color: var(--secondary-color);
+}
+
+.data-title::after {
+    content: "✏️";
+    opacity: 0;
+}
+
+.data-title:hover::after {
+    opacity: 1;
+}
+
+.edit-input {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 1rem;
+    margin-bottom: 10px;
+}
+
+.edit-input:focus {
+    border-color: var(--primary-color);
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(108, 92, 231, 0.2);
 }

@@ -34,5 +34,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
     deleteBook: (name) => ipcRenderer.invoke('delete-book', name),
     updateBookRating: (name, rating) => ipcRenderer.invoke('update-book-rating', name, rating),
     updateBookStatus: (name, status) => ipcRenderer.invoke('update-book-status', name, status),
-    openExternal: (url) => ipcRenderer.send('open-external', url)
+    openExternal: (url) => ipcRenderer.send('open-external', url),
+    updateGame: (oldName, newName, newIcoUrl) => ipcRenderer.invoke('update-game', oldName, newName, newIcoUrl),
+    updateMovie: (oldName, newName, newIcoUrl) => ipcRenderer.invoke('update-movie', oldName, newName, newIcoUrl),
+    updateSerial: (oldName, newName, newIcoUrl) => ipcRenderer.invoke('update-serial', oldName, newName, newIcoUrl),
+    updateAnime: (oldName, newName, newIcoUrl) => ipcRenderer.invoke('update-anime', oldName, newName, newIcoUrl),
+    updateBook: (oldName, newName, newIcoUrl) => ipcRenderer.invoke('update-book', oldName, newName, newIcoUrl)
 });

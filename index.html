@@ -302,6 +302,7 @@
         // Инициализируем кнопки и поля для новых карточек
         setupDeleteButtons();
         setupEditableFields();
+        setupTitleClickHandlers();
         setupSearchButtons();
     }
 
@@ -445,6 +446,7 @@
 
         setupDeleteButtons();
         setupEditableFields();
+        setupTitleClickHandlers();
         setupSearchButtons();
         setupEventListeners();
         setupAddFormToggle();
@@ -794,8 +796,8 @@
                     <h3>Подтверждение удаления</h3>
                     <p>Вы уверены, что хотите удалить "${itemName}"?</p>
                     <div style="margin-top: 20px; display: flex; justify-content: space-between;">
-                        <button class="modal-button cancel-btn">Отмена</button>
-                        <button class="modal-button confirm-btn" style="background-color: #e74c3c;">Удалить</button>
+                        <button class="modal-button cancel-btn delete-bt">Отмена</button>
+                        <button class="modal-button confirm-btn delete-bt" style="background-color: #e74c3c;">Удалить</button>
                     </div>
                 </div>
             `;
@@ -879,6 +881,117 @@
         });
     }
 
+    function setupTitleClickHandlers() {
+        document.querySelectorAll('.data-title').forEach(title => {
+            // Удаляем старые обработчики
+            title.replaceWith(title.cloneNode(true));
+        });
+
+        document.querySelectorAll('.data-title').forEach(title => {
+            title.style.cursor = 'pointer';
+            title.addEventListener('click', async function(e) {
+                e.stopPropagation();
+                const card = this.closest('.data-card');
+                const oldName = card.dataset.name;
+                const currentIcoUrl = card.querySelector('.game-icon').src;
+
+                const modal = document.createElement('div');
+                modal.className = 'modal';
+                modal.style.display = 'block';
+                modal.innerHTML = `
+                <div class="modal-content" style="max-width: 400px;">
+                    <h3>Редактировать карточку</h3>
+                    <div class="form-group">
+                        <label>Название</label>
+                        <input id="editNameInput" value="${oldName}" class="edit-input">
+                    </div>
+                    <div class="form-group">
+                        <label>URL иконки</label>
+                        <div class="icon-input-container">
+                            <input id="editIcoInput" value="${currentIcoUrl}" class="edit-input">
+                            <button id="editSearchIconBtn" class="search-icon-btn" title="Найти иконку в интернете">🔍</button>
+                        </div>
+                    </div>
+                    <div style="margin-top: 20px; display: flex; justify-content: space-between;">
+                        <button class="modal-button cancel-btn">Отмена</button>
+                        <button class="modal-button confirm-btn">Сохранить</button>
+                    </div>
+                </div>
+            `;
+
+                document.body.appendChild(modal);
+
+                // Фокусируемся на поле ввода названия
+                modal.querySelector('#editNameInput').focus();
+
+                // Обработчик для кнопки поиска иконки
+                modal.querySelector('#editSearchIconBtn').addEventListener('click', () => {
+                    const nameInput = modal.querySelector('#editNameInput');
+                    if (nameInput && nameInput.value.trim()) {
+                        const searchQuery = encodeURIComponent(nameInput.value.trim() + ' cover');
+                        const searchUrl = `https://yandex.ru/images/search?text=${searchQuery}`;
+                        window.electronAPI.openExternal(searchUrl);
+                    } else {
+                        showError('Введите название перед поиском иконки');
+                    }
+                });
+
+                modal.querySelector('.cancel-btn').addEventListener('click', () => {
+                    document.body.removeChild(modal);
+                });
+
+                modal.querySelector('.confirm-btn').addEventListener('click', async () => {
+                    const newName = modal.querySelector('#editNameInput').value.trim();
+                    const newIcoUrl = modal.querySelector('#editIcoInput').value.trim();
+
+                    if (!newName) {
+                        await showError('Пожалуйста, введите название');
+                        return;
+                    }
+
+                    try {
+                        const section = document.querySelector('.nav-item.active')?.dataset.section;
+                        let data;
+
+                        switch(section) {
+                            case 'games':
+                                await window.electronAPI.updateGame(oldName, newName, newIcoUrl);
+                                data = await window.electronAPI.getGamesWithTags();
+                                break;
+                            case 'movies':
+                                await window.electronAPI.updateMovie(oldName, newName, newIcoUrl);
+                                data = await window.electronAPI.getMoviesWithTags();
+                                break;
+                            case 'serials':
+                                await window.electronAPI.updateSerial(oldName, newName, newIcoUrl);
+                                data = await window.electronAPI.getSerialsWithTags();
+                                break;
+                            case 'anime':
+                                await window.electronAPI.updateAnime(oldName, newName, newIcoUrl);
+                                data = await window.electronAPI.getAnimeWithTags();
+                                break;
+                            case 'books':
+                                await window.electronAPI.updateBook(oldName, newName, newIcoUrl);
+                                data = await window.electronAPI.getBooksWithTags();
+                                break;
+                        }
+
+                        await renderSection(section, data, true, true);
+                        document.body.removeChild(modal);
+                    } catch (error) {
+                        console.error('Ошибка при обновлении:', error);
+                        showError('Не удалось обновить карточку');
+                    }
+                });
+
+                modal.addEventListener('click', (e) => {
+                    if (e.target === modal) {
+                        document.body.removeChild(modal);
+                    }
+                });
+            });
+        });
+    }
 </script>
 </body>
 </html>

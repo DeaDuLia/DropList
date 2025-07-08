@@ -237,7 +237,12 @@ const statements = {
         VALUES (?, ?, ?, ?)`),
     deleteBook: db.prepare('DELETE FROM books WHERE name = ?'),
     updateBookRating: db.prepare('UPDATE books SET rating = ? WHERE name = ?'),
-    updateBookStatus: db.prepare('UPDATE books SET status = ? WHERE name = ?')
+    updateBookStatus: db.prepare('UPDATE books SET status = ? WHERE name = ?'),
+    updateGame: db.prepare('UPDATE games SET name = ?, ico_url = ? WHERE name = ?'),
+    updateMovie: db.prepare('UPDATE movies SET name = ?, ico_url = ? WHERE name = ?'),
+    updateSerial: db.prepare('UPDATE serials SET name = ?, ico_url = ? WHERE name = ?'),
+    updateAnime: db.prepare('UPDATE anime SET name = ?, ico_url = ? WHERE name = ?'),
+    updateBook: db.prepare('UPDATE books SET name = ?, ico_url = ? WHERE name = ?')
 };
 
 function createWindow() {
@@ -585,4 +590,31 @@ ipcMain.on('open-external', (event, url) => {
             }  
         `);
     });
+});
+
+// В раздел IPC handlers добавить:
+ipcMain.handle('update-game', async (event, oldName, newName, newIcoUrl) => {
+    return db.transaction(() => {
+        return statements.updateGame.run(newName, newIcoUrl, oldName);
+    })();
+});
+ipcMain.handle('update-movie', async (event, oldName, newName, newIcoUrl) => {
+    return db.transaction(() => {
+        return statements.updateMovie.run(newName, newIcoUrl, oldName);
+    })();
+});
+ipcMain.handle('update-serial', async (event, oldName, newName, newIcoUrl) => {
+    return db.transaction(() => {
+        return statements.updateSerial.run(newName, newIcoUrl, oldName);
+    })();
+});
+ipcMain.handle('update-anime', async (event, oldName, newName, newIcoUrl) => {
+    return db.transaction(() => {
+        return statements.updateAnime.run(newName, newIcoUrl, oldName);
+    })();
+});
+ipcMain.handle('update-book', async (event, oldName, newName, newIcoUrl) => {
+    return db.transaction(() => {
+        return statements.updateBook.run(newName, newIcoUrl, oldName);
+    })();
 });
