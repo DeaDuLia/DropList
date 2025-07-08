@@ -3,7 +3,6 @@ const path = require('path');
 const Database = require('better-sqlite3');
 
 const db = new Database('database.db', {
-    verbose: console.log, // для отладки
     timeout: 5000 // увеличить таймаут ожидания
 });
 db.pragma('journal_mode = WAL');

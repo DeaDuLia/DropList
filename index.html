@@ -166,6 +166,7 @@
     async function renderSection(section, data, resetPagination = true, preserveFilters = false) {
         const contentSection = document.getElementById('contentSection');
         if (!contentSection) return;
+        window.removeEventListener('scroll', handleScroll);
 
         if (resetPagination) {
             currentPage = 1;
@@ -183,6 +184,13 @@
             currentFilters = { searchQuery: '', statusFilter: 'Все' }; // Сбрасываем фильтры
         }
 
+        const oldSearchInput = document.getElementById('searchInput');
+        const oldSearchBtn = document.getElementById('searchBtn');
+        const oldStatusFilter = document.getElementById('statusFilter');
+
+        if (oldSearchInput) oldSearchInput.replaceWith(oldSearchInput.cloneNode(true));
+        if (oldSearchBtn) oldSearchBtn.replaceWith(oldSearchBtn.cloneNode(true));
+        if (oldStatusFilter) oldStatusFilter.replaceWith(oldStatusFilter.cloneNode(true));
         // Рендерим контент
         contentSection.innerHTML = `
         <div class="section-header">
@@ -302,6 +310,8 @@
     }
 
     function setupSearchInput() {
+        const oldInput = document.getElementById('searchInput');
+        if (oldInput) oldInput.replaceWith(oldInput.cloneNode(true));
         const searchInput = document.getElementById('searchInput');
         const searchBtn = document.getElementById('searchBtn');
         const searchSuggestions = document.getElementById('searchSuggestions');
@@ -522,8 +532,6 @@
     // Навигация между разделами
     document.querySelectorAll('.nav-item').forEach(item => {
         item.addEventListener('click', async function() {
-            // Удаляем обработчик прокрутки предыдущего раздела
-            window.removeEventListener('scroll', handleScroll);
 
             // Удаляем активный класс у всех элементов
             document.querySelectorAll('.nav-item').forEach(navItem => {
