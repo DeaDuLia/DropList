@@ -242,8 +242,10 @@ const statements = {
 
 function createWindow() {
     const win = new BrowserWindow({
+        title: 'DECatalog',
         width: 800,
         height: 600,
+        icon: path.join(__dirname, 'icon.ico'),
         webPreferences: {
             nodeIntegration: false,
             preload: path.join(__dirname, 'preload.js')
@@ -427,6 +429,7 @@ ipcMain.on('open-external', (event, url) => {
     const externalWindow = new BrowserWindow({
         width: 1000,
         height: 800,
+        icon: path.join(__dirname, 'icon.ico'),
         webPreferences: {
             nodeIntegration: false,
             contextIsolation: true
