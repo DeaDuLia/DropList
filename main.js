@@ -250,8 +250,9 @@ function createWindow() {
             preload: path.join(__dirname, 'preload.js')
         }
     });
-
+    win.setMenu(null)
     win.loadFile('index.html');
+
 }
 
 
@@ -432,7 +433,7 @@ ipcMain.on('open-external', (event, url) => {
             contextIsolation: true
         }
     });
-
+    externalWindow.setMenu(null)
     externalWindow.loadURL(url);
 
     // Блокируем навигацию
@@ -448,6 +449,11 @@ ipcMain.on('open-external', (event, url) => {
 
     externalWindow.webContents.on('did-finish-load', () => {
         externalWindow.webContents.executeJavaScript(`
+            // Блокируем стандартное поведение ссылок
+            document.querySelectorAll('a').forEach(link => {
+                link.onclick = (e) => e.preventDefault();
+            });
+        
             // Стиль для подсветки div с jsname и их изображений
             const style = document.createElement('style');
             style.textContent = \`
@@ -485,10 +491,6 @@ ipcMain.on('open-external', (event, url) => {
                         handleImageClick(img);
                         return;
                     }
-                if (targetDiv) {
-                    // Ищем первое изображение в любом уровне вложенности
-                    
-                }
                 
                 // Дополнительно: обработка прямого клика по изображению
                 if (e.target.tagName === 'IMG' && e.target.src) {
@@ -541,18 +543,22 @@ ipcMain.on('open-external', (event, url) => {
                 
                 Object.assign(notification.style, {
                     position: 'fixed',
-                    bottom: '20px',
-                    right: '20px',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
                     backgroundColor: style.bg,
                     color: 'white',
-                    padding: '12px 24px',
-                    borderRadius: '8px',
+                    padding: '24px 48px', // Увеличили padding для большего размера
+                    borderRadius: '12px',
                     zIndex: '9999',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '10px',
-                    boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
-                    maxWidth: '90vw',
+                    gap: '20px', // Увеличили расстояние между иконкой и текстом
+                    boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
+                    maxWidth: '80vw',
+                    fontSize: '24px', // Увеличили размер шрифта
+                    fontWeight: 'bold',
+                    textAlign: 'center',
                     overflow: 'hidden',
                     textOverflow: 'ellipsis'
                 });
@@ -560,6 +566,7 @@ ipcMain.on('open-external', (event, url) => {
                 // Добавляем иконку
                 const icon = document.createElement('span');
                 icon.textContent = style.icon;
+                icon.style.fontSize = '32px'; // Увеличили размер иконки
                 notification.appendChild(icon);
                 
                 // Добавляем текст
@@ -572,14 +579,8 @@ ipcMain.on('open-external', (event, url) => {
                 // Автоматическое скрытие
                 setTimeout(() => {
                     notification.remove();
-                    
-                }, 1000);
-            }
-
-            // Блокируем стандартное поведение ссылок
-            document.querySelectorAll('a').forEach(link => {
-                link.onclick = (e) => e.preventDefault();
-            });
+                }, 1500); // Увеличили время показа уведомления
+            }  
         `);
     });
 });
