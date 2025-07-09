@@ -7,7 +7,8 @@
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
     "rebuild": "electron-rebuild -f -w better-sqlite3",
-    "build": "electron-builder --win",
+    "build-win": "electron-builder --win",
+    "build-mac": "electron-builder --mac",
     "build-all": "electron-builder --win --x64 --ia32"
   },
   "build": {
@@ -17,8 +18,17 @@
         "nsis",
         "portable"
       ],
-      "icon": "build/icon.ico",
+      "icon": "icon.ico",
       "requestedExecutionLevel": "asInvoker"
+    },
+    "mac": {
+      "target": ["dmg", "zip"],
+      "category": "public.app-category.utilities",
+      "icon": "icon.icns"
+    },
+    "linux": {
+      "target": ["AppImage", "deb", "snap", "rpm"],
+      "category": "Utility"
     },
     "nsis": {
       "oneClick": false,
