@@ -26,7 +26,8 @@
     "mac": {
       "target": ["dmg", "zip"],
       "category": "public.app-category.utilities",
-      "icon": "icon.icns"
+      "icon": "icon.icns",
+      "identity": null
     },
     "linux": {
       "target": ["AppImage", "deb", "snap", "rpm"],
