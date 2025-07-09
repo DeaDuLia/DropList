@@ -7,24 +7,26 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Create database file
+        run: touch database.db  # Создаем пустой файл БД если его нет
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
 
-      - name: Install Linux dependencies
+      - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y build-essential
-
-      - name: Install npm packages
-        run: npm install
+          npm install
+          npm run rebuild
 
       - name: Build for Linux
-        run: npm run build-linux
+        run: npm run build -- --linux
 
-      - name: Upload Linux artifacts
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: linux-build
@@ -36,19 +38,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Create database file
+        run: New-Item -ItemType File -Path database.db  # PowerShell команда
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
 
-      - name: Install npm packages
-        run: npm install
+      - name: Install dependencies
+        run: |
+          npm install
+          npm run rebuild
 
       - name: Build for Windows
-        run: npm run build-win
+        run: npm run build -- --win
 
-      - name: Upload Windows artifacts
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: windows-build
@@ -60,21 +67,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Create database file
+        run: touch database.db
+
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
           cache: 'npm'
 
-      - name: Install npm packages (macOS)
+      - name: Install dependencies
         run: |
           npm install
-          npm config delete python  # Удаляем проблемную настройку
+          npm run rebuild
 
       - name: Build for Mac
-        run: npm run build-mac
+        run: npm run build -- --mac
 
-      - name: Upload Mac artifacts
+      - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: mac-build

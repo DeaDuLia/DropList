@@ -2,64 +2,48 @@
   "name": "DropList",
   "version": "1.0.0",
   "main": "main.js",
+  "author": "Nikita <nvdeshin@gmail.com>",
+  "description": "Media catalog application",
   "scripts": {
     "start": "electron .",
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
-    "rebuild": "electron-rebuild -f -w better-sqlite3",
+    "postinstall": "electron-builder install-app-deps",
     "build": "electron-builder",
     "build-win": "electron-builder --win",
-    "build-mac": "electron-builder --mac",
-    "build-linux": "electron-builder --linux",
-    "build-all": "electron-builder --win --x64 --ia32"
+    "build-mac": "electron-builder --mac --config.mac.identity=null",
+    "build-linux": "electron-builder --linux"
   },
   "build": {
     "appId": "com.deshin.droplist",
-    "win": {
-      "target": [
-        "nsis",
-        "portable"
-      ],
-      "icon": "icon.ico",
-      "requestedExecutionLevel": "asInvoker"
+    "linux": {
+      "target": ["AppImage", "deb"],
+      "category": "Utility",
+      "maintainer": "nvdeshin@gmail.com"
     },
     "mac": {
-      "target": ["dmg", "zip"],
+      "target": ["dmg"],
       "category": "public.app-category.utilities",
-      "icon": "icon.icns",
-      "identity": null
+      "identity": null,
+      "hardenedRuntime": false
     },
-    "linux": {
-      "target": ["AppImage", "deb", "snap", "rpm"],
-      "category": "Utility"
+    "win": {
+      "target": ["nsis"],
+      "icon": "icon.ico"
     },
-    "nsis": {
-      "oneClick": false,
-      "perMachine": false,
-      "allowToChangeInstallationDirectory": true,
-      "deleteAppDataOnUninstall": true
-    },
+    "publish": null,
     "extraResources": [
       {
         "from": "database.db",
-        "to": "../",
-        "filter": [
-          "**/*"
-        ]
+        "to": "../"
       }
     ]
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
-  "description": "",
   "dependencies": {
-    "better-sqlite3": "^12.2.0",
-    "sqlite3": "^5.1.7"
+    "better-sqlite3": "^12.2.0"
   },
   "devDependencies": {
     "electron": "^37.2.0",
-    "electron-builder": "^26.0.12",
-    "electron-rebuild": "^3.2.9"
+    "electron-builder": "^26.0.12"
   }
 }
