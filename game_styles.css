@@ -712,7 +712,7 @@ body {
     }
     /* Контейнер доната */
     .donate-modal .modal-content {
-        margin: 5% auto;
+        margin: 1% auto;
     }
         /* Внутри контейнера*/
         .donate-modal h2 {
