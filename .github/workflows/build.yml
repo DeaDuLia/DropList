@@ -1,27 +1,38 @@
-name: Build
+name: Build Electron App
 on: push
 
 jobs:
-  build-linux:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-      - run: npm install
-      - run: npm run build -- --linux
-      - uses: actions/upload-artifact@v3
-        with:
-          name: linux-build
-          path: dist/
+  build:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            build-flag: --linux
+          - os: windows-latest
+            build-flag: --win
+          - os: macos-latest
+            build-flag: --mac
 
-  build-mac:
-    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-      - run: npm install
-      - run: npm run build -- --mac
-      - uses: actions/upload-artifact@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
         with:
-          name: mac-build
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build app
+        run: npm run build ${{ matrix.build-flag }}
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-${{ matrix.os }}
           path: dist/
+          retention-days: 7
