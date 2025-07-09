@@ -9,10 +9,11 @@
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
     "postinstall": "electron-builder install-app-deps",
+    "rebuild": "electron-rebuild -f -w better-sqlite3",
     "build": "electron-builder",
-    "build-win": "electron-builder --win",
-    "build-mac": "electron-builder --mac --config.mac.identity=null",
-    "build-linux": "electron-builder --linux"
+    "build-win": "npm run rebuild && electron-builder --win",
+    "build-mac": "npm run rebuild && electron-builder --mac --config.mac.identity=null",
+    "build-linux": "npm run rebuild && electron-builder --linux"
   },
   "build": {
     "appId": "com.deshin.droplist",
@@ -44,6 +45,7 @@
   },
   "devDependencies": {
     "electron": "^37.2.0",
-    "electron-builder": "^26.0.12"
+    "electron-builder": "^26.0.12",
+    "electron-rebuild": "^3.2.9"
   }
 }
