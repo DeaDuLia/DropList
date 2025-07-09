@@ -7,8 +7,10 @@
     "pack": "electron-builder --dir",
     "dist": "electron-builder",
     "rebuild": "electron-rebuild -f -w better-sqlite3",
+    "build": "electron-builder",
     "build-win": "electron-builder --win",
     "build-mac": "electron-builder --mac",
+    "build-linux": "electron-builder --linux",
     "build-all": "electron-builder --win --x64 --ia32"
   },
   "build": {
