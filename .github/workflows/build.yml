@@ -11,10 +11,17 @@ jobs:
         include:
           - os: ubuntu-latest
             script: build-linux
+            install-deps: |
+              sudo apt-get update
+              sudo apt-get install -y build-essential
           - os: windows-latest
             script: build-win
+            install-deps: echo "No additional deps needed for Windows"
           - os: macos-latest
             script: build-mac
+            install-deps: |
+              brew install python
+              npm config set python python3
 
     steps:
       - uses: actions/checkout@v4
@@ -27,8 +34,7 @@ jobs:
 
       - name: Install dependencies
         run: |
-          sudo apt-get update
-          sudo apt-get install -y build-essential
+          ${{ matrix.install-deps }}
           npm install
 
       - name: Build app
