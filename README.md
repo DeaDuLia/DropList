@@ -27,7 +27,7 @@
 
 ## 🚀 Установка
 1. Скачайте последнюю версию:
-    - [Windows (.rar)]([https://example.com/DropList.exe](https://github.com/DeaDuLia/DropList/releases/tag/v1.0.0))
+    - [Windows (.rar)](https://github.com/DeaDuLia/DropList/releases/tag/v1.0.0)
 2. Распаковать архив в удобную папку
 3. Готово! Приложение работает **оффлайн**
 
