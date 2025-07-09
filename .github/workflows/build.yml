@@ -2,27 +2,8 @@ name: Build Electron App
 on: push
 
 jobs:
-  build:
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
-        include:
-          - os: ubuntu-latest
-            script: build-linux
-            install-deps: |
-              sudo apt-get update
-              sudo apt-get install -y build-essential
-          - os: windows-latest
-            script: build-win
-            install-deps: echo "No additional deps needed for Windows"
-          - os: macos-latest
-            script: build-mac
-            install-deps: |
-              brew install python
-              npm config set python python3
-
+  build-linux:
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
@@ -32,17 +13,70 @@ jobs:
           node-version: 20
           cache: 'npm'
 
-      - name: Install dependencies
+      - name: Install Linux dependencies
         run: |
-          ${{ matrix.install-deps }}
-          npm install
+          sudo apt-get update
+          sudo apt-get install -y build-essential
 
-      - name: Build app
-        run: npm run ${{ matrix.script }}
+      - name: Install npm packages
+        run: npm install
 
-      - name: Upload artifacts
+      - name: Build for Linux
+        run: npm run build-linux
+
+      - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: build-${{ matrix.os }}
+          name: linux-build
           path: dist/
-          retention-days: 7
+          retention-days: 3
+
+  build-windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install npm packages
+        run: npm install
+
+      - name: Build for Windows
+        run: npm run build-win
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: dist/
+          retention-days: 3
+
+  build-mac:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install npm packages (macOS)
+        run: |
+          npm install
+          npm config delete python  # Удаляем проблемную настройку
+
+      - name: Build for Mac
+        run: npm run build-mac
+
+      - name: Upload Mac artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: mac-build
+          path: dist/
+          retention-days: 3
