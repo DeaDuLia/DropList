@@ -249,7 +249,7 @@ const statements = {
 
 function createWindow() {
     const win = new BrowserWindow({
-        title: 'DECatalog',
+        title: 'DropList',
         width: 1280,
         height: 800,
         icon: path.join(__dirname, 'icon.ico'),
@@ -639,7 +639,7 @@ ipcMain.handle('export-data', async () => {
         // Показываем диалог сохранения
         const { filePath } = await dialog.showSaveDialog(win, {
             title: 'Экспорт данных',
-            defaultPath: 'decatalog_export.json',
+            defaultPath: 'DropList.json',
             filters: [
                 { name: 'JSON Files', extensions: ['json'] },
                 { name: 'All Files', extensions: ['*'] }
