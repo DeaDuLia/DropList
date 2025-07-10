@@ -614,13 +614,6 @@
         return titles[section] || section;
     }
 
-    async function renderCardSection(data) {
-        return `
-                ${getAddFormHTML()}
-                ${renderCardList(data)}
-            `;
-    }
-
     async function initCardSection() {
         await Promise.all([
             loadRatings(),

@@ -268,6 +268,7 @@ function createWindow() {
         icon: getIconPath(),
         webPreferences: {
             nodeIntegration: false,
+            sandbox: true,
             preload: path.join(__dirname, 'preload.js')
         }
     });
@@ -452,9 +453,9 @@ ipcMain.on('open-external', (event, url) => {
         icon: getIconPath(),
         webPreferences: {
             nodeIntegration: false,
-            contextIsolation: true,
             preload: path.join(__dirname, 'preload-external.js')
-        }
+        },
+        show: false
     });
     externalWindow.setMenu(null)
     externalWindow.loadURL(url);
@@ -470,14 +471,16 @@ ipcMain.on('open-external', (event, url) => {
         return { action: 'deny' };
     });
 
+
+
     externalWindow.webContents.on('did-finish-load', () => {
+        externalWindow.show();
         externalWindow.webContents.executeJavaScript(`
             // Блокируем стандартное поведение ссылок
             const style = document.createElement('style');
             style.textContent = \`           
-                a {
-                    pointer-events: none;
-                }
+                a { pointer-events: none !important; }
+                img { pointer-events: none !important; }
             \`;
             document.head.appendChild(style);
             // Обработчик кликов по div с jsname
