@@ -43,5 +43,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     exportData: () => ipcRenderer.invoke('export-data'),
     importData: () => ipcRenderer.invoke('import-data'),
     showSaveDialog: (options) => ipcRenderer.invoke('show-save-dialog', options),
-    showOpenDialog: (options) => ipcRenderer.invoke('show-open-dialog', options)
+    showOpenDialog: (options) => ipcRenderer.invoke('show-open-dialog', options),
+    onMessageFromMain: (callback) => {ipcRenderer.on('message-to-index', (event, message) => {callback(message);});
+    }
 });

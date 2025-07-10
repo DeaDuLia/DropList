@@ -157,6 +157,16 @@
         }
     });
 
+    window.addEventListener('DOMContentLoaded', () => {
+        // Подписываемся на сообщения из main.js
+        window.electronAPI.onMessageFromMain((message) => {
+            const editIcoInput = document.getElementById('editIcoInput');
+            const icoInput = document.getElementById('icoInput');
+            if (editIcoInput) editIcoInput.value=message;
+            else if (icoInput) icoInput.value=message;
+        });
+    });
+
     // Копирование адресов
     document.querySelectorAll('.copy-btn').forEach(btn => {
         btn.addEventListener('click', function() {

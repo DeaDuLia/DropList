@@ -11,19 +11,13 @@ function getIconPath() {
         return path.join(__dirname, 'icon.ico');
     }
 }
-
-const db = new Database('database.db', {
-    timeout: 5000 // увеличить таймаут ожидания
-});
-db.pragma('journal_mode = WAL');
-
-//Создаём таблицы при запуске
-db.exec(`
+function initializeDatabase(db) {
+    db.exec(`
   CREATE TABLE IF NOT EXISTS ratings (
     rating TEXT PRIMARY KEY
   )
 `);
-db.exec(`
+    db.exec(`
   INSERT OR IGNORE INTO ratings (rating)
   VALUES
   ('0'),
@@ -38,12 +32,12 @@ db.exec(`
   ('-4'),
   ('-5')
 `);
-db.exec(`
+    db.exec(`
   CREATE TABLE IF NOT EXISTS statuses (
     status TEXT PRIMARY KEY
   )
 `);
-db.exec(`
+    db.exec(`
   INSERT OR IGNORE INTO statuses (status)
   VALUES
   ('Уточнить'),
@@ -53,13 +47,13 @@ db.exec(`
   ('Завершено'),
   ('Избранное')
 `);
-//Игры
-db.exec(`
+    //Игры
+    db.exec(`
   CREATE TABLE IF NOT EXISTS game_tags (
     tag_name TEXT PRIMARY KEY
   )
 `);
-db.exec(`
+    db.exec(`
   CREATE TABLE IF NOT EXISTS games (
     name TEXT PRIMARY KEY,
     ico_url TEXT,
@@ -70,7 +64,7 @@ db.exec(`
     FOREIGN KEY (status)  REFERENCES statuses (status)
   )
 `);
-db.exec(`
+    db.exec(`
   CREATE TABLE IF NOT EXISTS game_tags_assign (
     game_name TEXT,
     tag_name TEXT,
@@ -79,13 +73,13 @@ db.exec(`
     FOREIGN KEY (tag_name) REFERENCES game_tags (tag_name)
   )
 `);
-//Фильмы
-db.exec(`
+    //Фильмы
+    db.exec(`
   CREATE TABLE IF NOT EXISTS movie_tags (
     tag_name TEXT PRIMARY KEY
   )
 `);
-db.exec(`
+    db.exec(`
   CREATE TABLE IF NOT EXISTS movies (
     name TEXT PRIMARY KEY,
     ico_url TEXT,
@@ -96,7 +90,7 @@ db.exec(`
     FOREIGN KEY (status)  REFERENCES statuses (status)
   )
 `);
-db.exec(`
+    db.exec(`
   CREATE TABLE IF NOT EXISTS movie_tags_assign (
     movie_name TEXT,
     tag_name TEXT,
@@ -105,13 +99,13 @@ db.exec(`
     FOREIGN KEY (tag_name) REFERENCES game_tags (tag_name)
   )
 `);
-//Сериалы
-db.exec(`
+    //Сериалы
+    db.exec(`
   CREATE TABLE IF NOT EXISTS serial_tags (
     tag_name TEXT PRIMARY KEY
   )
 `);
-db.exec(`
+    db.exec(`
   CREATE TABLE IF NOT EXISTS serials (
     name TEXT PRIMARY KEY,
     ico_url TEXT,
@@ -122,7 +116,7 @@ db.exec(`
     FOREIGN KEY (status)  REFERENCES statuses (status)
   )
 `);
-db.exec(`
+    db.exec(`
   CREATE TABLE IF NOT EXISTS serial_tags_assign (
     serial_name TEXT,
     tag_name TEXT,
@@ -131,13 +125,13 @@ db.exec(`
     FOREIGN KEY (tag_name) REFERENCES game_tags (tag_name)
   )
 `);
-//Аниме
-db.exec(`
+    //Аниме
+    db.exec(`
   CREATE TABLE IF NOT EXISTS anime_tags (
     tag_name TEXT PRIMARY KEY
   )
 `);
-db.exec(`
+    db.exec(`
   CREATE TABLE IF NOT EXISTS anime (
     name TEXT PRIMARY KEY,
     ico_url TEXT,
@@ -148,7 +142,7 @@ db.exec(`
     FOREIGN KEY (status) REFERENCES statuses (status)
   )
 `);
-db.exec(`
+    db.exec(`
   CREATE TABLE IF NOT EXISTS anime_tags_assign (
     anime_name TEXT,
     tag_name TEXT,
@@ -157,13 +151,13 @@ db.exec(`
     FOREIGN KEY (tag_name) REFERENCES game_tags (tag_name)
   )
 `);
-//Книги
-db.exec(`
+    //Книги
+    db.exec(`
   CREATE TABLE IF NOT EXISTS book_tags (
     tag_name TEXT PRIMARY KEY
   )
 `);
-db.exec(`
+    db.exec(`
   CREATE TABLE IF NOT EXISTS books (
     name TEXT PRIMARY KEY,
     ico_url TEXT,
@@ -174,7 +168,7 @@ db.exec(`
     FOREIGN KEY (status) REFERENCES statuses (status)
   )
 `);
-db.exec(`
+    db.exec(`
   CREATE TABLE IF NOT EXISTS book_tags_assign (
     book_name TEXT,
     tag_name TEXT,
@@ -183,6 +177,16 @@ db.exec(`
     FOREIGN KEY (tag_name) REFERENCES game_tags (tag_name)
   )
 `);
+}
+
+const db = new Database('database.db', {
+    timeout: 5000 // увеличить таймаут ожидания
+});
+db.pragma('journal_mode = WAL');
+initializeDatabase(db);
+
+//Создаём таблицы при первом запуске
+
 
 const statements = {
     //Общее
@@ -255,8 +259,9 @@ const statements = {
     updateBook: db.prepare('UPDATE books SET name = ?, ico_url = ? WHERE name = ?')
 };
 
+let win;
 function createWindow() {
-    const win = new BrowserWindow({
+    win = new BrowserWindow({
         title: 'DropList',
         width: 1280,
         height: 800,
@@ -444,10 +449,11 @@ ipcMain.on('open-external', (event, url) => {
     const externalWindow = new BrowserWindow({
         width: 1000,
         height: 800,
-        icon: path.join(__dirname, 'icon.ico'),
+        icon: getIconPath(),
         webPreferences: {
             nodeIntegration: false,
-            contextIsolation: true
+            contextIsolation: true,
+            preload: path.join(__dirname, 'preload-external.js')
         }
     });
     externalWindow.setMenu(null)
@@ -467,58 +473,30 @@ ipcMain.on('open-external', (event, url) => {
     externalWindow.webContents.on('did-finish-load', () => {
         externalWindow.webContents.executeJavaScript(`
             // Блокируем стандартное поведение ссылок
-            document.querySelectorAll('a').forEach(link => {
-                link.onclick = (e) => e.preventDefault();
-            });
-        
-            // Стиль для подсветки div с jsname и их изображений
             const style = document.createElement('style');
-            style.textContent = \`
-                div[jsname]:hover {
-                    cursor: pointer;
-                    position: relative;
-                }
-                div[jsname]:hover::after {
-                    content: '';
-                    position: absolute;
-                    top: 0;
-                    left: 0;
-                    right: 0;
-                    bottom: 0;
-                    outline: 2px solid #6c5ce7;
-                    pointer-events: none;
-                }
-                div[jsname]:hover img {
-                    opacity: 0.9;
-                }
+            style.textContent = \`           
                 a {
                     pointer-events: none;
                 }
             \`;
             document.head.appendChild(style);
-
             // Обработчик кликов по div с jsname
             document.addEventListener('click', function(e) {
                 // Ищем ближайший div с атрибутом jsname
-                const img = e.target.querySelector('img');
-                    
-                    if (img && img.src) {
+                let img = (e.target.tagName === 'IMG' && e.target.src)
+                    ? e.target
+                    : e.target.querySelector('img');
+                if (img && img.src) {
                         e.preventDefault();
                         e.stopPropagation();
                         handleImageClick(img);
                         return;
-                    }
-                
-                // Дополнительно: обработка прямого клика по изображению
-                if (e.target.tagName === 'IMG' && e.target.src) {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    handleImageClick(e.target);
-                }
+                } 
             });
 
             function handleImageClick(imgElement) {
                 const isDataUrl = imgElement.src.startsWith('data:');
+                window.externalAPI.sendMessageToMain(imgElement.src);
                 
                 navigator.clipboard.writeText(imgElement.src)
                     .then(() => {
@@ -528,8 +506,6 @@ ipcMain.on('open-external', (event, url) => {
                                 : 'Ссылка на изображение скопирована',
                             isDataUrl ? 'data' : 'url'
                         );
-                        
-                        // Закрываем окно после успешного копирования
                         setTimeout(() => {
                             window.close();
                         }, 1000); // Даем время увидеть уведомление
@@ -541,23 +517,14 @@ ipcMain.on('open-external', (event, url) => {
             }
 
             function showNotification(message, type = 'info') {
-                // Удаляем предыдущие уведомления
-                const existing = document.querySelector('.img-copy-notification');
-                if (existing) existing.remove();
-                
-                // Настройки стилей для разных типов
                 const styles = {
                     info: { bg: '#6c5ce7', icon: '📋' },
                     data: { bg: '#00b894', icon: '🖼️' },
                     error: { bg: '#d63031', icon: '⚠️' }
                 };
-                
                 const style = styles[type] || styles.info;
-                
-                // Создаем уведомление
                 const notification = document.createElement('div');
                 notification.className = 'img-copy-notification';
-                
                 Object.assign(notification.style, {
                     position: 'fixed',
                     top: '50%',
@@ -592,14 +559,14 @@ ipcMain.on('open-external', (event, url) => {
                 notification.appendChild(text);
                 
                 document.body.appendChild(notification);
-                
-                // Автоматическое скрытие
+
                 setTimeout(() => {
                     notification.remove();
                 }, 1500); // Увеличили время показа уведомления
             }  
         `);
     });
+
 });
 
 // В раздел IPC handlers добавить:
@@ -766,5 +733,12 @@ ipcMain.handle('import-data', async () => {
     } catch (error) {
         console.error('Import error:', error);
         return { success: false, message: 'Ошибка при импорте данных' };
+    }
+});
+
+ipcMain.on('message-from-external', (event, imgUrl) => {
+    // Отправляем сообщение в index.html
+    if (win) {
+        win.webContents.send('message-to-index', imgUrl);
     }
 });
