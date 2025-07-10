@@ -4,6 +4,14 @@ const fs = require('fs');
 const path = require('path');
 const Database = require('better-sqlite3');
 
+function getIconPath() {
+    if (process.platform === 'darwin') {
+        return path.join(__dirname, 'icon.icns');
+    } else {
+        return path.join(__dirname, 'icon.ico');
+    }
+}
+
 const db = new Database('database.db', {
     timeout: 5000 // увеличить таймаут ожидания
 });
@@ -252,7 +260,7 @@ function createWindow() {
         title: 'DropList',
         width: 1280,
         height: 800,
-        icon: path.join(__dirname, 'icon.ico'),
+        icon: getIconPath(),
         webPreferences: {
             nodeIntegration: false,
             preload: path.join(__dirname, 'preload.js')
