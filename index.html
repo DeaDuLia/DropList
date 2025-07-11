@@ -205,10 +205,13 @@
     toggleAddFormBtn.addEventListener('click', (e) => {
         const toggleBtn = e.target;
         const addForm = document.getElementById('addForm');
+        const addMoreCheck = document.getElementById('addMoreCheckbox');
         addForm.classList.toggle('visible');
         toggleBtn.textContent = addForm.classList.contains('visible') ? '− Скрыть' : '+ Добавить';
         if (addForm.classList.contains('visible')) {
             document.getElementById('nameInput')?.focus();
+        } else {
+            addMoreCheck.checked = false;
         }
     });
     document.addEventListener('click', async (e) => {
@@ -343,7 +346,7 @@
         if (statusSelect) statusSelect.value = 'Не играл';
     }
 
-    async function renderSection(section, data, resetPagination = true, preserveFilters = false) {
+    async function renderSection(section, data, resetPagination = true, preserveFilters = false, addMoreChecked=false, addFormVisible='') {
         const contentSection = document.getElementById('contentSection');
         if (!contentSection) return;
 
@@ -391,7 +394,7 @@
                 </div>
             </div>
         </div>
-        ${getAddFormHTML()}
+        ${getAddFormHTML(addMoreChecked, addFormVisible)}
         <div id="dataList" class="data-grid"></div>
         <div id="loadingIndicator" class="loading-indicator" style="display: none;">
             <div class="loading-spinner"></div>
@@ -400,7 +403,6 @@
     `;
 
         await initCardSection();
-        hideAddForm();
         setupSearchInput();
 
         // Устанавливаем сохранённое значение фильтра статуса
@@ -738,8 +740,10 @@
                     newCategory: newCat
                 };
                 await window.electronAPI.moveDataToCategory(data);
-                let dataSection = await window.electronAPI.getData(section);
-                await renderSection(oldCat, dataSection, true);
+                const card = document.querySelector(`.data-card[data-name="${name}"]`);
+                if (card) {
+                    card.remove();
+                }
                 document.body.removeChild(modal);
             } catch (error) {
                 await showError('Не удалось сменить категорию');
@@ -764,9 +768,9 @@
         }
     }
 
-    function getAddFormHTML() {
+    function getAddFormHTML(addMoreChecked=false, visible='') {
         return `
-                <div id="addForm" class="add-form">
+                <div id="addForm" class="add-form ${visible}">
                     <div class="form-group">
                         <input id="nameInput" placeholder="Введите название">
                     </div>
@@ -789,7 +793,12 @@
                             <option value="Уточнить">Уточнить</option>
                         </select>
                     </div>
-
+                    <div class="form-group add-more-container">
+                        <label>
+                            <input type="checkbox" id="addMoreCheckbox" ${addMoreChecked ? 'checked' : ''}>
+                            Добавить ещё
+                        </label>
+                    </div>
                     <button id="addBtn">Добавить</button>
                 </div>
             `;
@@ -831,6 +840,7 @@
         const icoInput = document.getElementById('icoInput');
         const ratingSelect = document.getElementById('ratingSelect');
         const statusSelect = document.getElementById('statusSelect');
+        const addMoreCheckbox = document.getElementById('addMoreCheckbox');
 
         const cardData = {
             name: nameInput.value.trim(),
@@ -861,10 +871,16 @@
                 }
             }
             await window.electronAPI.addData(section, cardData);
-            resetForm();
+
+            if (!addMoreCheckbox.checked) {
+                hideAddForm();
+                resetForm();
+            }
+            const addMoreChecked = addMoreCheckbox.checked;
+            const addFromVisible = addMoreCheckbox.checked ? 'visible' : '';
             // Перезагружаем данные и рендерим раздел заново
             let data = await window.electronAPI.getData(section);
-            await renderSection(section, data, true);
+            await renderSection(section, data, true, false, addMoreChecked, addFromVisible);
         } catch (error) {
             console.error('Ошибка при добавлении:', error);
             await showError(`Ошибка при добавлении: ${error.message}`);

@@ -893,14 +893,23 @@ button:hover {
 
 
 
-/* Добавим после стилей для .search-btn */
-
-
-/*.change-image-btn:hover {
-    background-color: #8e44ad;
-    transform: scale(1.1);
+.add-more-container {
+    display: flex;
+    align-items: center;
+    margin-bottom: 15px;
 }
-.change-category-btn:hover {
-    background-color: #16a085;
-    transform: scale(1.1);
+
+.add-more-container label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    color: var(--dark-input-color);
+    font-size: 0.9rem;
+}
+
+.add-more-container input[type="checkbox"] {
+    width: auto;
+    margin: 0;
+    cursor: pointer;
 }
