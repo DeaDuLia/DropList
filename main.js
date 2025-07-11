@@ -201,6 +201,10 @@ const statements = {
         INSERT OR REPLACE INTO games 
         (name, ico_url, rating, status) 
         VALUES (?, ?, ?, ?)`),
+    importGame: db.prepare(`
+        INSERT OR IGNORE INTO games 
+        (name, ico_url, rating, status) 
+        VALUES (?, ?, ?, ?)`),
     deleteGame: db.prepare('DELETE FROM games WHERE name = ?'),
     updateGameRating: db.prepare('UPDATE games SET rating = ? WHERE name = ?'),
     updateGameStatus: db.prepare('UPDATE games SET status = ? WHERE name = ?'),
@@ -212,6 +216,10 @@ const statements = {
         FROM movies`),
     addMovie: db.prepare(`
         INSERT OR REPLACE INTO movies 
+        (name, ico_url, rating, status) 
+        VALUES (?, ?, ?, ?)`),
+    importMovie: db.prepare(`
+        INSERT OR IGNORE INTO movies 
         (name, ico_url, rating, status) 
         VALUES (?, ?, ?, ?)`),
     deleteMovie: db.prepare('DELETE FROM movies WHERE name = ?'),
@@ -227,6 +235,10 @@ const statements = {
         INSERT OR REPLACE INTO serials 
         (name, ico_url, rating, status) 
         VALUES (?, ?, ?, ?)`),
+    importSerial: db.prepare(`
+        INSERT OR IGNORE INTO serials 
+        (name, ico_url, rating, status) 
+        VALUES (?, ?, ?, ?)`),
     deleteSerial: db.prepare('DELETE FROM serials WHERE name = ?'),
     updateSerialRating: db.prepare('UPDATE serials SET rating = ? WHERE name = ?'),
     updateSerialStatus: db.prepare('UPDATE serials SET status = ? WHERE name = ?'),
@@ -240,6 +252,10 @@ const statements = {
         INSERT OR REPLACE INTO anime 
         (name, ico_url, rating, status) 
         VALUES (?, ?, ?, ?)`),
+    importAnime: db.prepare(`
+        INSERT OR IGNORE INTO anime 
+        (name, ico_url, rating, status) 
+        VALUES (?, ?, ?, ?)`),
     deleteAnime: db.prepare('DELETE FROM anime WHERE name = ?'),
     updateAnimeRating: db.prepare('UPDATE anime SET rating = ? WHERE name = ?'),
     updateAnimeStatus: db.prepare('UPDATE anime SET status = ? WHERE name = ?'),
@@ -251,6 +267,10 @@ const statements = {
         FROM books`),
     addBook: db.prepare(`
         INSERT OR REPLACE INTO books 
+        (name, ico_url, rating, status) 
+        VALUES (?, ?, ?, ?)`),
+    importBook: db.prepare(`
+        INSERT OR IGNORE INTO books 
         (name, ico_url, rating, status) 
         VALUES (?, ?, ?, ?)`),
     deleteBook: db.prepare('DELETE FROM books WHERE name = ?'),
@@ -676,7 +696,7 @@ ipcMain.handle('import-data', async () => {
             // Импорт игр
             if (data.games) {
                 data.games.forEach(game => {
-                    statements.addGame.run(
+                    statements.importGame.run(
                         game.name,
                         game.icoUrl || null,
                         game.rating || '0',
@@ -688,7 +708,7 @@ ipcMain.handle('import-data', async () => {
             // Импорт фильмов
             if (data.movies) {
                 data.movies.forEach(movie => {
-                    statements.addMovie.run(
+                    statements.importMovie.run(
                         movie.name,
                         movie.icoUrl || null,
                         movie.rating || '0',
@@ -700,7 +720,7 @@ ipcMain.handle('import-data', async () => {
             // Импорт сериалов
             if (data.serials) {
                 data.serials.forEach(serial => {
-                    statements.addSerial.run(
+                    statements.importSerial.run(
                         serial.name,
                         serial.icoUrl || null,
                         serial.rating || '0',
@@ -712,7 +732,7 @@ ipcMain.handle('import-data', async () => {
             // Импорт аниме
             if (data.anime) {
                 data.anime.forEach(anime => {
-                    statements.addAnime.run(
+                    statements.importAnime.run(
                         anime.name,
                         anime.icoUrl || null,
                         anime.rating || '0',
@@ -724,7 +744,7 @@ ipcMain.handle('import-data', async () => {
             // Импорт книг
             if (data.books) {
                 data.books.forEach(book => {
-                    statements.addBook.run(
+                    statements.importBook.run(
                         book.name,
                         book.icoUrl || null,
                         book.rating || '0',
