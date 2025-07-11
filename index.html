@@ -378,12 +378,19 @@
         if (oldStatusFilter) oldStatusFilter.replaceWith(oldStatusFilter.cloneNode(true));
         // Рендерим контент
         contentSection.innerHTML = `
-        <div class="section-header">
+            <div class="section-header">
             <h1 class="section-title">${getSectionTitle(section)}</h1>
             <div style="display: flex; flex-wrap: wrap; gap: 10px;">
                 <div class="filter-container">
                     <select id="statusFilter">
                         <option value="Все">Все статусы</option>
+                    </select>
+                </div>
+                <div class="filter-container">
+                    <select id="sortFilter">
+                        <option value="date">Время</option>
+                        <option value="rating">Рейтинг</option>
+                        <option value="alphabet">Алфавит</option>
                     </select>
                 </div>
                 <div class="search-container">
@@ -594,23 +601,58 @@
             }
         });
     }
+    function sortData(data, sortBy) {
+        const statusPriority = {
+            'Избранное': 1,
+            'Завершено': 2,
+            'Смотрел': 3,
+            'В процессе': 4,
+            'Уточнить': 5
+        };
+
+        return [...data].sort((a, b) => {
+            if (sortBy === 'date') {
+                // По умолчанию данные уже в порядке добавления
+                return 0;
+            } else if (sortBy === 'rating') {
+                // Сначала по статусу
+                const statusA = statusPriority[a.status] || 5;
+                const statusB = statusPriority[b.status] || 5;
+                if (statusA !== statusB) return statusA - statusB;
+
+                // Затем по рейтингу (если статусы одинаковые)
+                const ratingA = parseInt(a.rating) || 0;
+                const ratingB = parseInt(b.rating) || 0;
+                return ratingB - ratingA; // Сначала высокий рейтинг
+            } else if (sortBy === 'alphabet') {
+                // По алфавиту
+                return a.name.localeCompare(b.name);
+            }
+            return 0;
+        });
+    }
 
     function filterCards(query = '') {
         const statusFilter = document.getElementById('statusFilter');
+        const sortFilter = document.getElementById('sortFilter');
         const selectedStatus = statusFilter ? statusFilter.value : 'Все';
+        const selectedSort = sortFilter ? sortFilter.value : 'date';
         const clearSearchBtn = document.getElementById('clearSearchBtn');
 
         // Сохраняем текущие фильтры
         currentFilters = {
             searchQuery: query,
-            statusFilter: selectedStatus
+            statusFilter: selectedStatus,
+            sortBy: selectedSort
         };
 
         if (clearSearchBtn) {
             clearSearchBtn.style.display = query ? 'block' : 'none';
         }
 
-        window.filteredData = filterData(window.allSectionData, query, selectedStatus);
+        // Сначала фильтруем, затем сортируем
+        const filtered = filterData(window.allSectionData, query, selectedStatus);
+        window.filteredData = sortData(filtered, selectedSort);
 
         // Сбрасываем пагинацию и перерисовываем
         const dataList = document.getElementById('dataList');
@@ -639,13 +681,22 @@
             loadStatusFilter()
         ]);
 
+        // Добавляем обработчик сортировки
+        const sortFilter = document.getElementById('sortFilter');
+        if (sortFilter) {
+            sortFilter.value = currentFilters.sortBy || 'date';
+            sortFilter.addEventListener('change', () => {
+                filterCards(currentFilters.searchQuery);
+            });
+        }
+
         setupDeleteButtons();
         setupEditableFields();
         setupTitleClickHandlers();
         setupSearchButtons();
         setupIconSearchButton();
-        setupChangeImageButtons(); // Новая функция
-        setupChangeCategoryButtons(); // Новая функция
+        setupChangeImageButtons();
+        setupChangeCategoryButtons();
     }
 
     function setupChangeImageButtons() {
