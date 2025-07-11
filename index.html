@@ -74,9 +74,19 @@
     const errorModal = document.getElementById('errorModal');
     const modalMessage = document.getElementById('modalMessage');
     const modalClose = document.getElementById('modalClose');
-    let isAddingGame = false;
     const scrollToTopBtn = document.getElementById('scrollToTopBtn');
 
+    const donateModal = document.getElementById('donateModal');
+    const closeDonateModal = document.getElementById('closeDonateModal');
+
+
+    // Кнопки шапки
+    const exportBtn = document.getElementById('exportBtn');
+    const importBtn = document.getElementById('importBtn');
+    const donateBtn = document.getElementById('donateBtn');
+    const toggleAddFormBtn = document.getElementById('toggleAddFormBtn');
+
+    let isAddingGame = false;
     let currentPage = 1;
     const itemsPerPage = 20; // Количество элементов на странице
     let isLoading = false;
@@ -86,7 +96,6 @@
         searchQuery: '',
         statusFilter: 'Все'
     };
-
 
     window.addEventListener('scroll', () => {
         if (window.pageYOffset > 300) {
@@ -103,7 +112,7 @@
         });
     });
 
-    document.getElementById('exportBtn').addEventListener('click', async () => {
+    exportBtn.addEventListener('click', async () => {
         try {
             const result = await window.electronAPI.exportData();
             if (result.success) {
@@ -116,7 +125,8 @@
             await showError('Ошибка при экспорте данных');
         }
     });
-    document.getElementById('importBtn').addEventListener('click', async () => {
+
+    importBtn.addEventListener('click', async () => {
         try {
             const result = await window.electronAPI.importData();
             if (result.success) {
@@ -136,16 +146,17 @@
             await showError('Ошибка при импорте данных');
         }
     });
-    document.getElementById('donateBtn')?.addEventListener('click', () => {
-        document.getElementById('donateModal').style.display = 'block';
+
+    donateBtn.addEventListener('click', () => {
+        donateModal.style.display = 'block';
     });
 
     // Закрытие модального окна
-    document.getElementById('closeDonateModal')?.addEventListener('click', () => {
-        document.getElementById('donateModal').style.display = 'none';
+    closeDonateModal.addEventListener('click', () => {
+        donateModal.style.display = 'none';
     });
 
-    document.getElementById('donateModal').addEventListener('click', function(e) {
+    donateModal.addEventListener('click', function(e) {
         if (e.target === this) {
             this.style.display = 'none';
         }
@@ -158,7 +169,6 @@
             const icoInput = document.getElementById('icoInput');
 
             if (name) {
-                // Если есть имя, обновляем иконку для конкретного элемента
                 const section = document.querySelector('.nav-item.active')?.dataset.section;
                 if (section) {
                     updateItemIcon(section, name, imgUrl);
@@ -174,16 +184,25 @@
     async function updateItemIcon(section, name, newIconUrl) {
         try {
             await window.electronAPI.updateData(section, name, name, newIconUrl);
-            let data = await window.electronAPI.getData(section);
-            await renderSection(section, data, true, true);
+            // Находим карточку по data-name и обновляем только её иконку
+            const card = document.querySelector(`.data-card[data-name="${name}"]`);
+            if (card) {
+                const icon = card.querySelector('.game-icon');
+                if (icon) {
+                    icon.src = newIconUrl;
+                    // Добавляем обработчик на случай ошибки загрузки изображения
+                    icon.onerror = () => {
+                        icon.src = 'https://apptor.studio/assets/cache/images/600-856x600-629.png';
+                    };
+                }
+            }
         } catch (error) {
             console.error('Ошибка при обновлении иконки:', error);
             showError('Не удалось обновить иконку');
         }
     }
 
-
-    document.getElementById('toggleAddFormBtn').addEventListener('click', (e) => {
+    toggleAddFormBtn.addEventListener('click', (e) => {
         const toggleBtn = e.target;
         const addForm = document.getElementById('addForm');
         addForm.classList.toggle('visible');
@@ -222,8 +241,6 @@
             }
         });
     });
-
-
 
     // Копирование адресов
     document.querySelectorAll('.copy-btn').forEach(btn => {
@@ -295,7 +312,6 @@
     // Генерация HTML для иконки игры
     function getCardIconHTML(game) {
         let iconUrl = 'https://apptor.studio/assets/cache/images/600-856x600-629.png';
-
         // Проверяем URL обложки
         if (game.icoUrl) {
             try {
@@ -306,7 +322,6 @@
                 iconUrl = 'https://apptor.studio/assets/cache/images/600-856x600-629.png';
             }
         }
-
         return `
             <img src="${iconUrl}"
                  alt="${game.name}"
@@ -952,18 +967,21 @@
                         const section = document.querySelector('.nav-item.active')?.dataset.section;
                         if (isRating) {
                             await window.electronAPI.updateDataRating(section, itemName, newValue);
-                            this.dataset.rating = newValue;
-                            this.textContent = newValue || 'Не оценено';
+                            // Обновляем только значение рейтинга в DOM
+                            const ratingElement = document.querySelector(`.rating-value[data-name="${itemName}"]`);
+                            if (ratingElement) {
+                                ratingElement.textContent = newValue || '0';
+                                ratingElement.dataset.rating = newValue;
+                            }
                         } else {
                             await window.electronAPI.updateDataStatus(section, itemName, newValue);
-
-                            this.dataset.status = newValue;
-                            this.textContent = newValue || 'Не играл';
+                            // Обновляем только значение статуса в DOM
+                            const statusElement = document.querySelector(`.status-value[data-name="${itemName}"]`);
+                            if (statusElement) {
+                                statusElement.textContent = newValue || 'Не играл';
+                                statusElement.dataset.status = newValue;
+                            }
                         }
-                        let data = await window.electronAPI.getData(section);
-                        // Перерисовываем раздел с обновленными данными
-                        await renderSection(section, data, true, true);
-
                         document.body.removeChild(modal);
                     } catch (error) {
                         console.error('Ошибка при обновлении:', error);
@@ -1018,7 +1036,9 @@
                     try {
                         const section = document.querySelector('.nav-item.active')?.dataset.section;
                         await window.electronAPI.deleteData(section, itemName);
-                        btn.closest('.data-card').remove();
+                        // Удаляем карточку из DOM
+                        const card = btn.closest('.data-card');
+                        if (card) card.remove();
                         document.body.removeChild(confirmModal);
                     } catch (error) {
                         console.error('Не удалось удалить:', error);
@@ -1138,7 +1158,6 @@
                 modal.querySelector('.confirm-btn').addEventListener('click', async () => {
                     const newName = modal.querySelector('#editNameInput').value.trim();
                     const newIcoUrl = modal.querySelector('#editIcoInput').value.trim();
-
                     if (!newName) {
                         await showError('Пожалуйста, введите название');
                         return;
@@ -1146,27 +1165,34 @@
 
                     try {
                         const section = document.querySelector('.nav-item.active')?.dataset.section;
-                        let data;
-
-                        const hasData = await window.electronAPI.checkDuplicates(section, newName);
-                        const isDuplicate = (oldName !== newName && hasData);
-                        if (isDuplicate) {
-                            const confirmReplace = await showConfirmModal(
-                                'Элемент уже существует',
-                                `"${newName}" уже есть в списке. Хотите заменить его?`,
-                                'Заменить',
-                                'Отмена'
-                            );
-
-                            if (!confirmReplace) {
-                                isAddingGame = false;
-                                return;
-                            }
-                        }
-                        if(isDuplicate) await window.electronAPI.deleteData(section, newName);
                         await window.electronAPI.updateData(section, oldName, newName, newIcoUrl);
-                        data = await window.electronAPI.getData(section);
-                        await renderSection(section, data, true, true);
+
+                        // Обновляем карточку без перерисовки всего раздела
+                        const card = document.querySelector(`.data-card[data-name="${oldName}"]`);
+                        if (card) {
+                            // Обновляем название
+                            const titleElement = card.querySelector('.data-title');
+                            if (titleElement) titleElement.textContent = newName;
+
+                            // Обновляем иконку
+                            const icon = card.querySelector('.game-icon');
+                            if (icon) {
+                                icon.src = newIcoUrl;
+                                icon.onerror = () => {
+                                    icon.src = 'https://apptor.studio/assets/cache/images/600-856x600-629.png';
+                                };
+                            }
+
+                            // Обновляем data-name карточки
+                            card.dataset.name = newName;
+
+                            // Обновляем data-name в кнопках (если нужно)
+                            const buttons = card.querySelectorAll('[data-name]');
+                            buttons.forEach(btn => {
+                                btn.dataset.name = newName;
+                            });
+                        }
+
                         document.body.removeChild(modal);
                     } catch (error) {
                         console.error('Ошибка при обновлении:', error);
