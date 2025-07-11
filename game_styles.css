@@ -388,22 +388,43 @@ body {
             }
                 /* Обложка карточки */
                 .delete-btn {
-                    top: 10px;
-                    background-color: #e74c3c;
+                    margin-top: 130px;
+                    background-color: #E74C3C;
                 }
                 .search-btn {
-                    top: 50px;
-                    background-color: #3498db;
+                    top: 10px;
+                    background-color: #3498DB  ;
                 }
+                .change-image-btn {
+                    top: 50px;
+                    background-color: #9B59B6  ;
+                }
+                .change-category-btn {
+                    margin-top: 90px;
+                    background-color: #2ECC71  ;
+                }
+
                 .delete-btn:hover {
-                    background-color: #c0392b;
+                    background-color: #EC7063;
                     transform: scale(1.1);
                 }
                 .search-btn:hover {
-                    background-color: #2980b9;
+                    background-color: #5DADE2;
                     transform: scale(1.1);
                 }
-                .delete-btn, .search-btn {
+                .change-category-btn:hover {
+                    background-color: #48C988;
+                    transform: scale(1.1);
+
+                }
+                .change-image-btn:hover {
+                    background-color: #AF7AC5;
+                    transform: scale(1.1);
+                }
+                .delete-btn,
+                .search-btn,
+                .change-image-btn,
+                .change-category-btn {
                     position: absolute;
                     right: 10px;
                     color: white;
@@ -419,10 +440,10 @@ body {
                     align-items: center;
                     justify-content: center;
                 }
-                .data-card:hover .delete-btn {
-                    opacity: 1;
-                }
-                .data-card:hover .search-btn {
+                .data-card:hover .delete-btn,
+                .data-card:hover .search-btn,
+                .data-card:hover .change-image-btn,
+                .data-card:hover .change-category-btn {
                     opacity: 1;
                 }
                 .game-icon {
@@ -868,4 +889,18 @@ button:hover {
 ::-webkit-scrollbar-thumb {
     background: var(--dark-scroll-tracker);
     border-radius: 4px;
+}
+
+
+
+/* Добавим после стилей для .search-btn */
+
+
+/*.change-image-btn:hover {
+    background-color: #8e44ad;
+    transform: scale(1.1);
+}
+.change-category-btn:hover {
+    background-color: #16a085;
+    transform: scale(1.1);
 }

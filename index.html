@@ -159,13 +159,60 @@
 
     window.addEventListener('DOMContentLoaded', () => {
         // Подписываемся на сообщения из main.js
-        window.electronAPI.onMessageFromMain((message) => {
+        window.electronAPI.onMessageFromMain(({ imgUrl, name }) => {
             const editIcoInput = document.getElementById('editIcoInput');
             const icoInput = document.getElementById('icoInput');
-            if (editIcoInput) editIcoInput.value=message;
-            else if (icoInput) icoInput.value=message;
+
+            if (name) {
+                // Если есть имя, обновляем иконку для конкретного элемента
+                const section = document.querySelector('.nav-item.active')?.dataset.section;
+                if (section) {
+                    updateItemIcon(section, name, imgUrl);
+                }
+            } else if (editIcoInput) {
+                editIcoInput.value = imgUrl;
+            } else if (icoInput) {
+                icoInput.value = imgUrl;
+            }
         });
     });
+
+    async function updateItemIcon(section, name, newIconUrl) {
+        try {
+            switch(section) {
+                case 'games':
+                    await window.electronAPI.updateGame(name, name, newIconUrl);
+                    break;
+                case 'movies':
+                    await window.electronAPI.updateMovie(name, name, newIconUrl);
+                    break;
+                case 'serials':
+                    await window.electronAPI.updateSerial(name, name, newIconUrl);
+                    break;
+                case 'anime':
+                    await window.electronAPI.updateAnime(name, name, newIconUrl);
+                    break;
+                case 'books':
+                    await window.electronAPI.updateBook(name, name, newIconUrl);
+                    break;
+            }
+
+            // Перезагружаем данные
+            let data;
+            switch(section) {
+                case 'games': data = await window.electronAPI.getGamesWithTags(); break;
+                case 'movies': data = await window.electronAPI.getMoviesWithTags(); break;
+                case 'serials': data = await window.electronAPI.getSerialsWithTags(); break;
+                case 'anime': data = await window.electronAPI.getAnimeWithTags(); break;
+                case 'books': data = await window.electronAPI.getBooksWithTags(); break;
+            }
+            await renderSection(section, data, true, true);
+        } catch (error) {
+            console.error('Ошибка при обновлении иконки:', error);
+            showError('Не удалось обновить иконку');
+        }
+    }
+
 
     document.getElementById('toggleAddFormBtn').addEventListener('click', (e) => {
         const toggleBtn = e.target;
@@ -471,6 +518,8 @@
         setupEditableFields();
         setupTitleClickHandlers();
         setupSearchButtons();
+        setupChangeImageButtons(); // Новая функция
+        setupChangeCategoryButtons(); // Новая функция
     }
 
     async function loadStatusFilter() {
@@ -626,6 +675,78 @@
         setupTitleClickHandlers();
         setupSearchButtons();
         setupIconSearchButton();
+        setupChangeImageButtons(); // Новая функция
+        setupChangeCategoryButtons(); // Новая функция
+    }
+
+    function setupChangeImageButtons() {
+        document.querySelectorAll('.change-image-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const itemName = btn.dataset.name;
+                const searchUrl = `https://yandex.ru/images/search?text=${encodeURIComponent(itemName + ' cover')}`;
+                window.electronAPI.openExternal(searchUrl, itemName);
+            });
+        });
+    }
+
+    function setupChangeCategoryButtons() {
+        document.querySelectorAll('.change-category-btn').forEach(btn => {
+            btn.addEventListener('click', async (e) => {
+                e.stopPropagation();
+                const itemName = btn.dataset.name;
+                showCategoryChangeModal(itemName);
+            });
+        });
+    }
+
+    function showCategoryChangeModal(itemName) {
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+        modal.style.display = 'block';
+
+        modal.innerHTML = `
+        <div class="modal-content" style="max-width: 300px;">
+            <h3>Сменить категорию</h3>
+            <p>Выберите новую категорию для "${itemName}"</p>
+            <select id="categorySelect" class="edit-select">
+                <option value="games">🎮 Игры</option>
+                <option value="movies">🎬 Кино</option>
+                <option value="serials">📺 Сериалы</option>
+                <option value="anime">🌸 Аниме</option>
+                <option value="books">📚 Книги</option>
+            </select>
+            <div style="margin-top: 20px; display: flex; justify-content: space-between;">
+                <button class="modal-button cancel-btn">Отмена</button>
+                <button class="modal-button confirm-btn">Сохранить</button>
+            </div>
+        </div>
+    `;
+
+        document.body.appendChild(modal);
+
+        modal.querySelector('.cancel-btn').addEventListener('click', () => {
+            document.body.removeChild(modal);
+        });
+
+        modal.querySelector('.confirm-btn').addEventListener('click', async () => {
+            const newCategory = modal.querySelector('#categorySelect').value;
+            try {
+                // Здесь нужно реализовать логику перемещения между категориями
+                // Это потребует изменений в main.js для добавления соответствующих IPC-хендлеров
+                await showError('Функционал смены категории еще не реализован');
+                document.body.removeChild(modal);
+            } catch (error) {
+                console.error('Ошибка при смене категории:', error);
+                await showError('Не удалось сменить категорию');
+            }
+        });
+
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) {
+                document.body.removeChild(modal);
+            }
+        });
     }
 
     function hideAddForm() {
@@ -672,29 +793,31 @@
 
     function renderCardList(cards) {
         return cards.map(card => `
-                <div class="data-card" data-name="${card.name}" style="display: block;">
-                    <button class="delete-btn" data-name="${card.name}">🗑️</button>
-                    <button class="search-btn" data-name="${card.name}" title="Найти в интернете">🔍</button>
-                    ${getCardIconHTML(card)}
-                    <div class="data-info">
-                        <h3 class="data-title">${card.name}</h3>
-                        <div class="data-ratings-container">
-                            <span class="card-rating rating-value editable-field"
-                                  data-rating="${card.rating}"
-                                  data-name="${card.name}"
-                                  title="Редактировать">
-                                ${card.rating || '0'}
-                            </span>
-                            <span class="card-status status-value editable-field"
-                                  data-status="${card.status}"
-                                  data-name="${card.name}"
-                                  title="Редактировать">
-                                ${card.status || 'Уточнить'}
-                            </span>
-                        </div>
+            <div class="data-card" data-name="${card.name}" style="display: block;">
+                <button class="search-btn" data-name="${card.name}" title="Найти в интернете">🔍</button>
+                <button class="change-image-btn" data-name="${card.name}" title="Сменить картинку">📄</button>
+                <button class="change-category-btn" data-name="${card.name}" title="Сменить категорию">⇄</button>
+                <button class="delete-btn" data-name="${card.name}">🗑️</button>
+                ${getCardIconHTML(card)}
+                <div class="data-info">
+                    <h3 class="data-title">${card.name}</h3>
+                    <div class="data-ratings-container">
+                        <span class="card-rating rating-value editable-field"
+                              data-rating="${card.rating}"
+                              data-name="${card.name}"
+                              title="Редактировать">
+                            ${card.rating || '0'}
+                        </span>
+                        <span class="card-status status-value editable-field"
+                              data-status="${card.status}"
+                              data-name="${card.name}"
+                              title="Редактировать">
+                            ${card.status || 'Уточнить'}
+                        </span>
                     </div>
                 </div>
-            `).join('');
+            </div>
+        `).join('');
     }
 
     async function addNewData(section) {

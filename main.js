@@ -446,7 +446,7 @@ ipcMain.handle('update-book-status', async (event, name, status) => {
     })();
 });
 
-ipcMain.on('open-external', (event, url) => {
+ipcMain.on('open-external', (event, url, name) => {
     const externalWindow = new BrowserWindow({
         width: 1000,
         height: 800,
@@ -471,11 +471,10 @@ ipcMain.on('open-external', (event, url) => {
         return { action: 'deny' };
     });
 
-
-
     externalWindow.webContents.on('did-finish-load', () => {
         externalWindow.show();
         externalWindow.webContents.executeJavaScript(`
+            // Устанавливаем имя во временную переменную
             // Блокируем стандартное поведение ссылок
             const style = document.createElement('style');
             style.textContent = \`           
@@ -483,35 +482,34 @@ ipcMain.on('open-external', (event, url) => {
                 img { pointer-events: none !important; }
             \`;
             document.head.appendChild(style);
-            // Обработчик кликов по div с jsname
+
+            // Обработчик кликов
             document.addEventListener('click', function(e) {
-                // Ищем ближайший div с атрибутом jsname
                 let img = (e.target.tagName === 'IMG' && e.target.src)
                     ? e.target
                     : e.target.querySelector('img');
                 if (img && img.src) {
-                        e.preventDefault();
-                        e.stopPropagation();
-                        handleImageClick(img);
-                        return;
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleImageClick(img);
+                    return;
                 } 
             });
 
             function handleImageClick(imgElement) {
-                const isDataUrl = imgElement.src.startsWith('data:');
-                window.externalAPI.sendMessageToMain(imgElement.src);
-                
+                const isChangeUrl = (${JSON.stringify(name)});
                 navigator.clipboard.writeText(imgElement.src)
                     .then(() => {
                         showNotification(
-                            isDataUrl 
-                                ? 'Data-URL изображения скопирована' 
-                                : 'Ссылка на изображение скопирована',
-                            isDataUrl ? 'data' : 'url'
+                            isChangeUrl 
+                                ? 'Обложка обновлена' 
+                                : 'Data-URL изображения скопирована',
+                            isChangeUrl ? 'info' : 'data'
                         );
+                        window.externalAPI.sendMessageToMain(imgElement.src, ${JSON.stringify(name)});
                         setTimeout(() => {
                             window.close();
-                        }, 1000); // Даем время увидеть уведомление
+                        }, 1000);
                     })
                     .catch(err => {
                         console.error('Ошибка:', err);
@@ -521,8 +519,8 @@ ipcMain.on('open-external', (event, url) => {
 
             function showNotification(message, type = 'info') {
                 const styles = {
-                    info: { bg: '#6c5ce7', icon: '📋' },
-                    data: { bg: '#00b894', icon: '🖼️' },
+                    info: { bg: '#00b894', icon: '🖼️' },
+                    data: { bg: '#6c5ce7', icon: '📋' },
                     error: { bg: '#d63031', icon: '⚠️' }
                 };
                 const style = styles[type] || styles.info;
@@ -569,7 +567,6 @@ ipcMain.on('open-external', (event, url) => {
             }  
         `);
     });
-
 });
 
 // В раздел IPC handlers добавить:
@@ -739,9 +736,19 @@ ipcMain.handle('import-data', async () => {
     }
 });
 
-ipcMain.on('message-from-external', (event, imgUrl) => {
+ipcMain.on('message-from-external', (event, imgUrl, name) => {
     // Отправляем сообщение в index.html
     if (win) {
-        win.webContents.send('message-to-index', imgUrl);
+        win.webContents.send('message-to-index', { imgUrl, name });
     }
+});
+
+ipcMain.handle('move-to-category', async (event, { oldName, newName, newCategory }) => {
+    return db.transaction(() => {
+        // 1. Получить данные из старой категории
+        // 2. Удалить из старой категории
+        // 3. Добавить в новую категорию
+        // 4. Вернуть обновленные данные
+        // (Это требует более сложной реализации)
+    })();
 });

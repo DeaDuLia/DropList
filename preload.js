@@ -34,7 +34,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     deleteBook: (name) => ipcRenderer.invoke('delete-book', name),
     updateBookRating: (name, rating) => ipcRenderer.invoke('update-book-rating', name, rating),
     updateBookStatus: (name, status) => ipcRenderer.invoke('update-book-status', name, status),
-    openExternal: (url) => ipcRenderer.send('open-external', url),
+    openExternal: (url, name) => ipcRenderer.send('open-external', url, name),
     updateGame: (oldName, newName, newIcoUrl) => ipcRenderer.invoke('update-game', oldName, newName, newIcoUrl),
     updateMovie: (oldName, newName, newIcoUrl) => ipcRenderer.invoke('update-movie', oldName, newName, newIcoUrl),
     updateSerial: (oldName, newName, newIcoUrl) => ipcRenderer.invoke('update-serial', oldName, newName, newIcoUrl),
@@ -44,6 +44,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     importData: () => ipcRenderer.invoke('import-data'),
     showSaveDialog: (options) => ipcRenderer.invoke('show-save-dialog', options),
     showOpenDialog: (options) => ipcRenderer.invoke('show-open-dialog', options),
-    onMessageFromMain: (callback) => {ipcRenderer.on('message-to-index', (event, message) => {callback(message);});
-    }
+    onMessageFromMain: (callback) => {ipcRenderer.on('message-to-index', (event, message) => {callback(message);});},
+    moveGameToCategory: (gameName, oldCategory, newCategory) => ipcRenderer.invoke('move-to-category', { gameName, oldCategory, newCategory })
 });
