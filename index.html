@@ -695,20 +695,24 @@
             btn.addEventListener('click', async (e) => {
                 e.stopPropagation();
                 const itemName = btn.dataset.name;
-                showCategoryChangeModal(itemName);
+                const icoUrl = btn.getAttribute('datatype');
+                const status = btn.dataset.status;
+                const rating = btn.dataset.rating;
+                const section = document.querySelector('.nav-item.active')?.dataset.section;
+                showCategoryChangeModal(section, itemName, icoUrl, status, rating);
             });
         });
     }
 
-    function showCategoryChangeModal(itemName) {
+    function showCategoryChangeModal(oldSection, itemName, icoUrl, status, rating) {
         const modal = document.createElement('div');
         modal.className = 'modal';
         modal.style.display = 'block';
 
         modal.innerHTML = `
         <div class="modal-content" style="max-width: 300px;">
-            <h3>Сменить категорию</h3>
-            <p>Выберите новую категорию для "${itemName}"</p>
+            <h3 data-section="${oldSection}" data-rating="${rating}" data-status="${status}" datatype="${icoUrl}">${itemName}</h3>
+            <p>Выберите новую категорию</p>
             <select id="categorySelect" class="edit-select">
                 <option value="games">🎮 Игры</option>
                 <option value="movies">🎬 Кино</option>
@@ -730,14 +734,64 @@
         });
 
         modal.querySelector('.confirm-btn').addEventListener('click', async () => {
-            const newCategory = modal.querySelector('#categorySelect').value;
+            const oldCat = modal.querySelector('h3').getAttribute('data-section');
+            const newCat = modal.querySelector('#categorySelect').value;
+            const name = modal.querySelector('h3').innerText;
+            const status = modal.querySelector('h3').getAttribute('data-status');
+            const rating = modal.querySelector('h3').getAttribute('data-rating');
+            const icoUrl = modal.querySelector('h3').getAttribute('datatype');
+
             try {
-                // Здесь нужно реализовать логику перемещения между категориями
-                // Это потребует изменений в main.js для добавления соответствующих IPC-хендлеров
-                await showError('Функционал смены категории еще не реализован');
+                const hasDuplicates = await window.electronAPI.checkDuplicates(newCat, name);
+                const isDuplicate = (oldCat !== newCat && hasDuplicates);
+                if (isDuplicate) {
+                    const confirmReplace = await showConfirmModal(
+                        'Элемент уже существует',
+                        `"${name}" уже есть в категории ${newCat}. Хотите заменить его?`,
+                        'Заменить',
+                        'Отмена'
+                    );
+
+                    if (!confirmReplace) {
+                        isAddingGame = false;
+                        return;
+                    }
+                }
+                if (oldCat === newCat) {
+                    isAddingGame = false;
+                    document.body.removeChild(modal);
+                    return;
+                }
+                const data = {
+                    name: name,
+                    oldStatus: status,
+                    oldRating: rating,
+                    oldIcoUrl: icoUrl,
+                    oldCategory: oldCat,
+                    newCategory: newCat
+                };
+                await window.electronAPI.moveDataToCategory(data);
+                let dataSectiom;
+                switch (oldCat) {
+                    case "games":
+                        dataSectiom = await window.electronAPI.getGamesWithTags();
+                        break;
+                    case "movies":
+                        dataSectiom = await window.electronAPI.getMoviesWithTags();
+                        break;
+                    case "serials":
+                        dataSectiom = await window.electronAPI.getSerialsWithTags();
+                        break;
+                    case "anime":
+                        dataSectiom = await window.electronAPI.getAnimeWithTags();
+                        break;
+                    case "books":
+                        dataSectiom = await window.electronAPI.getBooksWithTags();
+                        break;
+                }
+                await renderSection(oldCat, dataSectiom, true);
                 document.body.removeChild(modal);
             } catch (error) {
-                console.error('Ошибка при смене категории:', error);
                 await showError('Не удалось сменить категорию');
             }
         });
@@ -796,7 +850,7 @@
             <div class="data-card" data-name="${card.name}" style="display: block;">
                 <button class="search-btn" data-name="${card.name}" title="Найти в интернете">🔍</button>
                 <button class="change-image-btn" data-name="${card.name}" title="Сменить картинку">📄</button>
-                <button class="change-category-btn" data-name="${card.name}" title="Сменить категорию">⇄</button>
+                <button class="change-category-btn" data-name="${card.name}" data-status="${card.status}" data-rating="${card.rating}" datatype="${card.icoUrl}" title="Сменить категорию">⇄</button>
                 <button class="delete-btn" data-name="${card.name}">🗑️</button>
                 ${getCardIconHTML(card)}
                 <div class="data-info">
@@ -843,6 +897,21 @@
         }
 
         try {
+            const isDuplicate = await window.electronAPI.checkDuplicates(section, cardData.name)
+            if (isDuplicate) {
+                const confirmReplace = await showConfirmModal(
+                    'Элемент уже существует',
+                    `"${cardData.name}" уже есть в списке. Хотите заменить его?`,
+                    'Заменить',
+                    'Отмена'
+                );
+
+                if (!confirmReplace) {
+                    isAddingGame = false;
+                    return;
+                }
+            }
+
             switch (section) {
                 case "games":
                     await window.electronAPI.addGame(cardData);
@@ -888,6 +957,43 @@
         } finally {
             isAddingGame = false;
         }
+    }
+
+    function showConfirmModal(title, message, confirmText, cancelText) {
+        return new Promise((resolve) => {
+            const modal = document.createElement('div');
+            modal.className = 'modal';
+            modal.style.display = 'block';
+            modal.innerHTML = `
+            <div class="modal-content" style="max-width: 400px;">
+                <h3>${title}</h3>
+                <p>${message}</p>
+                <div style="margin-top: 20px; display: flex; justify-content: space-between;">
+                    <button class="modal-button cancel-btn">${cancelText}</button>
+                    <button class="modal-button confirm-btn">${confirmText}</button>
+                </div>
+            </div>
+        `;
+
+            document.body.appendChild(modal);
+
+            modal.querySelector('.cancel-btn').addEventListener('click', () => {
+                document.body.removeChild(modal);
+                resolve(false);
+            });
+
+            modal.querySelector('.confirm-btn').addEventListener('click', () => {
+                document.body.removeChild(modal);
+                resolve(true);
+            });
+
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    document.body.removeChild(modal);
+                    resolve(false);
+                }
+            });
+        });
     }
 
     function setupEditableFields() {
@@ -1131,13 +1237,13 @@
                 modal.style.display = 'block';
                 modal.innerHTML = `
                 <div class="modal-content" style="max-width: 400px;">
-                    <h3>Редактировать карточку</h3>
+                    <h3>${oldName}</h3>
                     <div class="form-group">
                         <label>Название</label>
                         <input id="editNameInput" value="${oldName}" class="edit-input">
                     </div>
                     <div class="form-group">
-                        <label>URL иконки</label>
+                        <label>URL обложки</label>
                         <div class="icon-input-container">
                             <input id="editIcoInput" value="${currentIcoUrl}" class="edit-input">
                             <button id="editSearchIconBtn" class="search-icon-btn" title="Найти иконку в интернете">🔍</button>
@@ -1184,24 +1290,44 @@
                         const section = document.querySelector('.nav-item.active')?.dataset.section;
                         let data;
 
+                        const hasData = await window.electronAPI.checkDuplicates(section, newName);
+                        const isDuplicate = (oldName !== newName && hasData);
+                        if (isDuplicate) {
+                            const confirmReplace = await showConfirmModal(
+                                'Элемент уже существует',
+                                `"${newName}" уже есть в списке. Хотите заменить его?`,
+                                'Заменить',
+                                'Отмена'
+                            );
+
+                            if (!confirmReplace) {
+                                isAddingGame = false;
+                                return;
+                            }
+                        }
                         switch(section) {
                             case 'games':
+                                if(isDuplicate) await window.electronAPI.deleteGame(newName);
                                 await window.electronAPI.updateGame(oldName, newName, newIcoUrl);
                                 data = await window.electronAPI.getGamesWithTags();
                                 break;
                             case 'movies':
+                                if(isDuplicate) await window.electronAPI.deleteMovie(newName);
                                 await window.electronAPI.updateMovie(oldName, newName, newIcoUrl);
                                 data = await window.electronAPI.getMoviesWithTags();
                                 break;
                             case 'serials':
+                                if(isDuplicate) await window.electronAPI.deleteSerial(newName);
                                 await window.electronAPI.updateSerial(oldName, newName, newIcoUrl);
                                 data = await window.electronAPI.getSerialsWithTags();
                                 break;
                             case 'anime':
+                                if(isDuplicate) await window.electronAPI.deleteAnime(newName);
                                 await window.electronAPI.updateAnime(oldName, newName, newIcoUrl);
                                 data = await window.electronAPI.getAnimeWithTags();
                                 break;
                             case 'books':
+                                if(isDuplicate) await window.electronAPI.deleteBook(newName);
                                 await window.electronAPI.updateBook(oldName, newName, newIcoUrl);
                                 data = await window.electronAPI.getBooksWithTags();
                                 break;

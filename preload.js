@@ -45,5 +45,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     showSaveDialog: (options) => ipcRenderer.invoke('show-save-dialog', options),
     showOpenDialog: (options) => ipcRenderer.invoke('show-open-dialog', options),
     onMessageFromMain: (callback) => {ipcRenderer.on('message-to-index', (event, message) => {callback(message);});},
-    moveGameToCategory: (gameName, oldCategory, newCategory) => ipcRenderer.invoke('move-to-category', { gameName, oldCategory, newCategory })
+    checkDuplicates: (section, name) => ipcRenderer.invoke('check-duplicates', section, name),
+    moveDataToCategory: (data) => ipcRenderer.invoke('move-to-category', data)
 });

@@ -204,6 +204,7 @@ const statements = {
     deleteGame: db.prepare('DELETE FROM games WHERE name = ?'),
     updateGameRating: db.prepare('UPDATE games SET rating = ? WHERE name = ?'),
     updateGameStatus: db.prepare('UPDATE games SET status = ? WHERE name = ?'),
+    getGameCount: db.prepare('select count(*) as allCount from games WHERE name = ?'),
     //Фильмы
     getMovies: db.prepare(`
         SELECT name as name, ico_url as icoUrl, 
@@ -216,6 +217,7 @@ const statements = {
     deleteMovie: db.prepare('DELETE FROM movies WHERE name = ?'),
     updateMovieRating: db.prepare('UPDATE movies SET rating = ? WHERE name = ?'),
     updateMovieStatus: db.prepare('UPDATE movies SET status = ? WHERE name = ?'),
+    getMovieCount: db.prepare('select count(*) as allCount from movies WHERE name = ?'),
     //Сериалы
     getSerials: db.prepare(`
         SELECT name as name, ico_url as icoUrl, 
@@ -228,6 +230,7 @@ const statements = {
     deleteSerial: db.prepare('DELETE FROM serials WHERE name = ?'),
     updateSerialRating: db.prepare('UPDATE serials SET rating = ? WHERE name = ?'),
     updateSerialStatus: db.prepare('UPDATE serials SET status = ? WHERE name = ?'),
+    getSerialCount: db.prepare('select count(*) as allCount from serials WHERE name = ?'),
     //Аниме
     getAnime: db.prepare(`
         SELECT name as name, ico_url as icoUrl, 
@@ -240,6 +243,7 @@ const statements = {
     deleteAnime: db.prepare('DELETE FROM anime WHERE name = ?'),
     updateAnimeRating: db.prepare('UPDATE anime SET rating = ? WHERE name = ?'),
     updateAnimeStatus: db.prepare('UPDATE anime SET status = ? WHERE name = ?'),
+    getAnimeCount: db.prepare('select count(*) as allCount from anime WHERE name = ?'),
     //Книги
     getBooks: db.prepare(`
         SELECT name as name, ico_url as icoUrl, 
@@ -252,6 +256,7 @@ const statements = {
     deleteBook: db.prepare('DELETE FROM books WHERE name = ?'),
     updateBookRating: db.prepare('UPDATE books SET rating = ? WHERE name = ?'),
     updateBookStatus: db.prepare('UPDATE books SET status = ? WHERE name = ?'),
+    getBookCount: db.prepare('select count(*) as allCount from books WHERE name = ?'),
     updateGame: db.prepare('UPDATE games SET name = ?, ico_url = ? WHERE name = ?'),
     updateMovie: db.prepare('UPDATE movies SET name = ?, ico_url = ? WHERE name = ?'),
     updateSerial: db.prepare('UPDATE serials SET name = ?, ico_url = ? WHERE name = ?'),
@@ -743,12 +748,63 @@ ipcMain.on('message-from-external', (event, imgUrl, name) => {
     }
 });
 
-ipcMain.handle('move-to-category', async (event, { oldName, newName, newCategory }) => {
+ipcMain.handle('move-to-category', async (event,data) => {
     return db.transaction(() => {
-        // 1. Получить данные из старой категории
-        // 2. Удалить из старой категории
-        // 3. Добавить в новую категорию
-        // 4. Вернуть обновленные данные
-        // (Это требует более сложной реализации)
+        switch (data.oldCategory) {
+            case "games":
+                statements.deleteGame.run(data.name)
+                break;
+            case "movies":
+                statements.deleteMovie.run(data.name)
+                break;
+            case "serials":
+                statements.deleteSerial.run(data.name)
+                break;
+            case "anime":
+                statements.deleteAnime.run(data.name)
+                break;
+            case "books":
+                statements.deleteBook.run(data.name)
+                break;
+        }
+
+        switch (data.newCategory) {
+            case "games":
+                return statements.addGame.run(data.name, data.oldIcoUrl, data.oldRating, data.oldStatus);
+            case "movies":
+                return statements.addMovie.run(data.name, data.oldIcoUrl, data.oldRating, data.oldStatus);
+            case "serials":
+                return statements.addSerial.run(data.name, data.oldIcoUrl, data.oldRating, data.oldStatus);
+            case "anime":
+                return statements.addAnime.run(data.name, data.oldIcoUrl, data.oldRating, data.oldStatus);
+            case "books":
+                return statements.addBook.run(data.name, data.oldIcoUrl, data.oldRating, data.oldStatus);
+        }
     })();
+
+
+});
+
+ipcMain.handle('check-duplicates', async (event, section, name) => {
+    let countOfData;
+    switch (section) {
+        case "games":
+            countOfData = statements.getGameCount.get(name)?.allCount ?? 0;
+            break;
+        case "movies":
+            countOfData = statements.getMovieCount.get(name)?.allCount ?? 0;
+            break;
+        case "serials":
+            countOfData = statements.getSerialCount.get(name)?.allCount ?? 0;
+            break;
+        case "anime":
+            countOfData = statements.getAnimeCount.get(name)?.allCount ?? 0;
+            break;
+        case "books":
+            countOfData = statements.getBookCount.get(name)?.allCount ?? 0;
+            break;
+        default:
+            countOfData = 0; // На случай, если section не совпал ни с одним case
+    }
+    return countOfData > 0;
 });
