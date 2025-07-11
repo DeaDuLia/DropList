@@ -207,15 +207,14 @@ body {
                 display: flex;
                 align-items: center;
                 gap: 10px;
-                margin-left: 20px;
             }
-                #statusFilter {
+                #statusFilter, #sortFilter {
                     padding: 10px 0;
                     border: 1px solid var(--dark-input-hover-background);
                     font-size: 1rem;
                     transition: all 0.3s ease;
                 }
-                #statusFilter:focus {
+                #statusFilter:focus, #sortFilter:focus {
                     outline: none;
                     border-color: var(--dark-primary-color);
                     box-shadow: 0 0 0 2px var(--dark-primary-shadow);
@@ -225,8 +224,7 @@ body {
                 position: relative;
                 display: flex;
                 align-items: center;
-                margin-left: 5px;
-                gap: 5px;
+
             }
                 #searchInput {
                     padding: 10px 15px;
