@@ -314,7 +314,6 @@ setInterval(() => {
     db.pragma('wal_checkpoint(RESTART)');
 }, 30000);
 
-// Общие
 ipcMain.handle('get-ratings', () => {
     return statements.getRatings
         .all()
@@ -325,151 +324,7 @@ ipcMain.handle('get-statuses', () => {
         .all()
         .map(row => row.status);
 });
-//Игры
-ipcMain.handle('get-games-with-tags', () => {
-    return statements.getGames.all();
-});
-ipcMain.handle('add-game', (event, gameData) => {
-    return db.transaction(() => {
-        return statements.addGame.run(
-            gameData.name,
-            gameData.icoUrl || null,
-            gameData.rating,
-            gameData.status || 'Не играл'
-        );
-    })();
-});
-ipcMain.handle('delete-game', (event, gameName) => {
-    return db.transaction(() => {
-        return statements.deleteGame.run(gameName)
-    })();
-});
-ipcMain.handle('update-game-rating', async (event, gameName, rating) => {
-    return db.transaction(() => {
-        return statements.updateGameRating.run(rating, gameName);
-    })();
-});
-ipcMain.handle('update-game-status', async (event, gameName, status) => {
-    return db.transaction(() => {
-        return statements.updateGameStatus.run(status, gameName);
-    })();
-});
-//Фильмы
-ipcMain.handle('get-movies-with-tags', () => {
-    return statements.getMovies.all();
-});
-ipcMain.handle('add-movie', (event, movieData) => {
-    return db.transaction(() => {
-        return statements.addMovie.run(
-            movieData.name,
-            movieData.icoUrl || null,
-            movieData.rating,
-            movieData.status || 'Не играл'
-        );
-    })();
-});
-ipcMain.handle('delete-movie', (event, movieName) => {
-    return db.transaction(() => {
-        return statements.deleteMovie.run(movieName)
-    })();
-});
-ipcMain.handle('update-movie-rating', async (event, movieName, rating) => {
-    return db.transaction(() => {
-        return statements.updateMovieRating.run(rating, movieName);
-    })();
-});
-ipcMain.handle('update-movie-status', async (event, movieName, status) => {
-    return db.transaction(() => {
-        return statements.updateMovieStatus.run(status, movieName);
-    })();
-});
-//Сериалы
-ipcMain.handle('get-serials-with-tags', () => {
-    return statements.getSerials.all();
-});
-ipcMain.handle('add-serial', (event, data) => {
-    return db.transaction(() => {
-        return statements.addSerial.run(
-            data.name,
-            data.icoUrl || null,
-            data.rating,
-            data.status || 'Не играл'
-        );
-    })();
-});
-ipcMain.handle('delete-serial', (event, name) => {
-    return db.transaction(() => {
-        return statements.deleteSerial.run(name)
-    })();
-});
-ipcMain.handle('update-serial-rating', async (event, name, rating) => {
-    return db.transaction(() => {
-        return statements.updateSerialStatus.run(rating, name);
-    })();
-});
-ipcMain.handle('update-serial-status', async (event, name, status) => {
-    return db.transaction(() => {
-        return statements.updateSerialStatus.run(status, name);
-    })();
-});
-//Аниме
-ipcMain.handle('get-anime-with-tags', () => {
-    return statements.getAnime.all();
-});
-ipcMain.handle('add-anime', (event, data) => {
-    return db.transaction(() => {
-        return statements.addAnime.run(
-            data.name,
-            data.icoUrl || null,
-            data.rating,
-            data.status || 'Не играл'
-        );
-    })();
-});
-ipcMain.handle('delete-anime', (event, name) => {
-    return db.transaction(() => {
-        return statements.deleteAnime.run(name)
-    })();
-});
-ipcMain.handle('update-anime-rating', async (event, name, rating) => {
-    return db.transaction(() => {
-        return statements.updateAnimeRating.run(rating, name);
-    })();
-});
-ipcMain.handle('update-anime-status', async (event, name, status) => {
-    return db.transaction(() => {
-        return statements.updateAnimeStatus.run(status, name);
-    })();
-});
-//Аниме
-ipcMain.handle('get-books-with-tags', () => {
-    return statements.getBooks.all();
-});
-ipcMain.handle('add-book', (event, data) => {
-    return db.transaction(() => {
-        return statements.addBook.run(
-            data.name,
-            data.icoUrl || null,
-            data.rating,
-            data.status || 'Не играл'
-        );
-    })();
-});
-ipcMain.handle('delete-book', (event, name) => {
-    return db.transaction(() => {
-        return statements.deleteBook.run(name)
-    })();
-});
-ipcMain.handle('update-book-rating', async (event, name, rating) => {
-    return db.transaction(() => {
-        return statements.updateBookRating.run(rating, name);
-    })();
-});
-ipcMain.handle('update-book-status', async (event, name, status) => {
-    return db.transaction(() => {
-        return statements.updateBookStatus.run(status, name);
-    })();
-});
+
 
 ipcMain.on('open-external', (event, url, name) => {
     const externalWindow = new BrowserWindow({
@@ -828,3 +683,109 @@ ipcMain.handle('check-duplicates', async (event, section, name) => {
     }
     return countOfData > 0;
 });
+
+ipcMain.handle('get-data', async (event, section) => {
+    switch (section) {
+        case "games":
+            return statements.getGames.all();
+        case "movies":
+            return statements.getMovies.all();
+        case "serials":
+            return statements.getSerials.all();
+        case "anime":
+            return statements.getAnime.all();
+        case "books":
+            return statements.getBooks.all();
+        default:
+            return null;
+    }
+});
+
+//add-data
+
+ipcMain.handle('delete-data', (event, section, dataName) => {
+    switch (section) {
+        case "games":
+            return statements.deleteGame.run(dataName);
+        case "movies":
+            return statements.deleteMovie.run(dataName);
+        case "serials":
+            return statements.deleteSerial.run(dataName);
+        case "anime":
+            return statements.deleteAnime.run(dataName);
+        case "books":
+            return statements.deleteBook.run(dataName);
+        default:
+            return;
+    }
+});
+
+ipcMain.handle('update-data', async (event, section, oldName, newName, newIcoUrl) => {
+    switch (section) {
+        case "games":
+            return statements.updateGame.run(newName, newIcoUrl, oldName);
+        case "movies":
+            return statements.updateMovie.run(newName, newIcoUrl, oldName)
+        case "serials":
+            return statements.updateSerial.run(newName, newIcoUrl, oldName)
+        case "anime":
+            return statements.updateAnime.run(newName, newIcoUrl, oldName)
+        case "books":
+            return statements.updateBook.run(newName, newIcoUrl, oldName)
+        default:
+            return null;
+    }
+});
+
+ipcMain.handle('update-data-rating', async (event,section, dataName, rating) => {
+    switch (section) {
+        case "games":
+            return statements.updateGameRating.run(rating, dataName);
+        case "movies":
+            return statements.updateMovieRating.run(rating, dataName);
+        case "serials":
+            return statements.updateSerialRating.run(rating, dataName);
+        case "anime":
+            return statements.updateAnimeRating.run(rating, dataName);
+        case "books":
+            return statements.updateBookRating.run(rating, dataName);
+        default:
+            return null;
+    }
+});
+
+ipcMain.handle('update-data-status', async (event,section, dataName, status) => {
+    switch (section) {
+        case "games":
+            return statements.updateGameStatus.run(status, dataName);
+        case "movies":
+            return statements.updateMovieStatus.run(status, dataName);
+        case "serials":
+            return statements.updateSerialStatus.run(status, dataName);
+        case "anime":
+            return statements.updateAnimeStatus.run(status, dataName);
+        case "books":
+            return statements.updateBookStatus.run(status, dataName);
+        default:
+            return null;
+    }
+});
+
+ipcMain.handle('add-data', (event, section, data) => {
+    switch (section) {
+        case "games":
+            return statements.addGame.run(data.name, data.icoUrl || null, data.rating, data.status || 'Уточнить');
+        case "movies":
+            return statements.addMovie.run(data.name, data.icoUrl || null, data.rating, data.status || 'Уточнить');
+        case "serials":
+            return statements.addSerial.run(data.name, data.icoUrl || null, data.rating, data.status || 'Уточнить');
+        case "anime":
+            return statements.addAnime.run(data.name, data.icoUrl || null, data.rating, data.status || 'Уточнить');
+        case "books":
+            return statements.addBook.run(data.name, data.icoUrl || null, data.rating, data.status || 'Уточнить');
+        default:
+            return null;
+    }
+});
+
+

@@ -124,14 +124,8 @@
                 // Перезагружаем текущий раздел
                 const section = document.querySelector('.nav-item.active')?.dataset.section;
                 if (section) {
-                    let data;
-                    switch(section) {
-                        case 'games': data = await window.electronAPI.getGamesWithTags(); break;
-                        case 'movies': data = await window.electronAPI.getMoviesWithTags(); break;
-                        case 'serials': data = await window.electronAPI.getSerialsWithTags(); break;
-                        case 'anime': data = await window.electronAPI.getAnimeWithTags(); break;
-                        case 'books': data = await window.electronAPI.getBooksWithTags(); break;
-                    }
+                    let data = await window.electronAPI.getData(section);
+
                     await renderSection(section, data, true);
                 }
             } else if (result.message !== 'Импорт отменен') {
@@ -179,33 +173,8 @@
 
     async function updateItemIcon(section, name, newIconUrl) {
         try {
-            switch(section) {
-                case 'games':
-                    await window.electronAPI.updateGame(name, name, newIconUrl);
-                    break;
-                case 'movies':
-                    await window.electronAPI.updateMovie(name, name, newIconUrl);
-                    break;
-                case 'serials':
-                    await window.electronAPI.updateSerial(name, name, newIconUrl);
-                    break;
-                case 'anime':
-                    await window.electronAPI.updateAnime(name, name, newIconUrl);
-                    break;
-                case 'books':
-                    await window.electronAPI.updateBook(name, name, newIconUrl);
-                    break;
-            }
-
-            // Перезагружаем данные
-            let data;
-            switch(section) {
-                case 'games': data = await window.electronAPI.getGamesWithTags(); break;
-                case 'movies': data = await window.electronAPI.getMoviesWithTags(); break;
-                case 'serials': data = await window.electronAPI.getSerialsWithTags(); break;
-                case 'anime': data = await window.electronAPI.getAnimeWithTags(); break;
-                case 'books': data = await window.electronAPI.getBooksWithTags(); break;
-            }
+            await window.electronAPI.updateData(section, name, name, newIconUrl);
+            let data = await window.electronAPI.getData(section);
             await renderSection(section, data, true, true);
         } catch (error) {
             console.error('Ошибка при обновлении иконки:', error);
@@ -245,24 +214,7 @@
             const section = this.dataset.section;
 
             try {
-                let data;
-                switch(section) {
-                    case 'games':
-                        data = await window.electronAPI.getGamesWithTags();
-                        break;
-                    case 'movies':
-                        data = await window.electronAPI.getMoviesWithTags();
-                        break;
-                    case 'serials':
-                        data = await window.electronAPI.getSerialsWithTags();
-                        break;
-                    case 'anime':
-                        data = await window.electronAPI.getAnimeWithTags();
-                        break;
-                    case 'books':
-                        data = await window.electronAPI.getBooksWithTags();
-                        break;
-                }
+                let data = await window.electronAPI.getData(section);
                 await renderSection(section, data, true, false);
             } catch (error) {
                 console.error(`Ошибка загрузки раздела ${section}:`, error);
@@ -305,7 +257,7 @@
         await loadStatuses();
 
         // Загружаем игры по умолчанию
-        const games = await window.electronAPI.getGamesWithTags();
+        const games = await window.electronAPI.getData('games');
         await renderSection('games', games);
     });
 
@@ -771,25 +723,8 @@
                     newCategory: newCat
                 };
                 await window.electronAPI.moveDataToCategory(data);
-                let dataSectiom;
-                switch (oldCat) {
-                    case "games":
-                        dataSectiom = await window.electronAPI.getGamesWithTags();
-                        break;
-                    case "movies":
-                        dataSectiom = await window.electronAPI.getMoviesWithTags();
-                        break;
-                    case "serials":
-                        dataSectiom = await window.electronAPI.getSerialsWithTags();
-                        break;
-                    case "anime":
-                        dataSectiom = await window.electronAPI.getAnimeWithTags();
-                        break;
-                    case "books":
-                        dataSectiom = await window.electronAPI.getBooksWithTags();
-                        break;
-                }
-                await renderSection(oldCat, dataSectiom, true);
+                let dataSection = await window.electronAPI.getData(section);
+                await renderSection(oldCat, dataSection, true);
                 document.body.removeChild(modal);
             } catch (error) {
                 await showError('Не удалось сменить категорию');
@@ -905,51 +840,15 @@
                     'Заменить',
                     'Отмена'
                 );
-
                 if (!confirmReplace) {
                     isAddingGame = false;
                     return;
                 }
             }
-
-            switch (section) {
-                case "games":
-                    await window.electronAPI.addGame(cardData);
-                    break;
-                case "movies":
-                    await window.electronAPI.addMovie(cardData);
-                    break;
-                case "serials":
-                    await window.electronAPI.addSerial(cardData);
-                    break;
-                case "anime":
-                    await window.electronAPI.addAnime(cardData);
-                    break;
-                case "books":
-                    await window.electronAPI.addBook(cardData);
-                    break;
-            }
+            await window.electronAPI.addData(section, cardData);
             resetForm();
-
             // Перезагружаем данные и рендерим раздел заново
-            let data;
-            switch (section) {
-                case "games":
-                    data = await window.electronAPI.getGamesWithTags();
-                    break;
-                case "movies":
-                    data = await window.electronAPI.getMoviesWithTags();
-                    break;
-                case "serials":
-                    data = await window.electronAPI.getSerialsWithTags();
-                    break;
-                case "anime":
-                    data = await window.electronAPI.getAnimeWithTags();
-                    break;
-                case "books":
-                    data = await window.electronAPI.getBooksWithTags();
-                    break;
-            }
+            let data = await window.electronAPI.getData(section);
             await renderSection(section, data, true);
         } catch (error) {
             console.error('Ошибка при добавлении:', error);
@@ -1051,48 +950,17 @@
                     const newValue = modal.querySelector('.edit-select').value;
                     try {
                         const section = document.querySelector('.nav-item.active')?.dataset.section;
-                        let data;
-
                         if (isRating) {
-                            if (section === 'games') {
-                                await window.electronAPI.updateGameRating(itemName, newValue);
-                                data = await window.electronAPI.getGamesWithTags();
-                            } else if (section === 'movies') {
-                                await window.electronAPI.updateMovieRating(itemName, newValue);
-                                data = await window.electronAPI.getMoviesWithTags();
-                            } else if (section === 'serials') {
-                                await window.electronAPI.updateSerialRating(itemName, newValue);
-                                data = await window.electronAPI.getSerialsWithTags();
-                            } else if (section === 'anime') {
-                                await window.electronAPI.updateAnimeRating(itemName, newValue);
-                                data = await window.electronAPI.getAnimeWithTags();
-                            } else if (section === 'books') {
-                                await window.electronAPI.updateBookRating(itemName, newValue);
-                                data = await window.electronAPI.getBooksWithTags();
-                            }
+                            await window.electronAPI.updateDataRating(section, itemName, newValue);
                             this.dataset.rating = newValue;
                             this.textContent = newValue || 'Не оценено';
                         } else {
-                            if (section === 'games') {
-                                await window.electronAPI.updateGameStatus(itemName, newValue);
-                                data = await window.electronAPI.getGamesWithTags();
-                            } else if (section === 'movies') {
-                                await window.electronAPI.updateMovieStatus(itemName, newValue);
-                                data = await window.electronAPI.getMoviesWithTags();
-                            } else if (section === 'serials') {
-                                await window.electronAPI.updateSerialStatus(itemName, newValue);
-                                data = await window.electronAPI.getSerialsWithTags();
-                            } else if (section === 'anime') {
-                                await window.electronAPI.updateAnimeStatus(itemName, newValue);
-                                data = await window.electronAPI.getAnimeWithTags();
-                            } else if (section === 'books') {
-                                await window.electronAPI.updateBookStatus(itemName, newValue);
-                                data = await window.electronAPI.getBooksWithTags();
-                            }
+                            await window.electronAPI.updateDataStatus(section, itemName, newValue);
+
                             this.dataset.status = newValue;
                             this.textContent = newValue || 'Не играл';
                         }
-
+                        let data = await window.electronAPI.getData(section);
                         // Перерисовываем раздел с обновленными данными
                         await renderSection(section, data, true, true);
 
@@ -1149,17 +1017,7 @@
                 confirmModal.querySelector('.confirm-btn').addEventListener('click', async () => {
                     try {
                         const section = document.querySelector('.nav-item.active')?.dataset.section;
-                        if (section === 'games') {
-                            await window.electronAPI.deleteGame(itemName);
-                        } else if (section === 'movies') {
-                            await window.electronAPI.deleteMovie(itemName);
-                        } else if (section === 'serials') {
-                            await window.electronAPI.deleteSerial(itemName);
-                        } else if (section === 'anime') {
-                            await window.electronAPI.deleteAnime(itemName);
-                        } else if (section === 'books') {
-                            await window.electronAPI.deleteBook(itemName);
-                        }
+                        await window.electronAPI.deleteData(section, itemName);
                         btn.closest('.data-card').remove();
                         document.body.removeChild(confirmModal);
                     } catch (error) {
@@ -1305,34 +1163,9 @@
                                 return;
                             }
                         }
-                        switch(section) {
-                            case 'games':
-                                if(isDuplicate) await window.electronAPI.deleteGame(newName);
-                                await window.electronAPI.updateGame(oldName, newName, newIcoUrl);
-                                data = await window.electronAPI.getGamesWithTags();
-                                break;
-                            case 'movies':
-                                if(isDuplicate) await window.electronAPI.deleteMovie(newName);
-                                await window.electronAPI.updateMovie(oldName, newName, newIcoUrl);
-                                data = await window.electronAPI.getMoviesWithTags();
-                                break;
-                            case 'serials':
-                                if(isDuplicate) await window.electronAPI.deleteSerial(newName);
-                                await window.electronAPI.updateSerial(oldName, newName, newIcoUrl);
-                                data = await window.electronAPI.getSerialsWithTags();
-                                break;
-                            case 'anime':
-                                if(isDuplicate) await window.electronAPI.deleteAnime(newName);
-                                await window.electronAPI.updateAnime(oldName, newName, newIcoUrl);
-                                data = await window.electronAPI.getAnimeWithTags();
-                                break;
-                            case 'books':
-                                if(isDuplicate) await window.electronAPI.deleteBook(newName);
-                                await window.electronAPI.updateBook(oldName, newName, newIcoUrl);
-                                data = await window.electronAPI.getBooksWithTags();
-                                break;
-                        }
-
+                        if(isDuplicate) await window.electronAPI.deleteData(section, newName);
+                        await window.electronAPI.updateData(section, oldName, newName, newIcoUrl);
+                        data = await window.electronAPI.getData(section);
                         await renderSection(section, data, true, true);
                         document.body.removeChild(modal);
                     } catch (error) {
