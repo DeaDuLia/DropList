@@ -21,6 +21,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     updateDataRating: (section, dataName, rating) => ipcRenderer.invoke('update-data-rating', section, dataName, rating),
     updateDataStatus: (section, dataName, status) => ipcRenderer.invoke('update-data-status', section, dataName, status),
 
-    moveDataToCategory: (data) => ipcRenderer.invoke('move-to-category', data)
-
+    moveDataToCategory: (data) => ipcRenderer.invoke('move-to-category', data),
+    getGitHubDownloads: () => ipcRenderer.invoke('get-github-downloads'),
 });

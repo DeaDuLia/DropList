@@ -17,27 +17,17 @@
   },
   "build": {
     "appId": "com.deshin.droplist",
-    "linux": {
-      "target": ["AppImage", "deb"],
-      "category": "Utility",
-      "maintainer": "nvdeshin@gmail.com"
-    },
-    "mac": {
-      "target": ["dmg"],
-      "category": "public.app-category.utilities",
-      "identity": null,
-      "hardenedRuntime": false
-    },
+    "icon": "icon.ico",
+    "linux": { "target": [] },
+    "mac": { "target": [] },
     "win": {
+      "signAndEditExecutable": false,
       "target": ["nsis"],
       "icon": "icon.ico"
     },
     "publish": null,
     "extraResources": [
-      {
-        "from": "database.db",
-        "to": "../"
-      }
+      { "from": "database.db", "to": "../" }
     ]
   },
   "dependencies": {
