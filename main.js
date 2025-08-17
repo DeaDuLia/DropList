@@ -466,3 +466,72 @@ ipcMain.handle('import-data', async () => {
         return { success: false, message: 'Ошибка при импорте данных' };
     }
 });
+
+ipcMain.handle('replace-data', async () => {
+    const win = BrowserWindow.getFocusedWindow();
+
+    try {
+        // Показываем диалог выбора файла
+        const { filePaths } = await dialog.showOpenDialog(win, {
+            title: 'Заменить данные',
+            filters: [
+                { name: 'JSON Files', extensions: ['json'] },
+                { name: 'All Files', extensions: ['*'] }
+            ],
+            properties: ['openFile']
+        });
+
+        if (filePaths.length === 0) {
+            return { success: false, message: 'Замена отменена' };
+        }
+
+        const filePath = filePaths[0];
+        const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+
+        // Очищаем и импортируем данные в транзакции
+        await db.transaction(() => {
+            // Очищаем все таблицы
+            db.exec('DELETE FROM tags_assign');
+            db.exec('DELETE FROM data_cards');
+
+            db.exec('DELETE FROM ratings');
+            db.exec('DELETE FROM statuses');
+
+            // Импортируем рейтинги и статусы
+            if (data.ratings) {
+                data.ratings.forEach(rating => {
+                    db.prepare('INSERT INTO ratings (rating) VALUES (?)').run(rating);
+                });
+            }
+            if (data.statuses) {
+                data.statuses.forEach(status => {
+                    db.prepare('INSERT INTO statuses (status) VALUES (?)').run(status);
+                });
+            }
+
+            const categories = Object.keys(data).filter(key =>
+                key !== 'ratings' && key !== 'statuses'
+            );
+
+            categories.forEach(category => {
+                if (Array.isArray(data[category])) {
+                    data[category].forEach(item => {
+                        statements.importData.run(
+                            item.name,
+                            category,
+                            item.icoUrl || null,
+                            item.rating || '0',
+                            item.status || 'Уточнить',
+                            item.description || ''
+                        );
+                    });
+                }
+            });
+        })();
+
+        return { success: true, message: 'Данные успешно заменены' };
+    } catch (error) {
+        console.error('Replace error:', error);
+        return { success: false, message: 'Ошибка при замене данных' };
+    }
+});

@@ -23,4 +23,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
     moveDataToCategory: (data) => ipcRenderer.invoke('move-to-category', data),
     getGitHubDownloads: () => ipcRenderer.invoke('get-github-downloads'),
+    replaceData: () => ipcRenderer.invoke('replace-data')
 });

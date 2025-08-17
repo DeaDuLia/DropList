@@ -12,6 +12,7 @@ const closeDonateModal = document.getElementById('closeDonateModal');
 // Кнопки шапки
 const exportBtn = document.getElementById('exportBtn');
 const importBtn = document.getElementById('importBtn');
+const replaceBtn = document.getElementById('replaceBtn');
 const donateBtn = document.getElementById('donateBtn');
 const toggleAddFormBtn = document.getElementById('toggleAddFormBtn');
 
@@ -64,6 +65,37 @@ exportBtn.addEventListener('click', async () => {
     } catch (error) {
         console.error('Export error:', error);
         await showError('Ошибка при экспорте данных');
+    }
+});
+
+replaceBtn.addEventListener('click', async () => {
+    try {
+        const confirmReplace = await showConfirmModal(
+            'Подтверждение замены',
+            'Вы уверены, что хотите заменить все данные? Это действие нельзя отменить.',
+            'Заменить',
+            'Отмена'
+        );
+
+        if (!confirmReplace) {
+            return;
+        }
+
+        const result = await window.electronAPI.replaceData();
+        if (result.success) {
+            await showError(result.message);
+            // Перезагружаем текущий раздел
+            const section = document.querySelector('.nav-item.active')?.dataset.section;
+            if (section) {
+                let data = await window.electronAPI.getData(section);
+                await renderSection(section, data, true);
+            }
+        } else if (result.message !== 'Замена отменена') {
+            await showError(result.message);
+        }
+    } catch (error) {
+        console.error('Replace error:', error);
+        await showError('Ошибка при замене данных');
     }
 });
 
