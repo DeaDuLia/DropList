@@ -958,88 +958,86 @@ function showConfirmModal(title, message, confirmText, cancelText) {
 function setupEditableFields() {
     const oldFields = document.querySelectorAll('.editable-field');
     oldFields.forEach(field => {
-        field.replaceWith(field.cloneNode(true)); // Это удалит все привязанные обработчики
+        field.replaceWith(field.cloneNode(true));
     });
 
     document.querySelectorAll('.editable-field').forEach(field => {
-        // Меняем курсор при наведении
         field.style.cursor = 'pointer';
 
-        // Обработчик клика
-        field.addEventListener('click', async function(e) {
-            e.stopPropagation();
-            const itemName = this.dataset.name;
-            const isRating = this.classList.contains('rating-value');
-            const currentValue = isRating ? this.dataset.rating : this.dataset.status;
+        // Создаем контейнер для выпадающего списка
+        const container = document.createElement('div');
+        container.className = 'editable-select-container';
 
-            // Получаем возможные значения
-            let values, title;
-            if (isRating) {
+        // Получаем текущее значение
+        const currentValue = field.classList.contains('rating-value')
+            ? field.dataset.rating
+            : field.dataset.status;
+
+        // Создаем выпадающий список
+        const select = document.createElement('select');
+        select.className = 'editable-select';
+
+        // Создаем элемент для отображения текущего значения
+        const valueDisplay = document.createElement('span');
+        valueDisplay.className = 'editable-select-value';
+        valueDisplay.textContent = field.textContent;
+
+        // Добавляем элементы в DOM
+        field.innerHTML = '';
+        container.appendChild(select);
+        container.appendChild(valueDisplay);
+        field.appendChild(container);
+
+        // Заполняем список опциями
+        const populateOptions = async () => {
+            let values, currentText;
+            if (field.classList.contains('rating-value')) {
                 values = await window.electronAPI.getRatings();
-                title = 'Выберите рейтинг';
+                currentText = field.dataset.rating;
             } else {
                 values = await window.electronAPI.getStatuses();
-                title = 'Выберите статус';
+                currentText = field.dataset.status;
             }
 
-            // Создаем модальное окно с селектором
-            const modal = document.createElement('div');
-            modal.className = 'modal';
-            modal.style.display = 'block';
-            modal.innerHTML = `
-                <div class="modal-content" style="max-width: 300px;">
-                    <h3>${title}</h3>
-                    <select class="edit-select">
-                        ${values.map(v => `<option value="${v}" ${v === currentValue ? 'selected' : ''}>${v}</option>`).join('')}
-                    </select>
-                    <div style="margin-top: 20px; display: flex; justify-content: space-between;">
-                        <button class="modal-button cancel-btn">Отмена</button>
-                        <button class="modal-button confirm-btn">Сохранить</button>
-                    </div>
-                </div>
-            `;
+            select.innerHTML = values.map(v =>
+                `<option value="${v}" ${v === currentText ? 'selected' : ''}>${v}</option>`
+            ).join('');
+        };
 
-            document.body.appendChild(modal);
+        // При фокусе показываем выпадающий список
+        select.addEventListener('focus', populateOptions);
 
-            // Обработчики для кнопок
-            modal.querySelector('.cancel-btn').addEventListener('click', () => {
-                document.body.removeChild(modal);
-            });
+        // При изменении значения
+        select.addEventListener('change', async function() {
+            const newValue = this.value;
+            const itemName = field.dataset.name;
+            const isRating = field.classList.contains('rating-value');
 
-            modal.querySelector('.confirm-btn').addEventListener('click', async () => {
-                const newValue = modal.querySelector('.edit-select').value;
-                try {
-                    const section = document.querySelector('.nav-item.active')?.dataset.section;
-                    if (isRating) {
-                        await window.electronAPI.updateDataRating(section, itemName, newValue);
-                        // Обновляем только значение рейтинга в DOM
-                        const ratingElement = document.querySelector(`.rating-value[data-name="${itemName}"]`);
-                        if (ratingElement) {
-                            ratingElement.textContent = newValue || '0';
-                            ratingElement.dataset.rating = newValue;
-                        }
-                    } else {
-                        await window.electronAPI.updateDataStatus(section, itemName, newValue);
-                        // Обновляем только значение статуса в DOM
-                        const statusElement = document.querySelector(`.status-value[data-name="${itemName}"]`);
-                        if (statusElement) {
-                            statusElement.textContent = newValue || 'Не играл';
-                            statusElement.dataset.status = newValue;
-                        }
-                    }
-                    document.body.removeChild(modal);
-                } catch (error) {
-                    console.error('Ошибка при обновлении:', error);
-                    showError('Не удалось обновить значение');
+            try {
+                const section = document.querySelector('.nav-item.active')?.dataset.section;
+                if (isRating) {
+                    await window.electronAPI.updateDataRating(section, itemName, newValue);
+                    field.dataset.rating = newValue;
+                } else {
+                    await window.electronAPI.updateDataStatus(section, itemName, newValue);
+                    field.dataset.status = newValue;
                 }
-            });
 
-            // Закрытие при клике вне модального окна
-            modal.addEventListener('click', (e) => {
-                if (e.target === modal) {
-                    document.body.removeChild(modal);
-                }
-            });
+                // Обновляем отображаемое значение
+                valueDisplay.textContent = newValue;
+
+                // Возвращаем фокус и скрываем список
+                select.blur();
+            } catch (error) {
+                console.error('Ошибка при обновлении:', error);
+                showError('Не удалось обновить значение');
+            }
+        });
+
+        // При потере фокуса скрываем список
+        select.addEventListener('blur', function() {
+            this.style.opacity = '0';
+            valueDisplay.style.display = 'inline';
         });
     });
 }
