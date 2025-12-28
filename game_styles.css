@@ -120,24 +120,7 @@
     display: inline-block;
     padding: 0 5px;
 }
-.header-buttons {
-    display: flex;
-    gap: 10px;
-    justify-content: flex-end; /* Выравниваем по правому краю */
-    min-width: 0; /* Позволяет элементам сжиматься */
-}
-.header-button, .add-button {
-    background-color: var(--dark-button-background);
-    color: var(--dark-button-color);
-    border-radius: 12px;
-    padding: 8px 15px; /* Уменьшаем padding */
-    font-size: 1rem;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    white-space: nowrap;
-    max-width: 100%; /* Ограничиваем максимальную ширину */
-    flex-shrink: 1; /* Позволяет сжиматься */
-}
+
 
 #randomBtnSection {
     background-color: var(--dark-button-background); /* Фиолетовый цвет для кнопки случайности */
@@ -185,8 +168,7 @@
 }
 
 .header-button:hover, .add-button:hover {
-    background-color: var(--dark-button-color);
-    color: var(--dark-button-background);
+    background-color: #8e44ad;
 }
 /* Анимация кнопок */
 @media (max-width: 800px) {
@@ -360,7 +342,7 @@ body {
     transition: color 0.2s;
 }
 #searchBtn:hover {
-    color: var(--dark-button-hover-background);
+    background-color: #8e44ad;
 }
 .clear-search-btn {
     background-color: var(--dark-button-background);
@@ -501,7 +483,6 @@ body {
     transform: scale(1.1);
 }
 .delete-btn,
-
 .change-image-btn,
 .change-category-btn {
     position: absolute;
@@ -889,7 +870,6 @@ button {
     background-color: var(--dark-primary-color);
     color: white;
     border: none;
-    padding: 12px 24px;
     border-radius: 8px;
     font-size: 1rem;
     cursor: pointer;
@@ -1131,10 +1111,6 @@ button:hover {
     margin-left: 10px;
 }
 
-.add-button:hover {
-    background-color: var(--dark-button-hover-background);
-}
-
 @media (max-width: 768px) {
     .add-button-container {
         margin-left: 0;
@@ -1147,3 +1123,77 @@ button:hover {
         margin-left: 0;
     }
 }
+
+.nav-icon {
+    width: 20px;
+    height: 20px;
+    margin-right: 8px;
+    vertical-align: middle;
+    filter: invert(1) brightness(2); /* Делает иконки белыми на темном фоне */
+}
+
+/* Стили для иконок в кнопках */
+.button-icon {
+    width: 16px;
+    height: 16px;
+    margin-right: 6px;
+    vertical-align: middle;
+}
+
+.button-text {
+    vertical-align: middle;
+}
+
+/* Кнопки только с иконками (без текста) */
+.header-button:has(img:only-child) .button-icon {
+    margin-right: 0;
+}
+
+/* Стили для счетчика загрузок */
+.downloads-icon {
+    width: 16px;
+    height: 16px;
+    margin-right: 4px;
+    vertical-align: middle;
+}
+
+.downloads-number {
+    vertical-align: middle;
+}
+
+/* Стили для иконок в форме поиска */
+.search-container button img {
+    width: 16px;
+    height: 16px;
+}
+
+.header-buttons {
+    display: flex;
+    gap: 5px;
+    justify-content: flex-end; /* Выравниваем по правому краю */
+    min-width: 0;
+}
+.header-button {
+    border-radius: 0;
+    background-color: var(--dark-button-background);
+    color: var(--dark-button-color);
+    padding: 8px 15px; /* Уменьшаем padding */
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+    max-width: 100%; /* Ограничиваем максимальную ширину */
+    flex-shrink: 1; /* Позволяет сжиматься */
+}
+
+.add-button {
+    background-color: var(--dark-button-background);
+    color: var(--dark-button-color);
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+    max-width: 100%; /* Ограничиваем максимальную ширину */
+    flex-shrink: 1;
+}
+

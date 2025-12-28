@@ -877,10 +877,9 @@ function getAddFormHTML(addMoreChecked=false, visible='') {
 function renderCardList(cards) {
     return cards.map(card => `
             <div class="data-card" data-name="${card.name}" style="display: block;">
-                
-                <button class="change-image-btn" data-name="${card.name}" title="Сменить картинку">🖼️</button>
-                <button class="change-category-btn" data-name="${card.name}" data-status="${card.status}" data-rating="${card.rating}" datatype="${card.icoUrl}" title="Сменить категорию">⇄</button>
-                <button class="delete-btn" data-name="${card.name}">🗑️</button>
+                <button class="change-image-btn" data-name="${card.name}" title="Сменить картинку"><img src="assets/icons/changeImage.svg" alt="🖼️" class="downloads-icon"></button>
+                <button class="change-category-btn" data-name="${card.name}" data-status="${card.status}" data-rating="${card.rating}" datatype="${card.icoUrl}" title="Сменить категорию"><img src="assets/icons/changeCategory.svg" alt="⇄" class="downloads-icon"></button>
+                <button class="delete-btn" data-name="${card.name}"><img src="assets/icons/delete.svg" alt="🗑️" class="downloads-icon"></button>
                 ${getCardIconHTML(card)}
                 <div class="data-info">
                     <h3 class="data-title">${card.name}</h3>
