@@ -957,3 +957,43 @@ button:hover {
 .editable-select:focus + .editable-select-value {
     display: none;
 }
+
+.add-button-container {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+}
+
+.add-button {
+    background-color: var(--dark-button-background);
+    color: var(--dark-button-color);
+    border: none;
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+    height: 42px; /* Синхронизируем с высотой поиска */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 10px;
+}
+
+.add-button:hover {
+    background-color: var(--dark-button-hover-background);
+}
+
+@media (max-width: 768px) {
+    .add-button-container {
+        margin-left: 0;
+        margin-top: 10px;
+        width: 100%;
+    }
+
+    .add-button {
+        width: 100%;
+        margin-left: 0;
+    }
+}

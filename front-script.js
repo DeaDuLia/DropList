@@ -174,19 +174,23 @@ async function updateItemIcon(section, name, newIconUrl) {
         showError('Не удалось обновить иконку');
     }
 }
-
-toggleAddFormBtn.addEventListener('click', (e) => {
-    const toggleBtn = e.target;
+function setupAddButton() {
+    const toggleBtn = document.getElementById('toggleAddFormBtn');
     const addForm = document.getElementById('addForm');
     const addMoreCheck = document.getElementById('addMoreCheckbox');
-    addForm.classList.toggle('visible');
-    toggleBtn.textContent = addForm.classList.contains('visible') ? '− Скрыть' : '+ Добавить';
-    if (addForm.classList.contains('visible')) {
-        document.getElementById('nameInput')?.focus();
-    } else {
-        addMoreCheck.checked = false;
+
+    if (toggleBtn && addForm) {
+        toggleBtn.addEventListener('click', (e) => {
+            addForm.classList.toggle('visible');
+            toggleBtn.textContent = addForm.classList.contains('visible') ? '− Скрыть' : '+ Добавить';
+            if (addForm.classList.contains('visible')) {
+                document.getElementById('nameInput')?.focus();
+            } else {
+                if (addMoreCheck) addMoreCheck.checked = false;
+            }
+        });
     }
-});
+}
 document.addEventListener('click', async (e) => {
     if (e.target && e.target.id === 'addBtn') {
         const section = document.querySelector('.nav-item.active')?.dataset.section;
@@ -353,36 +357,39 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
     if (oldStatusFilter) oldStatusFilter.replaceWith(oldStatusFilter.cloneNode(true));
     // Рендерим контент
     contentSection.innerHTML = `
-            <div class="section-header">
-            <h1 class="section-title">${getSectionTitle(section)}</h1>
-            <div style="display: flex; flex-wrap: wrap; gap: 10px;">
-                <div class="filter-container">
-                    <select id="statusFilter">
-                        <option value="Все">Все статусы</option>
-                    </select>
-                </div>
-                <div class="filter-container">
-                    <select id="sortFilter">
-                        <option value="date">Сортировка</option>
-                        <option value="alphabet">Алфавит</option>
-                        <option value="rating">Рейтинг</option>
-                    </select>
-                </div>
-                <div class="search-container">
-                    <input type="text" id="searchInput" placeholder="Поиск..." value="${currentFilters.searchQuery}">
-                    <div id="searchSuggestions" class="search-suggestions"></div>
-                    <button id="searchBtn">🔍</button>
-                    <button id="clearSearchBtn" class="clear-search-btn" ${currentFilters.searchQuery ? '' : 'style="display: none;"'}>✕</button>
-                </div>
+    <div class="section-header">
+        <h1 class="section-title">${getSectionTitle(section)}</h1>
+        <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
+            <div class="filter-container">
+                <select id="statusFilter">
+                    <option value="Все">Все статусы</option>
+                </select>
+            </div>
+            <div class="filter-container">
+                <select id="sortFilter">
+                    <option value="date">Сортировка</option>
+                    <option value="alphabet">Алфавит</option>
+                    <option value="rating">Рейтинг</option>
+                </select>
+            </div>
+            <div class="search-container">
+                <input type="text" id="searchInput" placeholder="Поиск..." value="${currentFilters.searchQuery}">
+                <div id="searchSuggestions" class="search-suggestions"></div>
+                <button id="searchBtn">🔍</button>
+                <button id="clearSearchBtn" class="clear-search-btn" ${currentFilters.searchQuery ? '' : 'style="display: none;"'}>✕</button>
+            </div>
+            <div class="add-button-container">
+                <button id="toggleAddFormBtn" class="add-button">+ Добавить</button>
             </div>
         </div>
-        ${getAddFormHTML(addMoreChecked, addFormVisible)}
-        <div id="dataList" class="data-grid"></div>
-        <div id="loadingIndicator" class="loading-indicator" style="display: none;">
-            <div class="loading-spinner"></div>
-            <p>Загрузка...</p>
-        </div>
-    `;
+    </div>
+    ${getAddFormHTML(addMoreChecked, addFormVisible)}
+    <div id="dataList" class="data-grid"></div>
+    <div id="loadingIndicator" class="loading-indicator" style="display: none;">
+        <div class="loading-spinner"></div>
+        <p>Загрузка...</p>
+    </div>
+`;
 
     await initCardSection();
     setupSearchInput();
@@ -665,6 +672,9 @@ async function initCardSection() {
         });
     }
 
+    // Настраиваем кнопку добавления
+    setupAddButton();
+
     setupDeleteButtons();
     setupEditableFields();
     setupTitleClickHandlers();
@@ -785,10 +795,12 @@ function showCategoryChangeModal(oldSection, itemName, icoUrl, status, rating) {
 
 function hideAddForm() {
     const addForm = document.getElementById('addForm');
+    const toggleBtn = document.getElementById('toggleAddFormBtn');
+
     if (addForm) {
         addForm.classList.remove('visible');
     }
-    const toggleBtn = document.getElementById('toggleAddFormBtn');
+
     if (toggleBtn) {
         toggleBtn.textContent = '+ Добавить';
     }
