@@ -327,7 +327,9 @@ function resetForm() {
 
 async function renderSection(section, data, resetPagination = true, preserveFilters = false, addMoreChecked=false, addFormVisible='') {
     const contentSection = document.getElementById('contentSection');
-    if (!contentSection) return;
+    const contentWrapper = contentSection.querySelector('.content-wrapper');
+
+    if (!contentWrapper) return;
 
     // Очистка перед рендером
     cleanupSection();
@@ -340,57 +342,52 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
     // Сохраняем все данные для фильтрации и пагинации
     window.allSectionData = data;
 
-    // Применяем текущие фильтры, если не указано preserveFilters = false
+    // Применяем текущие фильтры
     if (preserveFilters) {
         window.filteredData = filterData(data, currentFilters.searchQuery, currentFilters.statusFilter);
     } else {
         window.filteredData = data;
-        currentFilters = { searchQuery: '', statusFilter: 'Все' }; // Сбрасываем фильтры
+        currentFilters = { searchQuery: '', statusFilter: 'Все' };
     }
 
-    const oldSearchInput = document.getElementById('searchInput');
-    const oldSearchBtn = document.getElementById('searchBtn');
-    const oldStatusFilter = document.getElementById('statusFilter');
-
-    if (oldSearchInput) oldSearchInput.replaceWith(oldSearchInput.cloneNode(true));
-    if (oldSearchBtn) oldSearchBtn.replaceWith(oldSearchBtn.cloneNode(true));
-    if (oldStatusFilter) oldStatusFilter.replaceWith(oldStatusFilter.cloneNode(true));
-    // Рендерим контент
-    contentSection.innerHTML = `
-    <div class="section-header">
-        <h1 class="section-title">${getSectionTitle(section)}</h1>
-        <div style="display: flex; flex-wrap: wrap; gap: 10px; align-items: center;">
-            <div class="filter-container">
-                <select id="statusFilter">
-                    <option value="Все">Все статусы</option>
-                </select>
+    // Рендерим контент во wrapper
+    contentWrapper.innerHTML = `
+        <div class="section-header">
+            <h1 class="section-title">${getSectionTitle(section)}</h1>
+            <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+                <div class="filter-container">
+                    <select id="statusFilter">
+                        <option value="Все">Все статусы</option>
+                    </select>
+                </div>
+                <div class="filter-container">
+                    <select id="sortFilter">
+                        <option value="date">Сортировка</option>
+                        <option value="alphabet">Алфавит</option>
+                        <option value="rating">Рейтинг</option>
+                    </select>
+                </div>
+                <div class="search-container">
+                    <input type="text" id="searchInput" placeholder="Поиск..." value="${currentFilters.searchQuery}">
+                    <div id="searchSuggestions" class="search-suggestions"></div>
+                    <button id="searchBtn">🔍</button>
+                    <button id="clearSearchBtn" class="clear-search-btn" ${currentFilters.searchQuery ? '' : 'style="display: none;"'}>✕</button>
+                </div>
+                <div class="add-button-container">
+                    <button id="toggleAddFormBtn" class="add-button">+ Добавить</button>
+                </div>
             </div>
-            <div class="filter-container">
-                <select id="sortFilter">
-                    <option value="date">Сортировка</option>
-                    <option value="alphabet">Алфавит</option>
-                    <option value="rating">Рейтинг</option>
-                </select>
-            </div>
-            <div class="search-container">
-                <input type="text" id="searchInput" placeholder="Поиск..." value="${currentFilters.searchQuery}">
-                <div id="searchSuggestions" class="search-suggestions"></div>
-                <button id="searchBtn">🔍</button>
-                <button id="clearSearchBtn" class="clear-search-btn" ${currentFilters.searchQuery ? '' : 'style="display: none;"'}>✕</button>
-            </div>
-            <div class="add-button-container">
-                <button id="toggleAddFormBtn" class="add-button">+ Добавить</button>
             </div>
         </div>
-    </div>
-    ${getAddFormHTML(addMoreChecked, addFormVisible)}
-    <div id="dataList" class="data-grid"></div>
-    <div id="loadingIndicator" class="loading-indicator" style="display: none;">
-        <div class="loading-spinner"></div>
-        <p>Загрузка...</p>
-    </div>
-`;
+        ${getAddFormHTML(addMoreChecked, addFormVisible)}
+        <div id="dataList" class="data-grid"></div>
+        <div id="loadingIndicator" class="loading-indicator" style="display: none;">
+            <div class="loading-spinner"></div>
+            <p>Загрузка...</p>
+        </div>
+    `;
 
+    // Инициализируем секцию
     await initCardSection();
     setupSearchInput();
 
@@ -400,10 +397,10 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
         statusFilter.value = currentFilters.statusFilter;
     }
 
-    loadMoreItems(); // Загружаем первую страницу
+    loadMoreItems();
 
-    // Добавляем обработчик прокрутки
-    window.addEventListener('scroll', handleScroll);
+    // Добавляем обработчик прокрутки для бесконечной загрузки
+    contentWrapper.addEventListener('scroll', handleScroll);
 }
 
 function filterData(data, searchQuery, statusFilter) {
@@ -417,18 +414,29 @@ function filterData(data, searchQuery, statusFilter) {
 
 let scrollTimeout;
 function handleScroll() {
+    const contentWrapper = document.querySelector('.content-wrapper');
+    if (!contentWrapper) return;
+
     clearTimeout(scrollTimeout);
     scrollTimeout = setTimeout(() => {
         if (isLoading || allItemsLoaded) return;
-        const scrollPosition = window.innerHeight + window.scrollY;
-        if (scrollPosition > document.body.offsetHeight - 500) {
+
+        // Проверяем, достигли ли мы низа контейнера
+        const scrollPosition = contentWrapper.scrollTop + contentWrapper.clientHeight;
+        const scrollHeight = contentWrapper.scrollHeight;
+
+        if (scrollPosition > scrollHeight - 100) {
             loadMoreItems();
         }
     }, 100);
 }
 
 function cleanupSection() {
-    window.removeEventListener('scroll', handleScroll);
+    const contentWrapper = document.querySelector('.content-wrapper');
+    if (contentWrapper) {
+        contentWrapper.removeEventListener('scroll', handleScroll);
+    }
+
     const interactiveElements = [
         '#searchInput', '#searchBtn', '#statusFilter',
         '.editable-field', '.delete-btn', '.search-btn', '#addForm'

@@ -176,14 +176,53 @@ body {
     border-radius: 12px;
     box-shadow: var(--shadow);
     margin-bottom: 30px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden; /* Важно: скрываем переполнение родителя */
+    max-height: calc(100vh - 200px); /* Ограничиваем высоту */
+}
+.content-wrapper {
+    flex: 1;
+    overflow-y: auto; /* Включаем вертикальный скролл */
+    overflow-x: hidden; /* Отключаем горизонтальный скролл */
+    padding-right: 5px; /* Чтобы контент не заезжал под скроллбар */
+}
+
+/* Адаптация для мобильных устройств */
+@media (max-width: 768px) {
+    .content-section {
+        max-height: calc(100vh - 150px); /* Меньшая высота на мобильных */
+        padding: 15px;
+    }
+}
+
+/* Стили для скроллбара внутри content-wrapper */
+.content-wrapper::-webkit-scrollbar {
+    width: 8px;
+}
+
+.content-wrapper::-webkit-scrollbar-track {
+    background: var(--dark-scroll-backgroud);
+    border-radius: 4px;
+}
+
+.content-wrapper::-webkit-scrollbar-thumb {
+    background: var(--dark-scroll-tracker);
+    border-radius: 4px;
+}
+
+.content-wrapper::-webkit-scrollbar-thumb:hover {
+    background: var(--dark-primary-color);
 }
 /* Шапка секции */
 .section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    position: sticky;
+    top: 0;
+    background-color: var(--dark-section-background);
+    z-index: 10;
+    padding-top: 10px;
+    padding-bottom: 15px;
     margin-bottom: 20px;
-    flex-wrap: wrap;
 }
 .section-title {
     color: #ffffff !important;               /* Чистый белый */
