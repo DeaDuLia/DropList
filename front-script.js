@@ -432,6 +432,9 @@ function handleScroll() {
 }
 
 function cleanupSection() {
+    // Закрываем все выпадающие списки
+    closeAllDropdowns();
+
     const contentWrapper = document.querySelector('.content-wrapper');
     if (contentWrapper) {
         contentWrapper.removeEventListener('scroll', handleScroll);
@@ -976,15 +979,20 @@ function showConfirmModal(title, message, confirmText, cancelText) {
 }
 
 function setupEditableFields() {
-    const oldFields = document.querySelectorAll('.editable-field');
-    oldFields.forEach(field => {
-        field.replaceWith(field.cloneNode(true));
-    });
+    // Создаем overlay для закрытия списка по клику вне
+    if (!document.getElementById('editable-select-overlay')) {
+        const overlay = document.createElement('div');
+        overlay.id = 'editable-select-overlay';
+        overlay.className = 'editable-select-overlay';
+        document.body.appendChild(overlay);
+    }
+
+    const overlay = document.getElementById('editable-select-overlay');
 
     document.querySelectorAll('.editable-field').forEach(field => {
         field.style.cursor = 'pointer';
 
-        // Создаем контейнер для выпадающего списка
+        // Создаем контейнер
         const container = document.createElement('div');
         container.className = 'editable-select-container';
 
@@ -993,73 +1001,173 @@ function setupEditableFields() {
             ? field.dataset.rating
             : field.dataset.status;
 
-        // Создаем выпадающий список
-        const select = document.createElement('select');
-        select.className = 'editable-select';
-
         // Создаем элемент для отображения текущего значения
         const valueDisplay = document.createElement('span');
         valueDisplay.className = 'editable-select-value';
-        valueDisplay.textContent = field.textContent;
+        valueDisplay.textContent = field.textContent.trim();
+
+        // Применяем стили в зависимости от типа поля
+        if (field.classList.contains('rating-value')) {
+            valueDisplay.style.backgroundColor = getRatingColor(currentValue);
+        } else {
+            valueDisplay.style.backgroundColor = getStatusColor(currentValue);
+        }
+        valueDisplay.style.color = 'white';
+        valueDisplay.style.textShadow = '0 1px 1px rgba(0,0,0,0.2)';
+
+        // Создаем выпадающий список (будет показан отдельно)
+        const select = document.createElement('div');
+        select.className = 'editable-select';
+        select.style.position = 'absolute';
+        select.style.width = '100%';
+        select.style.height = '100%';
+        select.style.cursor = 'pointer';
+        select.style.zIndex = '6';
 
         // Добавляем элементы в DOM
         field.innerHTML = '';
-        container.appendChild(select);
         container.appendChild(valueDisplay);
+        container.appendChild(select);
         field.appendChild(container);
 
-        // Заполняем список опциями
-        const populateOptions = async () => {
-            let values, currentText;
-            if (field.classList.contains('rating-value')) {
-                values = await window.electronAPI.getRatings();
-                currentText = field.dataset.rating;
-            } else {
-                values = await window.electronAPI.getStatuses();
-                currentText = field.dataset.status;
-            }
-
-            select.innerHTML = values.map(v =>
-                `<option value="${v}" ${v === currentText ? 'selected' : ''}>${v}</option>`
-            ).join('');
-        };
-
-        // При фокусе показываем выпадающий список
-        select.addEventListener('focus', populateOptions);
-
-        // При изменении значения
-        select.addEventListener('change', async function() {
-            const newValue = this.value;
-            const itemName = field.dataset.name;
-            const isRating = field.classList.contains('rating-value');
-
-            try {
-                const section = document.querySelector('.nav-item.active')?.dataset.section;
-                if (isRating) {
-                    await window.electronAPI.updateDataRating(section, itemName, newValue);
-                    field.dataset.rating = newValue;
-                } else {
-                    await window.electronAPI.updateDataStatus(section, itemName, newValue);
-                    field.dataset.status = newValue;
-                }
-
-                // Обновляем отображаемое значение
-                valueDisplay.textContent = newValue;
-
-                // Возвращаем фокус и скрываем список
-                select.blur();
-            } catch (error) {
-                console.error('Ошибка при обновлении:', error);
-                showError('Не удалось обновить значение');
-            }
+        // Обработчик клика
+        select.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            await showEditableDropdown(field, valueDisplay);
         });
 
-        // При потере фокуса скрываем список
-        select.addEventListener('blur', function() {
-            this.style.opacity = '0';
-            valueDisplay.style.display = 'inline';
+        // Также делаем кликабельным valueDisplay
+        valueDisplay.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            await showEditableDropdown(field, valueDisplay);
         });
     });
+}
+
+async function showEditableDropdown(field, valueDisplay) {
+    // Закрываем все открытые списки
+    closeAllDropdowns();
+
+    const isRating = field.classList.contains('rating-value');
+    const currentValue = isRating ? field.dataset.rating : field.dataset.status;
+    const itemName = field.dataset.name;
+
+    // Получаем доступные значения
+    let values;
+    if (isRating) {
+        values = await window.electronAPI.getRatings();
+    } else {
+        values = await window.electronAPI.getStatuses();
+    }
+
+    // Создаем список
+    const list = document.createElement('div');
+    list.className = 'editable-select-list';
+
+    // Позиционируем список рядом с полем
+    const rect = valueDisplay.getBoundingClientRect();
+    list.style.position = 'fixed';
+    list.style.top = (rect.bottom + 5) + 'px';
+    list.style.left = rect.left + 'px';
+    list.style.minWidth = rect.width + 'px';
+
+    // Добавляем опции
+    values.forEach(value => {
+        const option = document.createElement('div');
+        option.className = `editable-select-option ${value === currentValue ? 'selected' : ''}`;
+        option.textContent = value;
+        option.dataset.value = value;
+
+        option.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            await updateFieldValue(field, valueDisplay, value, itemName, isRating);
+            closeDropdown();
+        });
+
+        list.appendChild(option);
+    });
+
+    document.body.appendChild(list);
+
+    // Показываем overlay
+    const overlay = document.getElementById('editable-select-overlay');
+    overlay.style.display = 'block';
+
+    // Закрытие при клике на overlay
+    overlay.onclick = closeDropdown;
+
+    function closeDropdown() {
+        if (list.parentNode) {
+            document.body.removeChild(list);
+        }
+        overlay.style.display = 'none';
+        overlay.onclick = null;
+    }
+}
+
+async function updateFieldValue(field, valueDisplay, newValue, itemName, isRating) {
+    try {
+        const section = document.querySelector('.nav-item.active')?.dataset.section;
+        if (isRating) {
+            await window.electronAPI.updateDataRating(section, itemName, newValue);
+            field.dataset.rating = newValue;
+            valueDisplay.style.backgroundColor = getRatingColor(newValue);
+        } else {
+            await window.electronAPI.updateDataStatus(section, itemName, newValue);
+            field.dataset.status = newValue;
+            valueDisplay.style.backgroundColor = getStatusColor(newValue);
+        }
+
+        valueDisplay.textContent = newValue;
+    } catch (error) {
+        console.error('Ошибка при обновлении:', error);
+        showError('Не удалось обновить значение');
+    }
+}
+
+// Функция закрытия всех открытых списков
+function closeAllDropdowns() {
+    document.querySelectorAll('.editable-select-list').forEach(list => {
+        if (list.parentNode) {
+            document.body.removeChild(list);
+        }
+    });
+
+    const overlay = document.getElementById('editable-select-overlay');
+    if (overlay) {
+        overlay.style.display = 'none';
+        overlay.onclick = null;
+    }
+}
+
+// Функции для получения цвета
+function getRatingColor(rating) {
+    const ratingColors = {
+        '5': 'var(--rating-5)',
+        '4': 'var(--rating-4)',
+        '3': 'var(--rating-3)',
+        '2': 'var(--rating-2)',
+        '1': 'var(--rating-1)',
+        '0': 'var(--rating-0)',
+        '-1': 'var(--rating--1)',
+        '-2': 'var(--rating--2)',
+        '-3': 'var(--rating--3)',
+        '-4': 'var(--rating--4)',
+        '-5': 'var(--rating--5)'
+    };
+    return ratingColors[rating] || 'var(--rating-0)';
+}
+
+function getStatusColor(status) {
+    const statusColors = {
+        'Уточнить': 'var(--rating-not-played)',
+        'Смотрел': 'var(--rating-played)',
+        'В процессе': 'var(--rating-playing)',
+        'В планах': 'var(--rating-planed)',
+        'Завершено': 'var(--rating-completed)',
+        'Избранное': 'var(--rating-pined)'
+    };
+    return statusColors[status] || 'var(--rating-not-played)';
 }
 
 function setupDeleteButtons() {

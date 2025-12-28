@@ -519,7 +519,7 @@ body {
 }
 .card-rating, .card-status {
     display: inline-block;
-    padding: 4px 12px;
+    text-align: center;
     border-radius: 20px;
     font-size: 0.8rem;
     font-weight: 500;
@@ -531,9 +531,15 @@ body {
 .card-rating:hover,
 .card-status:hover {
     color: white !important; /* Белый текст */
-    background-color: #6c5ce7 !important; /* Фиолетовый фон */
     transform: scale(1.05); /* Легкое увеличение */
-    box-shadow: 0 0 0 2px rgba(108, 92, 231, 0.5); /* Свечение */
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3); /* Белое свечение */
+    filter: brightness(1.2) saturate(1.2); /* Увеличиваем яркость и насыщенность */
+}
+
+/* Для жёлтого рейтинга делаем тёмный текст при наведении */
+.card-rating[data-rating="2"]:hover {
+    color: var(--dark-text-color) !important;
+    filter: brightness(1.1) saturate(1.1);
 }
 .data-title:hover {
     transform: scale(1.05); /* Легкое увеличение */
@@ -960,34 +966,98 @@ button:hover {
 .editable-select-container {
     position: relative;
     display: inline-block;
-    margin-right: 5px;
-}
-
-.editable-select {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    z-index: 5;
-    opacity: 0;
-    width: 100%;
-    height: 100%;
-    cursor: pointer;
-}
-
-.editable-select:focus {
-    opacity: 1;
-    position: relative;
-    width: auto;
-    height: auto;
-    margin-top: 5px;
+    min-width: 40px;
 }
 
 .editable-select-value {
     pointer-events: none;
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 20px;
 }
 
-.editable-select:focus + .editable-select-value {
+.editable-select {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+    z-index: 5;
+}
+
+/* Стили для отображения списка */
+.editable-select-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: transparent;
+    z-index: 999;
     display: none;
+}
+
+.editable-select-list {
+    position: absolute;
+    background-color: var(--dark-modal-background);
+    border: 1px solid var(--dark-input-border);
+    border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+    max-height: 250px;
+    overflow-y: auto;
+    z-index: 1000;
+    min-width: 150px;
+    animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.editable-select-option {
+    padding: 8px 12px;
+    cursor: pointer;
+    color: var(--dark-input-color);
+    transition: background-color 0.2s;
+    white-space: nowrap;
+    font-size: 0.9rem;
+}
+
+.editable-select-option:hover {
+    background-color: var(--dark-input-hover-background);
+}
+
+.editable-select-option.selected {
+    background-color: var(--dark-primary-color);
+    color: white;
+}
+
+/* Стили для скроллбара в списке */
+.editable-select-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.editable-select-list::-webkit-scrollbar-track {
+    background: var(--dark-scroll-backgroud);
+    border-radius: 3px;
+}
+
+.editable-select-list::-webkit-scrollbar-thumb {
+    background: var(--dark-scroll-tracker);
+    border-radius: 3px;
+}
+
+.editable-select-list::-webkit-scrollbar-thumb:hover {
+    background: var(--dark-primary-color);
 }
 
 .add-button-container {
