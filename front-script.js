@@ -8,6 +8,8 @@ const scrollToTopBtn = document.getElementById('scrollToTopBtn');
 const donateModal = document.getElementById('donateModal');
 const closeDonateModal = document.getElementById('closeDonateModal');
 const randomBtn = document.getElementById('randomBtn');
+const searchInWebBtn = document.getElementById('searchInWeb');
+
 
 
 // Кнопки шапки
@@ -373,7 +375,8 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
                     <div id="searchSuggestions" class="search-suggestions"></div>
                     <button id="searchBtn">🔍</button>
                     <button id="clearSearchBtn" class="clear-search-btn" ${currentFilters.searchQuery ? '' : 'style="display: none;"'}>✕</button>
-                    <button id="randomBtnSection" title="Случайная карточка">🎲 Случайно</button>
+                    <button id="randomBtnSection" title="Случайная карточка">🎲 Случайное</button>
+                    <button id="searchInWeb" title="Поиск в интернете">🔍 Популярное</button>
                 </div>
                 <div class="add-button-container">
                     <button id="toggleAddFormBtn" class="add-button">+ Добавить</button>
@@ -690,6 +693,13 @@ async function initCardSection() {
         });
     }
 
+    const searchInWeb = document.getElementById('searchInWeb');
+    if (searchInWeb) {
+        searchInWeb.addEventListener('click', async () => {
+            await searchCardInWeb();
+        });
+    }
+
     // Настраиваем кнопку добавления
     setupAddButton();
 
@@ -868,7 +878,7 @@ function renderCardList(cards) {
     return cards.map(card => `
             <div class="data-card" data-name="${card.name}" style="display: block;">
                 
-                <button class="change-image-btn" data-name="${card.name}" title="Сменить картинку">📄</button>
+                <button class="change-image-btn" data-name="${card.name}" title="Сменить картинку">🖼️</button>
                 <button class="change-category-btn" data-name="${card.name}" data-status="${card.status}" data-rating="${card.rating}" datatype="${card.icoUrl}" title="Сменить категорию">⇄</button>
                 <button class="delete-btn" data-name="${card.name}">🗑️</button>
                 ${getCardIconHTML(card)}
@@ -1445,6 +1455,12 @@ randomBtn.addEventListener('click', async () => {
     await pickRandomVisibleCard();
 });
 
+searchInWebBtn.addEventListener('click', async () => {
+    await searchCardInWeb();
+});
+
+
+
 async function pickRandomCard() {
     try {
         const section = document.querySelector('.nav-item.active')?.dataset.section;
@@ -1521,7 +1537,24 @@ async function pickRandomVisibleCard() {
         const cardName = randomCard.dataset.name;
 
         // Открываем поиск
-        const searchUrl = `https://yandex.ru/search?text=${encodeURIComponent(cardName)}`;
+        const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(cardName)}`;
+        window.electronAPI.openSearch(searchUrl);
+
+        // Подсвечиваем карточку
+        highlightRandomCard(cardName);
+
+    } catch (error) {
+        console.error('Ошибка:', error);
+    }
+}
+
+async function searchCardInWeb() {
+    try {
+        const section = document.querySelector('.nav-item.active')?.dataset.section;
+
+
+        // Открываем поиск
+        const searchUrl = `https://www.google.com/search?q=${encodeURIComponent('популярное в разделе ' + section)}`;
         window.electronAPI.openSearch(searchUrl);
 
         // Подсвечиваем карточку
