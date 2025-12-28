@@ -535,3 +535,13 @@ ipcMain.handle('replace-data', async () => {
         return { success: false, message: 'Ошибка при замене данных' };
     }
 });
+
+ipcMain.handle('search-in-browser', async (event, url = '') => {
+    try {
+        shell.openExternal(url);
+        return { success: true };
+    } catch (error) {
+        console.error('Failed to open search in browser:', error);
+        return { success: false, error: error.message };
+    }
+});

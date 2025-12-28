@@ -483,9 +483,9 @@ async function loadMoreItems() {
     setupDeleteButtons();
     setupEditableFields();
     setupTitleClickHandlers();
-    setupSearchButtons();
     setupChangeImageButtons(); // Новая функция
     setupChangeCategoryButtons(); // Новая функция
+    setupCardClickHandlers();
 }
 
 async function loadStatusFilter() {
@@ -686,10 +686,10 @@ async function initCardSection() {
     setupDeleteButtons();
     setupEditableFields();
     setupTitleClickHandlers();
-    setupSearchButtons();
     setupIconSearchButton();
     setupChangeImageButtons();
     setupChangeCategoryButtons();
+    setupCardClickHandlers();
 }
 
 function setupChangeImageButtons() {
@@ -856,7 +856,7 @@ function getAddFormHTML(addMoreChecked=false, visible='') {
 function renderCardList(cards) {
     return cards.map(card => `
             <div class="data-card" data-name="${card.name}" style="display: block;">
-                <button class="search-btn" data-name="${card.name}" title="Найти в интернете">🔍</button>
+                
                 <button class="change-image-btn" data-name="${card.name}" title="Сменить картинку">📄</button>
                 <button class="change-category-btn" data-name="${card.name}" data-status="${card.status}" data-rating="${card.rating}" datatype="${card.icoUrl}" title="Сменить категорию">⇄</button>
                 <button class="delete-btn" data-name="${card.name}">🗑️</button>
@@ -1120,24 +1120,6 @@ function setupDeleteButtons() {
     });
 }
 
-function setupSearchButtons() {
-    const oldButtons = document.querySelectorAll('.search-btn');
-    oldButtons.forEach(btn => {
-        btn.replaceWith(btn.cloneNode(true));
-    });
-
-    document.querySelectorAll('.search-btn').forEach(btn => {
-        btn.addEventListener('click', async (e) => {
-            e.stopPropagation();
-            const itemName = btn.dataset.name;
-            if (itemName) {
-                const searchUrl = `https://yandex.ru/images/search?text=${encodeURIComponent(itemName)}`;
-                window.electronAPI.openExternal(searchUrl);
-            }
-        });
-    });
-}
-
 function setupIconSearchButton() {
     const oldIconButtons = document.querySelectorAll('.search-icon-btn');
     const oldNameButtons = document.querySelectorAll('.search-name-btn');
@@ -1315,6 +1297,30 @@ function setupTitleClickHandlers() {
                     document.body.removeChild(modal);
                 }
             });
+        });
+    });
+}
+function setupCardClickHandlers() {
+
+
+    document.querySelectorAll('.data-card').forEach(card => {
+        card.style.cursor = 'pointer';
+        card.addEventListener('click', async function(e) {
+            // Проверяем, не кликнули ли на внутренние кнопки
+            if (e.target.closest('.change-image-btn') ||
+                e.target.closest('.change-category-btn') ||
+                e.target.closest('.delete-btn') ||
+                e.target.closest('.data-title') ||
+                e.target.closest('.editable-field')) {
+                return; // Если кликнули на кнопку или редактируемое поле, ничего не делаем
+            }
+
+            const itemName = this.dataset.name;
+            if (itemName) {
+                // Открываем поиск в браузере
+                const searchUrl = `https://yandex.ru/search?text=${encodeURIComponent(itemName)}`;
+                window.electronAPI.openSearch(searchUrl);
+            }
         });
     });
 }
