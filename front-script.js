@@ -354,7 +354,7 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
     contentWrapper.innerHTML = `
         <div class="section-header">
             <h1 class="section-title">${getSectionTitle(section)}</h1>
-            <div style="display: flex; flex-wrap: wrap; gap: 10px;">
+            <div style="display: flex; flex-wrap: wrap;  margin: 0 0 0 auto">
                 <div class="filter-container">
                     <select id="statusFilter">
                         <option value="Все">Все статусы</option>
@@ -376,7 +376,6 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
                 <div class="add-button-container">
                     <button id="toggleAddFormBtn" class="add-button">+ Добавить</button>
                 </div>
-            </div>
             </div>
         </div>
         ${getAddFormHTML(addMoreChecked, addFormVisible)}

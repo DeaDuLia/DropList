@@ -216,6 +216,7 @@ body {
 }
 /* Шапка секции */
 .section-header {
+    display: flex;
     position: sticky;
     top: 0;
     background-color: var(--dark-section-background);
@@ -245,7 +246,7 @@ body {
 .filter-container {
     display: flex;
     align-items: center;
-    gap: 10px;
+    column-gap: 20px;
 }
 #statusFilter, #sortFilter {
     padding: 10px 0;
