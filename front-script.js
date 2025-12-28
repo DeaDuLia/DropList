@@ -7,6 +7,7 @@ const scrollToTopBtn = document.getElementById('scrollToTopBtn');
 
 const donateModal = document.getElementById('donateModal');
 const closeDonateModal = document.getElementById('closeDonateModal');
+const randomBtn = document.getElementById('randomBtn');
 
 
 // Кнопки шапки
@@ -372,6 +373,7 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
                     <div id="searchSuggestions" class="search-suggestions"></div>
                     <button id="searchBtn">🔍</button>
                     <button id="clearSearchBtn" class="clear-search-btn" ${currentFilters.searchQuery ? '' : 'style="display: none;"'}>✕</button>
+                    <button id="randomBtnSection" title="Случайная карточка">🎲 Случайно</button>
                 </div>
                 <div class="add-button-container">
                     <button id="toggleAddFormBtn" class="add-button">+ Добавить</button>
@@ -681,6 +683,12 @@ async function initCardSection() {
             filterCards(currentFilters.searchQuery);
         });
     }
+    const randomBtnSection = document.getElementById('randomBtnSection');
+    if (randomBtnSection) {
+        randomBtnSection.addEventListener('click', async () => {
+            await pickRandomVisibleCard();
+        });
+    }
 
     // Настраиваем кнопку добавления
     setupAddButton();
@@ -692,6 +700,7 @@ async function initCardSection() {
     setupChangeImageButtons();
     setupChangeCategoryButtons();
     setupCardClickHandlers();
+
 }
 
 function setupChangeImageButtons() {
@@ -1430,4 +1439,95 @@ function setupCardClickHandlers() {
             }
         });
     });
+}
+
+randomBtn.addEventListener('click', async () => {
+    await pickRandomVisibleCard();
+});
+
+async function pickRandomCard() {
+    try {
+        const section = document.querySelector('.nav-item.active')?.dataset.section;
+        if (!section) {
+            await showError('Сначала выберите категорию');
+            return;
+        }
+
+        // Получаем все данные текущего раздела
+        let data = await window.electronAPI.getData(section);
+
+        if (!data || data.length === 0) {
+            await showError('В этой категории нет карточек');
+            return;
+        }
+
+        // Выбираем случайную карточку
+        const randomIndex = Math.floor(Math.random() * data.length);
+        const randomCard = data[randomIndex];
+
+        // Открываем поиск в браузере
+        const searchUrl = `https://yandex.ru/search?text=${encodeURIComponent(randomCard.name)}`;
+        window.electronAPI.openSearch(searchUrl);
+
+        // Опционально: подсветить выбранную карточку
+        highlightRandomCard(randomCard.name);
+
+    } catch (error) {
+        console.error('Ошибка при выборе случайной карточки:', error);
+        await showError('Не удалось выбрать случайную карточку');
+    }
+}
+
+// 4. Функция для подсветки выбранной карточки (опционально)
+function highlightRandomCard(cardName) {
+    // Снимаем подсветку со всех карточек
+    document.querySelectorAll('.data-card').forEach(card => {
+        card.style.boxShadow = '';
+        card.style.transform = '';
+    });
+
+    // Находим нужную карточку
+    const card = document.querySelector(`.data-card[data-name="${cardName}"]`);
+    if (card) {
+        // Подсвечиваем карточку
+        card.style.boxShadow = '0 0 20px rgba(155, 89, 182, 0.8)';
+        card.style.transform = 'scale(1.05)';
+
+        // Прокручиваем к карточке
+        card.scrollIntoView({
+            behavior: 'smooth',
+            block: 'center'
+        });
+
+        // Снимаем подсветку через 3 секунды
+        setTimeout(() => {
+            card.style.boxShadow = '';
+            card.style.transform = '';
+        }, 3000);
+    }
+}
+
+// 5. Также можно добавить возможность выбора случайной карточки из видимых на экране:
+async function pickRandomVisibleCard() {
+    try {
+        const visibleCards = document.querySelectorAll('.data-card');
+        if (visibleCards.length === 0) {
+            await showError('Нет видимых карточек');
+            return;
+        }
+
+        const randomIndex = Math.floor(Math.random() * visibleCards.length);
+        const randomCard = visibleCards[randomIndex];
+        const cardName = randomCard.dataset.name;
+
+        // Открываем поиск
+        const searchUrl = `https://yandex.ru/search?text=${encodeURIComponent(cardName)}`;
+        window.electronAPI.openSearch(searchUrl);
+
+        // Подсвечиваем карточку
+        highlightRandomCard(cardName);
+
+    } catch (error) {
+        console.error('Ошибка:', error);
+    }
 }
