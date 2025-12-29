@@ -140,7 +140,6 @@ donateModal.addEventListener('click', function(e) {
 });
 
 window.addEventListener('DOMContentLoaded', () => {
-    // Подписываемся на сообщения из main.js
     window.electronAPI.onMessageFromMain(({ imgUrl, name }) => {
         const editIcoInput = document.getElementById('editIcoInput');
         const icoInput = document.getElementById('icoInput');
@@ -152,8 +151,10 @@ window.addEventListener('DOMContentLoaded', () => {
             }
         } else if (editIcoInput) {
             editIcoInput.value = imgUrl;
+            updatePreview(null, imgUrl, null, null);
         } else if (icoInput) {
             icoInput.value = imgUrl;
+            updatePreview(null, imgUrl, null, null);
         }
     });
 });
@@ -181,7 +182,6 @@ async function updateItemIcon(section, name, newIconUrl) {
 function setupAddButton() {
     const toggleBtn = document.getElementById('toggleAddFormBtn');
     const addForm = document.getElementById('addForm');
-    const addMoreCheck = document.getElementById('addMoreCheckbox');
 
     if (toggleBtn && addForm) {
         toggleBtn.addEventListener('click', (e) => {
@@ -190,14 +190,12 @@ function setupAddButton() {
             if (addForm.classList.contains('visible')) {
                 navigator.clipboard.readText().then(text => {
                     const nameInput = document.getElementById('nameInput');
-                    if (text && nameInput && text !== lastTextFromClipboard) {
+                    if (text && nameInput && text !== lastTextFromClipboard && !text.startsWith('http')) {
                         nameInput.value = text;
                         lastTextFromClipboard = text;
                     }
                 })
                 document.getElementById('nameInput')?.focus();
-            } else {
-                if (addMoreCheck) addMoreCheck.checked = false;
             }
         });
     }
@@ -742,6 +740,7 @@ async function initCardSection() {
     setupChangeImageButtons();
     setupChangeCategoryButtons();
     setupCardClickHandlers();
+    setupPreviewUpdate();
 
 }
 
@@ -870,33 +869,50 @@ function hideAddForm() {
 function getAddFormHTML(addMoreChecked = false, visible = '') {
     return `
         <div id="addForm" class="add-form ${visible}">
-            <div class="form-group">
-                <div class="icon-input-container">
-                    <input id="nameInput" placeholder="Название" autocomplete="off">
+            <div class="form-content">
+                <div id="previewCard" class="preview-card">
+                    <div class="preview-data-card" style="display: block;">
+                        ${getCardIconHTML({ name: 'Название', icoUrl: '' })}
+                        <div class="preview-data-info">
+                            <h3 class="preview-data-title">Название</h3>
+                            <div class="preview-data-ratings-container">
+                                <span class="preview-card-rating rating-value">
+                                    0
+                                </span>
+                                <span class="preview-card-status status-value">
+                                    Уточнить
+                                </span>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-            </div>
-            <div class="form-group">
-                <div class="icon-input-container">
-                    <input id="icoInput" placeholder="Ссылка на обложку" autocomplete="off">
-                    <button id="searchIconBtn" class="search-icon-btn" title="Найти обложку"><img src="assets/icons/find.svg" alt="🔍" class="button-icon-no-text"></button>
+                
+                <div class="form-fields">
+                    <div class="form-group">
+                        <div class="icon-input-container">
+                            <input id="nameInput" placeholder="Название" autocomplete="off">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <div class="icon-input-container">
+                            <input id="icoInput" placeholder="Ссылка на обложку" autocomplete="off">
+                            <button id="searchIconBtn" class="search-icon-btn" title="Найти обложку"><img src="assets/icons/find.svg" alt="🔍" class="button-icon-no-text"></button>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <select id="ratingSelect">
+                            <option value="0">Выберите рейтинг</option>
+                        </select>
+                        <select id="statusSelect">
+                            <option value="Уточнить">Выберите статус</option>
+                        </select>
+                    </div>
+                    <div class="form-group add-more-container">
+                        <button id="addBtn" class="add-button-compact">
+                            Добавить
+                        </button>
+                    </div>
                 </div>
-            </div>
-            <div class="form-group">
-                <select id="ratingSelect">
-                    <option value="0">Выберите рейтинг</option>
-                </select>
-                <select id="statusSelect">
-                    <option value="Уточнить">Выберите статус</option>
-                </select>
-            </div>
-            <div class="form-group add-more-container">
-                <label>
-                    <input type="checkbox" id="addMoreCheckbox" 
-                           ${addMoreChecked ? 'checked' : ''}> Ещё
-                </label>
-                <button id="addBtn" class="add-button-compact">
-                    Добавить
-                </button>
             </div>
         </div>
     `;
@@ -937,7 +953,6 @@ async function addNewData(section) {
     const icoInput = document.getElementById('icoInput');
     const ratingSelect = document.getElementById('ratingSelect');
     const statusSelect = document.getElementById('statusSelect');
-    const addMoreCheckbox = document.getElementById('addMoreCheckbox');
 
     const cardData = {
         name: nameInput.value.trim(),
@@ -968,16 +983,9 @@ async function addNewData(section) {
             }
         }
         await window.electronAPI.addData(section, cardData);
-
-        if (!addMoreCheckbox.checked) {
-            hideAddForm();
-            resetForm();
-        }
-        const addMoreChecked = addMoreCheckbox.checked;
-        const addFromVisible = addMoreCheckbox.checked ? 'visible' : '';
         // Перезагружаем данные и рендерим раздел заново
         let data = await window.electronAPI.getData(section);
-        await renderSection(section, data, true, false, addMoreChecked, addFromVisible);
+        await renderSection(section, data, true, false, false, true);
     } catch (error) {
         console.error('Ошибка при добавлении:', error);
         await showError(`Ошибка при добавлении: ${error.message}`);
@@ -1548,5 +1556,99 @@ async function searchCardInWeb() {
 
     } catch (error) {
         console.error('Ошибка:', error);
+    }
+}
+
+function setupPreviewUpdate() {
+    const nameInput = document.getElementById('nameInput');
+    const icoInput = document.getElementById('icoInput');
+    const ratingSelect = document.getElementById('ratingSelect');
+    const statusSelect = document.getElementById('statusSelect');
+
+    function updatePreview() {
+        const previewCard = document.getElementById('previewCard');
+        if (!previewCard) return;
+
+        const name = nameInput?.value || 'Название';
+        const icoUrl = icoInput?.value || '';
+        const rating = ratingSelect?.value || '0';
+        const status = statusSelect?.value || 'Уточнить';
+
+        // Обновляем иконку
+        const icon = previewCard.querySelector('.game-icon');
+        if (icon) {
+            if (icoUrl) {
+                icon.src = icoUrl;
+                icon.onerror = () => {
+                    icon.src = 'https://apptor.studio/assets/cache/images/600-856x600-629.png';
+                };
+            } else {
+                icon.src = 'https://apptor.studio/assets/cache/images/600-856x600-629.png';
+            }
+        }
+
+        // Обновляем название
+        const title = previewCard.querySelector('.preview-data-title');
+        if (title) {
+            title.textContent = name || 'Название';
+        }
+
+        // Обновляем рейтинг
+        const ratingElement = previewCard.querySelector('.preview-card-rating');
+        if (ratingElement) {
+            ratingElement.textContent = rating;
+            ratingElement.style.backgroundColor = getRatingColor(rating);
+        }
+
+        // Обновляем статус
+        const statusElement = previewCard.querySelector('.preview-card-status');
+        if (statusElement) {
+            statusElement.textContent = status;
+            statusElement.style.backgroundColor = getStatusColor(status);
+        }
+    }
+
+    // Назначаем обработчики событий
+    if (nameInput) nameInput.addEventListener('input', updatePreview);
+    if (icoInput) icoInput.addEventListener('input', updatePreview);
+    if (ratingSelect) ratingSelect.addEventListener('change', updatePreview);
+    if (statusSelect) statusSelect.addEventListener('change', updatePreview);
+
+    // Инициализируем превью
+    setTimeout(updatePreview, 100);
+}
+
+function updatePreview(name, icoUrl, rating, status) {
+    const previewCard = document.getElementById('previewCard');
+    if (!previewCard) return;
+
+    // Обновляем иконку
+    const icon = previewCard.querySelector('.game-icon');
+    if (icon && icoUrl) {
+        if (icoUrl) {
+            icon.src = icoUrl;
+            icon.onerror = () => {
+                icon.src = 'https://apptor.studio/assets/cache/images/600-856x600-629.png';
+            };
+        } else {
+            icon.src = 'https://apptor.studio/assets/cache/images/600-856x600-629.png';
+        }
+    }
+
+    if (name) {
+        const title = previewCard.querySelector('.preview-data-title');
+        title.textContent = name || 'Название';
+    }
+
+    if (rating) {
+        const ratingElement = previewCard.querySelector('.preview-card-rating');
+        ratingElement.textContent = rating;
+        ratingElement.style.backgroundColor = getRatingColor(rating);
+    }
+
+    if (status) {
+        const statusElement = previewCard.querySelector('.preview-card-status');
+        statusElement.textContent = status;
+        statusElement.style.backgroundColor = getStatusColor(status);
     }
 }
