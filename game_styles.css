@@ -610,7 +610,6 @@ body {
     background-color: var(--rating-completed);
     position: relative;
 }
-
 .card-status[data-status="Избранное"] {
     background-color: var(--rating-pined);
     position: relative;
