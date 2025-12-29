@@ -545,3 +545,58 @@ ipcMain.handle('search-in-browser', async (event, url = '') => {
         return { success: false, error: error.message };
     }
 });
+
+ipcMain.handle('search-image', async (event, title) => {
+    return new Promise((resolve) => {
+        const searchQuery = encodeURIComponent(title + ' обложка');
+        const searchUrl = `https://yandex.ru/images/search?text=${searchQuery}`;
+
+        // Создаем скрытое окно
+        const hiddenWindow = new BrowserWindow({
+            show: false,
+            webPreferences: {
+                nodeIntegration: false,
+                contextIsolation: true
+            }
+        });
+
+        // Загружаем страницу
+        hiddenWindow.loadURL(searchUrl);
+
+        // Ждем загрузки
+        hiddenWindow.webContents.on('did-finish-load', async () => {
+            try {
+                // Выполняем JavaScript в контексте страницы для получения изображений
+                const images = await hiddenWindow.webContents.executeJavaScript(`
+                    (function() {
+                        // Ищем все изображения результатов
+                        const images = document.getElementsByTagName('img');
+                        if (true) {
+                            
+                        }
+                        if (images.length > 5) {
+                            return images[1].src;
+                        }
+                        return '';
+                    })();
+                `);
+
+                hiddenWindow.close();
+                resolve(images || '');
+
+            } catch (error) {
+                console.error('Ошибка получения изображений:', error);
+                hiddenWindow.close();
+                resolve('');
+            }
+        });
+
+        // Таймаут на случай ошибки загрузки
+        setTimeout(() => {
+            if (!hiddenWindow.isDestroyed()) {
+                hiddenWindow.close();
+            }
+            resolve('');
+        }, 10000);
+    });
+});

@@ -179,27 +179,7 @@ async function updateItemIcon(section, name, newIconUrl) {
         showError('Не удалось обновить иконку');
     }
 }
-function setupAddButton() {
-    const toggleBtn = document.getElementById('toggleAddFormBtn');
-    const addForm = document.getElementById('addForm');
 
-    if (toggleBtn && addForm) {
-        toggleBtn.addEventListener('click', (e) => {
-            addForm.classList.toggle('visible');
-            toggleBtn.textContent = addForm.classList.contains('visible') ? '− Скрыть' : '+ Добавить';
-            if (addForm.classList.contains('visible')) {
-                navigator.clipboard.readText().then(text => {
-                    const nameInput = document.getElementById('nameInput');
-                    if (text && nameInput && text !== lastTextFromClipboard && !text.startsWith('http')) {
-                        nameInput.value = text;
-                        lastTextFromClipboard = text;
-                    }
-                })
-                document.getElementById('nameInput')?.focus();
-            }
-        });
-    }
-}
 document.addEventListener('click', async (e) => {
     if (e.target && e.target.id === 'addBtn') {
         const section = document.querySelector('.nav-item.active')?.dataset.section;
@@ -1650,5 +1630,75 @@ function updatePreview(name, icoUrl, rating, status) {
         const statusElement = previewCard.querySelector('.preview-card-status');
         statusElement.textContent = status;
         statusElement.style.backgroundColor = getStatusColor(status);
+    }
+}
+
+function setupAddButton() {
+    const toggleBtn = document.getElementById('toggleAddFormBtn');
+    const addForm = document.getElementById('addForm');
+
+    if (toggleBtn && addForm) {
+        toggleBtn.addEventListener('click', async (e) => {
+            addForm.classList.toggle('visible');
+            toggleBtn.textContent = addForm.classList.contains('visible') ? '− Скрыть' : '+ Добавить';
+
+            if (addForm.classList.contains('visible')) {
+                try {
+                    const text = await navigator.clipboard.readText();
+                    const nameInput = document.getElementById('nameInput');
+
+                    if (text && nameInput && text !== lastTextFromClipboard && !text.startsWith('http')) {
+                        nameInput.value = text;
+                        lastTextFromClipboard = text;
+
+                        // Автоматически ищем обложку
+                        await autoSearchCover(text);
+                    }
+
+                    document.getElementById('nameInput')?.focus();
+                } catch (error) {
+                    console.error('Ошибка чтения буфера обмена:', error);
+                }
+            }
+        });
+    }
+}
+
+async function autoSearchCover(title) {
+    if (!title || title.trim() === '') return;
+
+    const icoInput = document.getElementById('icoInput');
+    if (icoInput) {
+        icoInput.value = 'Ищем обложку...';
+        icoInput.disabled = true;
+    }
+
+    try {
+        const section = document.querySelector('.nav-item.active')?.dataset.section;
+        let imageUrl = '';
+
+        // Можно использовать разные поиски в зависимости от категории
+        imageUrl = await window.electronAPI.searchImage(title);
+
+        if (imageUrl && icoInput) {
+            icoInput.value = imageUrl;
+            icoInput.disabled = false;
+
+            // Обновляем превью
+            updatePreview(title, imageUrl,
+                document.getElementById('ratingSelect')?.value || '0',
+                document.getElementById('statusSelect')?.value || 'Уточнить');
+        } else {
+            if (icoInput) {
+                icoInput.value = '';
+                icoInput.disabled = false;
+            }
+        }
+    } catch (error) {
+        console.error('Ошибка поиска обложки:', error);
+        if (icoInput) {
+            icoInput.value = '';
+            icoInput.disabled = false;
+        }
     }
 }
