@@ -373,10 +373,10 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
                 <div class="search-container">
                     <input type="text" id="searchInput" placeholder="Поиск..." value="${currentFilters.searchQuery}">
                     <div id="searchSuggestions" class="search-suggestions"></div>
-                    <button id="searchBtn">🔍</button>
+                    <button id="searchBtn"><img src="assets/icons/find.svg" alt="🔍" class="button-icon"></button>
                     <button id="clearSearchBtn" class="clear-search-btn" ${currentFilters.searchQuery ? '' : 'style="display: none;"'}>✕</button>
-                    <button id="randomBtnSection" title="Случайная карточка">🎲 Случайное</button>
-                    <button id="searchInWeb" title="Поиск в интернете">🔍 Популярное</button>
+                    <button id="randomBtnSection" title="Случайная карточка"><img src="assets/icons/random.svg" alt="🎲" class="button-icon">Случайное</button>
+                    <button id="searchInWeb" title="Поиск в интернете"><img src="assets/icons/find.svg" alt="🔍" class="button-icon">Популярное</button>
                 </div>
                 <div class="add-button-container">
                     <button id="toggleAddFormBtn" class="add-button">+ Добавить</button>
@@ -841,14 +841,14 @@ function getAddFormHTML(addMoreChecked=false, visible='') {
                     <div class="form-group">
                         <div class="icon-input-container">
                             <input id="nameInput" placeholder="Введите название">
-                            <button id="searchNameBtn" class="search-name-btn" title="Найти иконку в интернете">🔍</button>
+                            <button id="searchNameBtn" class="search-name-btn" title="Найти иконку в интернете"><img src="assets/icons/find.svg" alt="🔍" class="button-icon"></button>
                         </div>
                     </div>
 
                     <div class="form-group">
                         <div class="icon-input-container">
                             <input id="icoInput" placeholder="https://example.com/icon.jpg">
-                            <button id="searchIconBtn" class="search-icon-btn" title="Найти иконку в интернете">🔍</button>
+                            <button id="searchIconBtn" class="search-icon-btn" title="Найти иконку в интернете"><img src="assets/icons/find.svg" alt="🔍" class="button-icon"></button>
                         </div>
                     </div>
 

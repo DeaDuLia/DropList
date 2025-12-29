@@ -338,7 +338,7 @@ body {
     margin-left: 5px;
     color: var(--dark-button-background);
     width: auto;
-    padding: 0;
+
     transition: color 0.2s;
 }
 #searchBtn:hover {
@@ -609,27 +609,13 @@ body {
 .card-status[data-status="Завершено"] {
     background-color: var(--rating-completed);
     position: relative;
-    padding-left: 25px;
 }
-.card-status[data-status="Завершено"]::before {
-    content: "✓";
-    position: absolute;
-    left: 8px;
-    top: 50%;
-    transform: translateY(-50%);
-}
+
 .card-status[data-status="Избранное"] {
     background-color: var(--rating-pined);
     position: relative;
-    padding-left: 25px;
 }
-.card-status[data-status="Избранное"]::before {
-    content: "⭐";
-    position: absolute;
-    left: 8px;
-    top: 50%;
-    transform: translateY(-50%);
-}
+
 @keyframes pulse {
     0% { opacity: 0.8; }
     50% { opacity: 1; }
