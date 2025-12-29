@@ -13,7 +13,7 @@
     --dark-modal-text-color: #FFFFFFFF;
 
     /* Общие цвета */
-    --dark-primary-color: #6c5ce7;
+    --dark-primary-color: #5d00cf;
     --dark-primary-shadow: #6C5CE733;
 
     --dark-input-background: #40444b;
@@ -99,13 +99,30 @@
     text-align: center;
     flex-grow: 1;
     position: relative;
+    overflow: hidden;
 }
+.nav-item::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: -100%;
+    width: 100%;
+    height: 3px;
+    background: linear-gradient(110deg, transparent, #ffffff, transparent);
+    transition: left 0.5s;
+}
+
+.nav-item:hover::after {
+    left: 50%;
+}
+
 .nav-item:hover {
     background-color: var(--dark-nav-background);
 }
 .nav-item.active {
-    background-color: var(--dark-nav-active-background);;
-    font-weight: 600;
+    background: linear-gradient(135deg, rgba(108, 92, 231, 0.1) 0%, rgba(2, 150, 170, 0.4) 100%);
+    box-shadow: 0 2px 2px rgba(108, 92, 231, 0.4);
+    backdrop-filter: blur(10px);
 }
 .nav-item.active::after {
     content: '';
@@ -116,6 +133,12 @@
     height: 3px;
     background-color: var(--dark-header-color);
 }
+.nav-item.active:hover {
+    background: linear-gradient(135deg, rgba(108, 92, 231, 0.1) 0%, rgba(141, 67, 172, 0.7) 100%);
+    box-shadow: 0 2px 2px rgba(108, 92, 231, 0.4);
+    backdrop-filter: blur(10px);
+}
+
 .nav-item span {
     display: inline-block;
     padding: 0 5px;
@@ -249,9 +272,6 @@ body {
     top: 0;
     background-color: var(--dark-section-background);
     z-index: 10;
-    padding-top: 10px;
-    padding-bottom: 15px;
-    margin-bottom: 20px;
 }
 .section-title {
     color: #ffffff !important;               /* Чистый белый */
@@ -292,14 +312,20 @@ body {
     position: relative;
     display: flex;
     align-items: center;
+    min-width: 300px;
 
 }
 #searchInput {
-    padding: 10px 15px;
-    border-color: var(--dark-input-hover-background);
-    width: 250px;
+    width: 100%;
+    padding: 10px 40px 10px 15px; /* Правое padding для кнопки */
+    border: 1px solid var(--dark-input-border);
+    background-color: var(--dark-input-background);
+    color: var(--dark-input-color);
     font-size: 1rem;
     transition: all 0.3s ease;
+    box-sizing: border-box;
+    border-right: none; /* Убираем правую границу, так как кнопка будет сливаться */
+    border-radius: 8px 0 0 8px;
 }
 #searchInput:focus {
     box-shadow: 0 0 0 2px var(--dark-input-shadow);
@@ -332,15 +358,24 @@ body {
     border-color: var(--dark-input-border-hover-color);
 }
 #searchBtn {
-    border: none;
-    cursor: pointer;
-    font-size: 1.8rem;
-    margin-left: 5px;
-    color: var(--dark-button-background);
-    width: auto;
 
-    transition: color 0.2s;
+    height: 40px;
+    width: 40px;
+    background: var(--dark-button-background);
+    backdrop-filter: blur(10px);
+    border: 1px solid var(--dark-input-border-focus);
+    border-left: none;
+    border-radius: 0 8px 8px 0;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0;
+    padding: 0;
+    transition: background-color 0.3s ease;
 }
+
+
 #searchBtn:hover {
     background-color: #8e44ad;
 }
@@ -351,73 +386,139 @@ body {
     font-size: 1.8rem;
     margin-left: 5px;
     color: var(--dark-header-color);
-    width: auto;
-    padding: 0 5px;
+    height: 40px;
+    width: 40px;
     transition: color 0.2s;
     display: flex;
     align-items: center;
     justify-content: center;
 }
 .clear-search-btn:hover {
-    color: var(--dark-primary-color);
+    background-color: #8e44ad;
 }
 /* Форма добавления карточки */
 .add-form {
-    background: var(--dark-body-background);
-    padding: 25px;
+    background: rgba(108, 92, 231, 0.1);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(108, 92, 231, 0.3);
     border-radius: 12px;
+    padding: 15px;
+    margin-bottom: 20px;
+    max-width: 300px;
     box-shadow: var(--shadow);
-    margin-bottom: 30px;
-    max-width: 600px;
-    margin-left: auto;
-    margin-right: auto;
     transition: all 0.3s ease;
+    margin-left: auto;
     overflow: hidden;
     max-height: 0;
     opacity: 0;
 }
 .add-form.visible {
-    max-height: 1000px;
+    max-height: 400px;
     opacity: 1;
-    padding: 25px;
-    margin-bottom: 30px;
 }
+
+
 /* Поля формы*/
-.form-group {
-    margin-bottom: 20px;
-}
-.icon-input-container {
+.add-form .form-group  {
+    margin-bottom: 10px;
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: 10px;
 }
-.icon-input-container input {
+
+.add-form input,
+.add-form select {
+    padding: 8px 12px;
+    font-size: 0.9rem;
+    height: 36px;
     flex: 1;
     margin: 0;
 }
-.search-icon-btn, .search-name-btn {
-    background-color: #3498db;
-    color: white;
-    border: none;
-    border-radius: 8px;
-    padding: 12px;
-    cursor: pointer;
-    transition: background-color 0.3s;
+.add-form .icon-input-container {
+    position: relative;
+    flex: 1;
+}
+
+.add-form .icon-input-container input {
+    padding-right: 40px;
+    width: 100%;
+}
+
+.add-form .search-icon-btn,
+.add-form .search-name-btn {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 28px;
+    height: 28px;
+    padding: 5px;
+    background: rgba(108, 92, 231, 0.2);
+    border: 1px solid rgba(108, 92, 231, 0.4);
+}
+
+.add-form .search-icon-btn:hover,
+.add-form .search-name-btn:hover {
+    background: rgba(108, 92, 231, 0.4);
+}
+
+.add-form #addBtn {
+    height: 36px;
+    margin-top: 10px;
+    background: linear-gradient(135deg, #6c5ce7, #0296aa);
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.add-form #addBtn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(108, 92, 231, 0.4);
+}
+
+.add-more-container label {
     display: flex;
     align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
+    gap: 8px;
+    cursor: pointer;
+    color: #a29bfe;
+    font-size: 0.85rem;
+    user-select: none;
 }
-.search-icon-btn:hover, .search-name-btn:hover {
-    background-color: #2980b9;
+
+.add-more-container input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    cursor: pointer;
 }
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.add-form input:focus,
+.add-form select:focus {
+    border-color: #a29bfe;
+    box-shadow: 0 0 0 2px rgba(162, 155, 254, 0.2);
+}
+
+.add-form input::placeholder {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.85rem;
+}
+
 /* Карточки */
 .data-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 20px;
-    margin-top: 30px;
+    gap: 10px;
 }
 .data-card {
     position: relative;
@@ -425,8 +526,8 @@ body {
     border-radius: 12px;
     box-shadow: var(--shadow);
     overflow: hidden;
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
     aspect-ratio: 16/9;
+
 }
 .data-card::after {
     content: "";
@@ -696,6 +797,7 @@ body {
     border: none;
     border-radius: 4px;
     cursor: pointer;
+    padding: 5px;
 }
 .modal-button:hover {
     opacity: 0.8;
@@ -1117,11 +1219,17 @@ button:hover {
     filter: invert(1) brightness(2); /* Делает иконки белыми на темном фоне */
 }
 
-/* Стили для иконок в кнопках */
+
 .button-icon {
     width: 16px;
     height: 16px;
     margin-right: 6px;
+    vertical-align: middle;
+}
+
+.button-icon-no-text {
+    width: 16px;
+    height: 16px;
     vertical-align: middle;
 }
 
@@ -1160,15 +1268,14 @@ button:hover {
 }
 .header-button {
     border-radius: 0;
-    background-color: var(--dark-button-background);
+    background: rgba(0, 200, 216, 0.7);
     color: var(--dark-button-color);
-    padding: 8px 15px; /* Уменьшаем padding */
     font-size: 1rem;
     cursor: pointer;
     transition: all 0.3s ease;
     white-space: nowrap;
-    max-width: 100%; /* Ограничиваем максимальную ширину */
-    flex-shrink: 1; /* Позволяет сжиматься */
+    max-width: 100%;
+    flex-shrink: 1;
 }
 
 .add-button {
@@ -1181,4 +1288,3 @@ button:hover {
     max-width: 100%; /* Ограничиваем максимальную ширину */
     flex-shrink: 1;
 }
-

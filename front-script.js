@@ -201,6 +201,30 @@ document.addEventListener('click', async (e) => {
     }
 });
 
+document.addEventListener('keydown', (e) => {
+    // Ctrl+F - фокус в поиск
+    if (e.ctrlKey && e.key === 'f') {
+        e.preventDefault();
+        document.getElementById('searchInput')?.focus();
+    }
+
+    // Ctrl+N - добавить новый элемент
+    if (e.ctrlKey && e.key === 'n') {
+        e.preventDefault();
+        document.getElementById('toggleAddFormBtn')?.click();
+    }
+
+    // Esc - закрыть все модалки
+    if (e.key === 'Escape') {
+        document.querySelectorAll('.modal').forEach(modal => {
+            modal.style.display = 'none';
+        });
+        if (document.getElementById('toggleAddFormBtn')?.textContent === '− Скрыть') {
+            document.getElementById('toggleAddFormBtn')?.click();
+        }
+    }
+});
+
 document.querySelectorAll('.nav-item').forEach(item => {
     item.addEventListener('click', async function() {
 
@@ -373,7 +397,7 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
                 <div class="search-container">
                     <input type="text" id="searchInput" placeholder="Поиск..." value="${currentFilters.searchQuery}">
                     <div id="searchSuggestions" class="search-suggestions"></div>
-                    <button id="searchBtn"><img src="assets/icons/find.svg" alt="🔍" class="button-icon"></button>
+                    <button id="searchBtn"><img src="assets/icons/find.svg" alt="🔍" class="button-icon-no-text"></button>
                     <button id="clearSearchBtn" class="clear-search-btn" ${currentFilters.searchQuery ? '' : 'style="display: none;"'}>✕</button>
                     <button id="randomBtnSection" title="Случайная карточка"><img src="assets/icons/random.svg" alt="🎲" class="button-icon">Случайное</button>
                     <button id="searchInWeb" title="Поиск в интернете"><img src="assets/icons/find.svg" alt="🔍" class="button-icon">Популярное</button>
@@ -835,51 +859,47 @@ function hideAddForm() {
     }
 }
 
-function getAddFormHTML(addMoreChecked=false, visible='') {
+function getAddFormHTML(addMoreChecked = false, visible = '') {
     return `
-                <div id="addForm" class="add-form ${visible}">
-                    <div class="form-group">
-                        <div class="icon-input-container">
-                            <input id="nameInput" placeholder="Введите название">
-                            <button id="searchNameBtn" class="search-name-btn" title="Найти иконку в интернете"><img src="assets/icons/find.svg" alt="🔍" class="button-icon"></button>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <div class="icon-input-container">
-                            <input id="icoInput" placeholder="https://example.com/icon.jpg">
-                            <button id="searchIconBtn" class="search-icon-btn" title="Найти иконку в интернете"><img src="assets/icons/find.svg" alt="🔍" class="button-icon"></button>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <select id="ratingSelect">
-                            <option value="0">Рейтинг</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <select id="statusSelect">
-                            <option value="Уточнить">Уточнить</option>
-                        </select>
-                    </div>
-                    <div class="form-group add-more-container">
-                        <label>
-                            <input type="checkbox" id="addMoreCheckbox" ${addMoreChecked ? 'checked' : ''}>
-                            Добавить ещё
-                        </label>
-                    </div>
-                    <button id="addBtn">Добавить</button>
+        <div id="addForm" class="add-form ${visible}">
+            <div class="form-group">
+                <div class="icon-input-container">
+                    <input id="nameInput" placeholder="Название" autocomplete="off">
                 </div>
-            `;
+            </div>
+            <div class="form-group">
+                <div class="icon-input-container">
+                    <input id="icoInput" placeholder="Ссылка на обложку" autocomplete="off">
+                    <button id="searchIconBtn" class="search-icon-btn" title="Найти обложку"><img src="assets/icons/find.svg" alt="🔍" class="button-icon-no-text"></button>
+                </div>
+            </div>
+            <div class="form-group">
+                <select id="ratingSelect">
+                    <option value="0">Выберите рейтинг</option>
+                </select>
+                <select id="statusSelect">
+                    <option value="Уточнить">Выберите статус</option>
+                </select>
+            </div>
+            <div class="form-group add-more-container">
+                <label>
+                    <input type="checkbox" id="addMoreCheckbox" 
+                           ${addMoreChecked ? 'checked' : ''}> Ещё
+                </label>
+                <button id="addBtn" class="add-button-compact">
+                    Добавить
+                </button>
+            </div>
+        </div>
+    `;
 }
 
 function renderCardList(cards) {
     return cards.map(card => `
             <div class="data-card" data-name="${card.name}" style="display: block;">
-                <button class="change-image-btn" data-name="${card.name}" title="Сменить картинку"><img src="assets/icons/changeImage.svg" alt="🖼️" class="downloads-icon"></button>
-                <button class="change-category-btn" data-name="${card.name}" data-status="${card.status}" data-rating="${card.rating}" datatype="${card.icoUrl}" title="Сменить категорию"><img src="assets/icons/changeCategory.svg" alt="⇄" class="downloads-icon"></button>
-                <button class="delete-btn" data-name="${card.name}"><img src="assets/icons/delete.svg" alt="🗑️" class="downloads-icon"></button>
+                <button class="change-image-btn" data-name="${card.name}" title="Сменить картинку"><img src="assets/icons/changeImage.svg" alt="🖼️" class="button-icon-no-text"></button>
+                <button class="change-category-btn" data-name="${card.name}" data-status="${card.status}" data-rating="${card.rating}" datatype="${card.icoUrl}" title="Сменить категорию"><img src="assets/icons/changeCategory.svg" alt="⇄" class="button-icon-no-text"></button>
+                <button class="delete-btn" data-name="${card.name}"><img src="assets/icons/delete.svg" alt="🗑️" class="button-icon-no-text"></button>
                 ${getCardIconHTML(card)}
                 <div class="data-info">
                     <h3 class="data-title">${card.name}</h3>
@@ -1247,11 +1267,7 @@ function setupDeleteButtons() {
 
 function setupIconSearchButton() {
     const oldIconButtons = document.querySelectorAll('.search-icon-btn');
-    const oldNameButtons = document.querySelectorAll('.search-name-btn');
     oldIconButtons.forEach(btn => {
-        btn.replaceWith(btn.cloneNode(true));
-    });
-    oldNameButtons.forEach(btn => {
         btn.replaceWith(btn.cloneNode(true));
     });
 
@@ -1280,7 +1296,6 @@ function setupIconSearchButton() {
                         for (const type of clipboardItem.types) {
                             if (type.startsWith('image/')) {
                                 clipboardItem.getType(type).then(imageBlob => {
-                                    // Теперь у вас есть Blob с изображением
                                     uploadImage(imageBlob);
                                 });
                             }
@@ -1459,41 +1474,6 @@ searchInWebBtn.addEventListener('click', async () => {
 });
 
 
-
-async function pickRandomCard() {
-    try {
-        const section = document.querySelector('.nav-item.active')?.dataset.section;
-        if (!section) {
-            await showError('Сначала выберите категорию');
-            return;
-        }
-
-        // Получаем все данные текущего раздела
-        let data = await window.electronAPI.getData(section);
-
-        if (!data || data.length === 0) {
-            await showError('В этой категории нет карточек');
-            return;
-        }
-
-        // Выбираем случайную карточку
-        const randomIndex = Math.floor(Math.random() * data.length);
-        const randomCard = data[randomIndex];
-
-        // Открываем поиск в браузере
-        const searchUrl = `https://yandex.ru/search?text=${encodeURIComponent(randomCard.name)}`;
-        window.electronAPI.openSearch(searchUrl);
-
-        // Опционально: подсветить выбранную карточку
-        highlightRandomCard(randomCard.name);
-
-    } catch (error) {
-        console.error('Ошибка при выборе случайной карточки:', error);
-        await showError('Не удалось выбрать случайную карточку');
-    }
-}
-
-// 4. Функция для подсветки выбранной карточки (опционально)
 function highlightRandomCard(cardName) {
     // Снимаем подсветку со всех карточек
     document.querySelectorAll('.data-card').forEach(card => {
@@ -1522,7 +1502,6 @@ function highlightRandomCard(cardName) {
     }
 }
 
-// 5. Также можно добавить возможность выбора случайной карточки из видимых на экране:
 async function pickRandomVisibleCard() {
     try {
         const visibleCards = document.querySelectorAll('.data-card');
