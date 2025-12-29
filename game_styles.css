@@ -379,24 +379,23 @@ body {
 }
 /* Форма добавления карточки */
 .add-form {
-    background: var(--dark-body-background);
-    padding: 25px;
+    background: rgba(108, 92, 231, 0.1);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(108, 92, 231, 0.3);
     border-radius: 12px;
+    padding: 15px;
+    margin-bottom: 20px;
+    max-width: 300px;
     box-shadow: var(--shadow);
-    margin-bottom: 30px;
-    max-width: 600px;
-    margin-left: auto;
-    margin-right: auto;
     transition: all 0.3s ease;
+    margin-left: auto;
     overflow: hidden;
     max-height: 0;
     opacity: 0;
 }
 .add-form.visible {
-    max-height: 1000px;
+    max-height: 400px;
     opacity: 1;
-    padding: 25px;
-    margin-bottom: 30px;
 }
 /* Поля формы*/
 .form-group {
