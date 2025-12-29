@@ -865,7 +865,6 @@ function getAddFormHTML(addMoreChecked = false, visible = '') {
             <div class="form-group">
                 <div class="icon-input-container">
                     <input id="nameInput" placeholder="Название" autocomplete="off">
-                    <button id="searchNameBtn" class="search-name-btn" title="Найти в интернете"><img src="assets/icons/find.svg" alt="🔍" class="button-icon-no-text"></button>
                 </div>
             </div>
             <div class="form-group">
@@ -1268,11 +1267,7 @@ function setupDeleteButtons() {
 
 function setupIconSearchButton() {
     const oldIconButtons = document.querySelectorAll('.search-icon-btn');
-    const oldNameButtons = document.querySelectorAll('.search-name-btn');
     oldIconButtons.forEach(btn => {
-        btn.replaceWith(btn.cloneNode(true));
-    });
-    oldNameButtons.forEach(btn => {
         btn.replaceWith(btn.cloneNode(true));
     });
 
@@ -1301,7 +1296,6 @@ function setupIconSearchButton() {
                         for (const type of clipboardItem.types) {
                             if (type.startsWith('image/')) {
                                 clipboardItem.getType(type).then(imageBlob => {
-                                    // Теперь у вас есть Blob с изображением
                                     uploadImage(imageBlob);
                                 });
                             }
