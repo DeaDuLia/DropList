@@ -201,6 +201,27 @@ document.addEventListener('click', async (e) => {
     }
 });
 
+document.addEventListener('keydown', (e) => {
+    // Ctrl+F - фокус в поиск
+    if (e.ctrlKey && e.key === 'f') {
+        e.preventDefault();
+        document.getElementById('searchInput')?.focus();
+    }
+
+    // Ctrl+N - добавить новый элемент
+    if (e.ctrlKey && e.key === 'n') {
+        e.preventDefault();
+        document.getElementById('toggleAddFormBtn')?.click();
+    }
+
+    // Esc - закрыть все модалки
+    if (e.key === 'Escape') {
+        document.querySelectorAll('.modal').forEach(modal => {
+            modal.style.display = 'none';
+        });
+    }
+});
+
 document.querySelectorAll('.nav-item').forEach(item => {
     item.addEventListener('click', async function() {
 
