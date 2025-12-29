@@ -18,6 +18,7 @@ const importBtn = document.getElementById('importBtn');
 const replaceBtn = document.getElementById('replaceBtn');
 const donateBtn = document.getElementById('donateBtn');
 const toggleAddFormBtn = document.getElementById('toggleAddFormBtn');
+let lastTextFromClipboard = 'test';
 
 let isAddingGame = false;
 let currentPage = 1;
@@ -187,6 +188,13 @@ function setupAddButton() {
             addForm.classList.toggle('visible');
             toggleBtn.textContent = addForm.classList.contains('visible') ? '− Скрыть' : '+ Добавить';
             if (addForm.classList.contains('visible')) {
+                navigator.clipboard.readText().then(text => {
+                    const nameInput = document.getElementById('nameInput');
+                    if (text && nameInput && text !== lastTextFromClipboard) {
+                        nameInput.value = text;
+                        lastTextFromClipboard = text;
+                    }
+                })
                 document.getElementById('nameInput')?.focus();
             } else {
                 if (addMoreCheck) addMoreCheck.checked = false;
