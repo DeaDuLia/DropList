@@ -397,7 +397,7 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
                 <div class="search-container">
                     <input type="text" id="searchInput" placeholder="Поиск..." value="${currentFilters.searchQuery}">
                     <div id="searchSuggestions" class="search-suggestions"></div>
-                    <button id="searchBtn"><img src="assets/icons/find.svg" alt="🔍" class="button-icon"></button>
+                    <button id="searchBtn"><img src="assets/icons/find.svg" alt="🔍" class="button-icon-no-text"></button>
                     <button id="clearSearchBtn" class="clear-search-btn" ${currentFilters.searchQuery ? '' : 'style="display: none;"'}>✕</button>
                     <button id="randomBtnSection" title="Случайная карточка"><img src="assets/icons/random.svg" alt="🎲" class="button-icon">Случайное</button>
                     <button id="searchInWeb" title="Поиск в интернете"><img src="assets/icons/find.svg" alt="🔍" class="button-icon">Популярное</button>
@@ -865,13 +865,13 @@ function getAddFormHTML(addMoreChecked = false, visible = '') {
             <div class="form-group">
                 <div class="icon-input-container">
                     <input id="nameInput" placeholder="Название" autocomplete="off">
-                    <button id="searchNameBtn" class="search-name-btn" title="Найти в интернете"><img src="assets/icons/find.svg" alt="🔍" class="button-icon"></button>
+                    <button id="searchNameBtn" class="search-name-btn" title="Найти в интернете"><img src="assets/icons/find.svg" alt="🔍" class="button-icon-no-text"></button>
                 </div>
             </div>
             <div class="form-group">
                 <div class="icon-input-container">
                     <input id="icoInput" placeholder="Ссылка на обложку" autocomplete="off">
-                    <button id="searchIconBtn" class="search-icon-btn" title="Найти обложку"><img src="assets/icons/find.svg" alt="🔍" class="button-icon"></button>
+                    <button id="searchIconBtn" class="search-icon-btn" title="Найти обложку"><img src="assets/icons/find.svg" alt="🔍" class="button-icon-no-text"></button>
                 </div>
             </div>
             <div class="form-group">
@@ -898,9 +898,9 @@ function getAddFormHTML(addMoreChecked = false, visible = '') {
 function renderCardList(cards) {
     return cards.map(card => `
             <div class="data-card" data-name="${card.name}" style="display: block;">
-                <button class="change-image-btn" data-name="${card.name}" title="Сменить картинку"><img src="assets/icons/changeImage.svg" alt="🖼️" class="downloads-icon"></button>
-                <button class="change-category-btn" data-name="${card.name}" data-status="${card.status}" data-rating="${card.rating}" datatype="${card.icoUrl}" title="Сменить категорию"><img src="assets/icons/changeCategory.svg" alt="⇄" class="downloads-icon"></button>
-                <button class="delete-btn" data-name="${card.name}"><img src="assets/icons/delete.svg" alt="🗑️" class="downloads-icon"></button>
+                <button class="change-image-btn" data-name="${card.name}" title="Сменить картинку"><img src="assets/icons/changeImage.svg" alt="🖼️" class="button-icon-no-text"></button>
+                <button class="change-category-btn" data-name="${card.name}" data-status="${card.status}" data-rating="${card.rating}" datatype="${card.icoUrl}" title="Сменить категорию"><img src="assets/icons/changeCategory.svg" alt="⇄" class="button-icon-no-text"></button>
+                <button class="delete-btn" data-name="${card.name}"><img src="assets/icons/delete.svg" alt="🗑️" class="button-icon-no-text"></button>
                 ${getCardIconHTML(card)}
                 <div class="data-info">
                     <h3 class="data-title">${card.name}</h3>
