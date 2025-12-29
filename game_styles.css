@@ -120,7 +120,7 @@
     background-color: var(--dark-nav-background);
 }
 .nav-item.active {
-    background: linear-gradient(135deg, #6c5ce7 0%, #40b3d6 100%);
+    background: linear-gradient(135deg, #6c5ce7 0%, #0296aa 100%);
     box-shadow: 0 4px 15px rgba(108, 92, 231, 0.4);
 }
 .nav-item.active::after {
@@ -397,36 +397,104 @@ body {
     max-height: 400px;
     opacity: 1;
 }
+
+
 /* Поля формы*/
-.form-group {
-    margin-bottom: 20px;
-}
-.icon-input-container {
+.add-form .form-group  {
+    margin-bottom: 10px;
     display: flex;
     align-items: center;
-    gap: 5px;
+    gap: 10px;
 }
-.icon-input-container input {
+
+.add-form input,
+.add-form select {
+    padding: 8px 12px;
+    font-size: 0.9rem;
+    height: 36px;
     flex: 1;
     margin: 0;
 }
-.search-icon-btn, .search-name-btn {
-    background-color: #3498db;
-    color: white;
-    border: none;
-    border-radius: 8px;
-    padding: 12px;
-    cursor: pointer;
-    transition: background-color 0.3s;
+.add-form .icon-input-container {
+    position: relative;
+    flex: 1;
+}
+
+.add-form .icon-input-container input {
+    padding-right: 40px;
+    width: 100%;
+}
+
+.add-form .search-icon-btn,
+.add-form .search-name-btn {
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 28px;
+    height: 28px;
+    padding: 5px;
+    background: rgba(108, 92, 231, 0.2);
+    border: 1px solid rgba(108, 92, 231, 0.4);
+}
+
+.add-form .search-icon-btn:hover,
+.add-form .search-name-btn:hover {
+    background: rgba(108, 92, 231, 0.4);
+}
+
+.add-form #addBtn {
+    height: 36px;
+    margin-top: 10px;
+    background: linear-gradient(135deg, #6c5ce7, #0296aa);
+    font-weight: 500;
+    transition: all 0.2s;
+}
+
+.add-form #addBtn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(108, 92, 231, 0.4);
+}
+
+.add-more-container label {
     display: flex;
     align-items: center;
-    justify-content: center;
-    width: 40px;
-    height: 40px;
+    gap: 8px;
+    cursor: pointer;
+    color: #a29bfe;
+    font-size: 0.85rem;
+    user-select: none;
 }
-.search-icon-btn:hover, .search-name-btn:hover {
-    background-color: #2980b9;
+
+.add-more-container input[type="checkbox"] {
+    width: 16px;
+    height: 16px;
+    margin: 0;
+    cursor: pointer;
 }
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.add-form input:focus,
+.add-form select:focus {
+    border-color: #a29bfe;
+    box-shadow: 0 0 0 2px rgba(162, 155, 254, 0.2);
+}
+
+.add-form input::placeholder {
+    color: rgba(255, 255, 255, 0.5);
+    font-size: 0.85rem;
+}
+
 /* Карточки */
 .data-grid {
     display: grid;

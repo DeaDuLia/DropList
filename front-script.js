@@ -219,6 +219,9 @@ document.addEventListener('keydown', (e) => {
         document.querySelectorAll('.modal').forEach(modal => {
             modal.style.display = 'none';
         });
+        if (document.getElementById('toggleAddFormBtn')?.textContent === '− Скрыть') {
+            document.getElementById('toggleAddFormBtn')?.click();
+        }
     }
 });
 
@@ -856,43 +859,40 @@ function hideAddForm() {
     }
 }
 
-function getAddFormHTML(addMoreChecked=false, visible='') {
+function getAddFormHTML(addMoreChecked = false, visible = '') {
     return `
-                <div id="addForm" class="add-form ${visible}">
-                    <div class="form-group">
-                        <div class="icon-input-container">
-                            <input id="nameInput" placeholder="Введите название">
-                            <button id="searchNameBtn" class="search-name-btn" title="Найти иконку в интернете"><img src="assets/icons/find.svg" alt="🔍" class="button-icon"></button>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <div class="icon-input-container">
-                            <input id="icoInput" placeholder="https://example.com/icon.jpg">
-                            <button id="searchIconBtn" class="search-icon-btn" title="Найти иконку в интернете"><img src="assets/icons/find.svg" alt="🔍" class="button-icon"></button>
-                        </div>
-                    </div>
-
-                    <div class="form-group">
-                        <select id="ratingSelect">
-                            <option value="0">Рейтинг</option>
-                        </select>
-                    </div>
-
-                    <div class="form-group">
-                        <select id="statusSelect">
-                            <option value="Уточнить">Уточнить</option>
-                        </select>
-                    </div>
-                    <div class="form-group add-more-container">
-                        <label>
-                            <input type="checkbox" id="addMoreCheckbox" ${addMoreChecked ? 'checked' : ''}>
-                            Добавить ещё
-                        </label>
-                    </div>
-                    <button id="addBtn">Добавить</button>
+        <div id="addForm" class="add-form ${visible}">
+            <div class="form-group">
+                <div class="icon-input-container">
+                    <input id="nameInput" placeholder="Название" autocomplete="off">
+                    <button id="searchNameBtn" class="search-name-btn" title="Найти в интернете"><img src="assets/icons/find.svg" alt="🔍" class="button-icon"></button>
                 </div>
-            `;
+            </div>
+            <div class="form-group">
+                <div class="icon-input-container">
+                    <input id="icoInput" placeholder="Ссылка на обложку" autocomplete="off">
+                    <button id="searchIconBtn" class="search-icon-btn" title="Найти обложку"><img src="assets/icons/find.svg" alt="🔍" class="button-icon"></button>
+                </div>
+            </div>
+            <div class="form-group">
+                <select id="ratingSelect">
+                    <option value="0">Выберите рейтинг</option>
+                </select>
+                <select id="statusSelect">
+                    <option value="Уточнить">Выберите статус</option>
+                </select>
+            </div>
+            <div class="form-group add-more-container">
+                <label>
+                    <input type="checkbox" id="addMoreCheckbox" 
+                           ${addMoreChecked ? 'checked' : ''}> Ещё
+                </label>
+                <button id="addBtn" class="add-button-compact">
+                    Добавить
+                </button>
+            </div>
+        </div>
+    `;
 }
 
 function renderCardList(cards) {
@@ -1480,41 +1480,6 @@ searchInWebBtn.addEventListener('click', async () => {
 });
 
 
-
-async function pickRandomCard() {
-    try {
-        const section = document.querySelector('.nav-item.active')?.dataset.section;
-        if (!section) {
-            await showError('Сначала выберите категорию');
-            return;
-        }
-
-        // Получаем все данные текущего раздела
-        let data = await window.electronAPI.getData(section);
-
-        if (!data || data.length === 0) {
-            await showError('В этой категории нет карточек');
-            return;
-        }
-
-        // Выбираем случайную карточку
-        const randomIndex = Math.floor(Math.random() * data.length);
-        const randomCard = data[randomIndex];
-
-        // Открываем поиск в браузере
-        const searchUrl = `https://yandex.ru/search?text=${encodeURIComponent(randomCard.name)}`;
-        window.electronAPI.openSearch(searchUrl);
-
-        // Опционально: подсветить выбранную карточку
-        highlightRandomCard(randomCard.name);
-
-    } catch (error) {
-        console.error('Ошибка при выборе случайной карточки:', error);
-        await showError('Не удалось выбрать случайную карточку');
-    }
-}
-
-// 4. Функция для подсветки выбранной карточки (опционально)
 function highlightRandomCard(cardName) {
     // Снимаем подсветку со всех карточек
     document.querySelectorAll('.data-card').forEach(card => {
@@ -1543,7 +1508,6 @@ function highlightRandomCard(cardName) {
     }
 }
 
-// 5. Также можно добавить возможность выбора случайной карточки из видимых на экране:
 async function pickRandomVisibleCard() {
     try {
         const visibleCards = document.querySelectorAll('.data-card');
