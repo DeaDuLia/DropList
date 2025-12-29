@@ -120,27 +120,55 @@
     display: inline-block;
     padding: 0 5px;
 }
-.header-buttons {
-    display: flex;
-    gap: 10px;
-    justify-content: flex-end; /* Выравниваем по правому краю */
-    min-width: 0; /* Позволяет элементам сжиматься */
-}
-.header-button, .add-button {
-    background-color: var(--dark-button-background);
-    color: var(--dark-button-color);
-    border-radius: 12px;
-    padding: 8px 15px; /* Уменьшаем padding */
-    font-size: 1rem;
+
+
+#randomBtnSection {
+    background-color: var(--dark-button-background); /* Фиолетовый цвет для кнопки случайности */
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 10px;
     cursor: pointer;
+    font-size: 1rem;
     transition: all 0.3s ease;
-    white-space: nowrap;
-    max-width: 100%; /* Ограничиваем максимальную ширину */
-    flex-shrink: 1; /* Позволяет сжиматься */
+    display: flex;
+    margin-left: 10px;
+    align-items: center;
+    justify-content: center;
 }
+
+#randomBtnSection:hover {
+    background-color: #8e44ad;
+    color: white;
+}
+#searchInWeb {
+    background-color: var(--dark-button-background); /* Фиолетовый цвет для кнопки случайности */
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 10px;
+    cursor: pointer;
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    display: flex;
+    margin-left: 10px;
+    align-items: center;
+    justify-content: center;
+}
+
+#searchInWeb:hover {
+    background-color: #8e44ad;
+    color: white;
+}
+
+
+.random-btn:hover {
+    background-color: #8e44ad;
+    transform: scale(1.1);
+}
+
 .header-button:hover, .add-button:hover {
-    background-color: var(--dark-button-color);
-    color: var(--dark-button-background);
+    background-color: #8e44ad;
 }
 /* Анимация кнопок */
 @media (max-width: 800px) {
@@ -176,14 +204,54 @@ body {
     border-radius: 12px;
     box-shadow: var(--shadow);
     margin-bottom: 30px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden; /* Важно: скрываем переполнение родителя */
+    max-height: calc(100vh - 200px); /* Ограничиваем высоту */
+}
+.content-wrapper {
+    flex: 1;
+    overflow-y: auto; /* Включаем вертикальный скролл */
+    overflow-x: hidden; /* Отключаем горизонтальный скролл */
+    padding-right: 5px; /* Чтобы контент не заезжал под скроллбар */
+}
+
+/* Адаптация для мобильных устройств */
+@media (max-width: 768px) {
+    .content-section {
+        max-height: calc(100vh - 150px); /* Меньшая высота на мобильных */
+        padding: 15px;
+    }
+}
+
+/* Стили для скроллбара внутри content-wrapper */
+.content-wrapper::-webkit-scrollbar {
+    width: 8px;
+}
+
+.content-wrapper::-webkit-scrollbar-track {
+    background: var(--dark-scroll-backgroud);
+    border-radius: 4px;
+}
+
+.content-wrapper::-webkit-scrollbar-thumb {
+    background: var(--dark-scroll-tracker);
+    border-radius: 4px;
+}
+
+.content-wrapper::-webkit-scrollbar-thumb:hover {
+    background: var(--dark-primary-color);
 }
 /* Шапка секции */
 .section-header {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    position: sticky;
+    top: 0;
+    background-color: var(--dark-section-background);
+    z-index: 10;
+    padding-top: 10px;
+    padding-bottom: 15px;
     margin-bottom: 20px;
-    flex-wrap: wrap;
 }
 .section-title {
     color: #ffffff !important;               /* Чистый белый */
@@ -206,7 +274,7 @@ body {
 .filter-container {
     display: flex;
     align-items: center;
-    gap: 10px;
+    column-gap: 20px;
 }
 #statusFilter, #sortFilter {
     padding: 10px 0;
@@ -267,14 +335,14 @@ body {
     border: none;
     cursor: pointer;
     font-size: 1.8rem;
-    margin-left: 2px;
+    margin-left: 5px;
     color: var(--dark-button-background);
     width: auto;
-    padding: 0;
+
     transition: color 0.2s;
 }
 #searchBtn:hover {
-    color: var(--dark-button-hover-background);
+    background-color: #8e44ad;
 }
 .clear-search-btn {
     background-color: var(--dark-button-background);
@@ -385,31 +453,26 @@ body {
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
 }
 /* Обложка карточки */
-.delete-btn {
-    margin-top: 130px;
-    background-color: #E74C3C;
-}
-.search-btn {
-    top: 10px;
-    background-color: #3498DB  ;
-}
+
 .change-image-btn {
-    top: 50px;
+    top: 10px;
     background-color: #9B59B6  ;
 }
 .change-category-btn {
-    margin-top: 90px;
+    margin-top: 45px;
     background-color: #2ECC71  ;
+}
+
+.delete-btn {
+    margin-top: 80px;
+    background-color: #E74C3C;
 }
 
 .delete-btn:hover {
     background-color: #EC7063;
     transform: scale(1.1);
 }
-.search-btn:hover {
-    background-color: #5DADE2;
-    transform: scale(1.1);
-}
+
 .change-category-btn:hover {
     background-color: #48C988;
     transform: scale(1.1);
@@ -420,7 +483,6 @@ body {
     transform: scale(1.1);
 }
 .delete-btn,
-.search-btn,
 .change-image-btn,
 .change-category-btn {
     position: absolute;
@@ -439,7 +501,6 @@ body {
     justify-content: center;
 }
 .data-card:hover .delete-btn,
-.data-card:hover .search-btn,
 .data-card:hover .change-image-btn,
 .data-card:hover .change-category-btn {
     opacity: 1;
@@ -487,7 +548,7 @@ body {
 }
 .card-rating, .card-status {
     display: inline-block;
-    padding: 4px 12px;
+    text-align: center;
     border-radius: 20px;
     font-size: 0.8rem;
     font-weight: 500;
@@ -499,9 +560,15 @@ body {
 .card-rating:hover,
 .card-status:hover {
     color: white !important; /* Белый текст */
-    background-color: #6c5ce7 !important; /* Фиолетовый фон */
     transform: scale(1.05); /* Легкое увеличение */
-    box-shadow: 0 0 0 2px rgba(108, 92, 231, 0.5); /* Свечение */
+    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3); /* Белое свечение */
+    filter: brightness(1.2) saturate(1.2); /* Увеличиваем яркость и насыщенность */
+}
+
+/* Для жёлтого рейтинга делаем тёмный текст при наведении */
+.card-rating[data-rating="2"]:hover {
+    color: var(--dark-text-color) !important;
+    filter: brightness(1.1) saturate(1.1);
 }
 .data-title:hover {
     transform: scale(1.05); /* Легкое увеличение */
@@ -542,27 +609,12 @@ body {
 .card-status[data-status="Завершено"] {
     background-color: var(--rating-completed);
     position: relative;
-    padding-left: 25px;
-}
-.card-status[data-status="Завершено"]::before {
-    content: "✓";
-    position: absolute;
-    left: 8px;
-    top: 50%;
-    transform: translateY(-50%);
 }
 .card-status[data-status="Избранное"] {
     background-color: var(--rating-pined);
     position: relative;
-    padding-left: 25px;
 }
-.card-status[data-status="Избранное"]::before {
-    content: "⭐";
-    position: absolute;
-    left: 8px;
-    top: 50%;
-    transform: translateY(-50%);
-}
+
 @keyframes pulse {
     0% { opacity: 0.8; }
     50% { opacity: 1; }
@@ -803,7 +855,6 @@ button {
     background-color: var(--dark-primary-color);
     color: white;
     border: none;
-    padding: 12px 24px;
     border-radius: 8px;
     font-size: 1rem;
     cursor: pointer;
@@ -928,32 +979,206 @@ button:hover {
 .editable-select-container {
     position: relative;
     display: inline-block;
-    margin-right: 5px;
-}
-
-.editable-select {
-    position: absolute;
-    bottom: 0;
-    left: 0;
-    z-index: 5;
-    opacity: 0;
-    width: 100%;
-    height: 100%;
-    cursor: pointer;
-}
-
-.editable-select:focus {
-    opacity: 1;
-    position: relative;
-    width: auto;
-    height: auto;
-    margin-top: 5px;
+    min-width: 40px;
 }
 
 .editable-select-value {
     pointer-events: none;
+    display: inline-block;
+    padding: 4px 8px;
+    border-radius: 20px;
 }
 
-.editable-select:focus + .editable-select-value {
+.editable-select {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    opacity: 0;
+    cursor: pointer;
+    z-index: 5;
+}
+
+/* Стили для отображения списка */
+.editable-select-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: transparent;
+    z-index: 999;
     display: none;
 }
+
+.editable-select-list {
+    position: absolute;
+    background-color: var(--dark-modal-background);
+    border: 1px solid var(--dark-input-border);
+    border-radius: 8px;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+    max-height: 250px;
+    overflow-y: auto;
+    z-index: 1000;
+    min-width: 150px;
+    animation: fadeIn 0.2s ease;
+}
+
+@keyframes fadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.editable-select-option {
+    padding: 8px 12px;
+    cursor: pointer;
+    color: var(--dark-input-color);
+    transition: background-color 0.2s;
+    white-space: nowrap;
+    font-size: 0.9rem;
+}
+
+.editable-select-option:hover {
+    background-color: var(--dark-input-hover-background);
+}
+
+.editable-select-option.selected {
+    background-color: var(--dark-primary-color);
+    color: white;
+}
+
+/* Стили для скроллбара в списке */
+.editable-select-list::-webkit-scrollbar {
+    width: 6px;
+}
+
+.editable-select-list::-webkit-scrollbar-track {
+    background: var(--dark-scroll-backgroud);
+    border-radius: 3px;
+}
+
+.editable-select-list::-webkit-scrollbar-thumb {
+    background: var(--dark-scroll-tracker);
+    border-radius: 3px;
+}
+
+.editable-select-list::-webkit-scrollbar-thumb:hover {
+    background: var(--dark-primary-color);
+}
+
+.add-button-container {
+    margin-left: auto;
+    display: flex;
+    align-items: center;
+}
+
+.add-button {
+    background-color: var(--dark-button-background);
+    color: var(--dark-button-color);
+    border: none;
+    border-radius: 8px;
+    padding: 10px 20px;
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+    height: 42px; /* Синхронизируем с высотой поиска */
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin-left: 10px;
+}
+
+@media (max-width: 768px) {
+    .add-button-container {
+        margin-left: 0;
+        margin-top: 10px;
+        width: 100%;
+    }
+
+    .add-button {
+        width: 100%;
+        margin-left: 0;
+    }
+}
+
+.nav-icon {
+    width: 20px;
+    height: 20px;
+    margin-right: 8px;
+    vertical-align: middle;
+    filter: invert(1) brightness(2); /* Делает иконки белыми на темном фоне */
+}
+
+/* Стили для иконок в кнопках */
+.button-icon {
+    width: 16px;
+    height: 16px;
+    margin-right: 6px;
+    vertical-align: middle;
+}
+
+.button-text {
+    vertical-align: middle;
+}
+
+/* Кнопки только с иконками (без текста) */
+.header-button:has(img:only-child) .button-icon {
+    margin-right: 0;
+}
+
+/* Стили для счетчика загрузок */
+.downloads-icon {
+    width: 16px;
+    height: 16px;
+    margin-right: 4px;
+    vertical-align: middle;
+}
+
+.downloads-number {
+    vertical-align: middle;
+}
+
+/* Стили для иконок в форме поиска */
+.search-container button img {
+    width: 16px;
+    height: 16px;
+}
+
+.header-buttons {
+    display: flex;
+    gap: 5px;
+    justify-content: flex-end; /* Выравниваем по правому краю */
+    min-width: 0;
+}
+.header-button {
+    border-radius: 0;
+    background-color: var(--dark-button-background);
+    color: var(--dark-button-color);
+    padding: 8px 15px; /* Уменьшаем padding */
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+    max-width: 100%; /* Ограничиваем максимальную ширину */
+    flex-shrink: 1; /* Позволяет сжиматься */
+}
+
+.add-button {
+    background-color: var(--dark-button-background);
+    color: var(--dark-button-color);
+    font-size: 1rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    white-space: nowrap;
+    max-width: 100%; /* Ограничиваем максимальную ширину */
+    flex-shrink: 1;
+}
+
