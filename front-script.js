@@ -208,6 +208,7 @@ document.addEventListener('keydown', (e) => {
         if (document.getElementById('toggleAddFormBtn')?.textContent === '− Скрыть') {
             document.getElementById('toggleAddFormBtn')?.click();
         }
+        document.getElementById('clearSearchBtn')?.click();
     }
 });
 
@@ -280,7 +281,7 @@ async function loadRatings() {
         const ratingSelect = document.getElementById('ratingSelect');
         if (ratingSelect) {
             ratingSelect.innerHTML = `
-            <option value="0">Рейтинг</option>
+            <option value="5">Рейтинг</option>
             ${ratings.map(r => `<option value="${r}">${r}</option>`).join('')}
             `;
         }
@@ -296,6 +297,7 @@ async function loadStatuses() {
         const statusSelect = document.getElementById('statusSelect');
         if (statusSelect) {
             statusSelect.innerHTML = `
+            <option value="В планах">Статус</option>
             ${statuses.map(s => `<option value="${s}">${s}</option>`).join('')}
             `;
         }
@@ -966,6 +968,7 @@ async function addNewData(section) {
         // Перезагружаем данные и рендерим раздел заново
         let data = await window.electronAPI.getData(section);
         await renderSection(section, data, true, false, false, true);
+        filterCards(cardData.name);
     } catch (error) {
         console.error('Ошибка при добавлении:', error);
         await showError(`Ошибка при добавлении: ${error.message}`);
@@ -1453,9 +1456,8 @@ function setupCardClickHandlers() {
 
             const itemName = this.dataset.name;
             if (itemName) {
-                // Открываем поиск в браузере
-                const searchUrl = `https://yandex.ru/search?text=${encodeURIComponent(itemName)}`;
-                window.electronAPI.openSearch(searchUrl);
+                const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(itemName)}`;
+                await window.electronAPI.openSearch(searchUrl);
             }
         });
     });
@@ -1650,8 +1652,7 @@ function setupAddButton() {
                     if (text && nameInput && text !== lastTextFromClipboard && !text.startsWith('http')) {
                         nameInput.value = text;
                         lastTextFromClipboard = text;
-
-                        // Автоматически ищем обложку
+                        updatePreview(text, null, null, null);
                         await autoSearchCover(text);
                     }
 
@@ -1686,7 +1687,7 @@ async function autoSearchCover(title) {
 
             // Обновляем превью
             updatePreview(title, imageUrl,
-                document.getElementById('ratingSelect')?.value || '0',
+                document.getElementById('ratingSelect')?.value || '5',
                 document.getElementById('statusSelect')?.value || 'Уточнить');
         } else {
             if (icoInput) {
