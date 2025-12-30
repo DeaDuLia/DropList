@@ -485,12 +485,7 @@ body {
     user-select: none;
 }
 
-.add-more-container input[type="checkbox"] {
-    width: 16px;
-    height: 16px;
-    margin: 0;
-    cursor: pointer;
-}
+
 
 @keyframes slideDown {
     from {
@@ -1059,11 +1054,6 @@ button:hover {
     font-size: 0.9rem;
 }
 
-.add-more-container input[type="checkbox"] {
-    width: auto;
-    margin: 0;
-    cursor: pointer;
-}
 
 .downloads-count {
     text-align: center;
@@ -1287,4 +1277,116 @@ button:hover {
     white-space: nowrap;
     max-width: 100%; /* Ограничиваем максимальную ширину */
     flex-shrink: 1;
+}
+
+add-form .form-content {
+    display: flex;
+    gap: 20px;
+    align-items: flex-start;
+}
+
+.preview-card {
+    flex: 0 0 250px;
+    min-width: 0;
+}
+
+.preview-data-card {
+    position: relative;
+    background: var(--card-bg);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    aspect-ratio: 16/9;
+    margin-bottom: 10px;
+}
+
+.preview-data-card::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 50%;
+    height: 100%;
+    background: linear-gradient(
+            to right,
+            rgba(255, 255, 255, 0) 0%,
+            rgba(255, 255, 255, 0.1) 50%,
+            rgba(255, 255, 255, 0) 100%
+    );
+    transform: skewX(-20deg);
+    transition: left 0.6s ease-out;
+    z-index: 2;
+}
+
+.preview-data-card:hover::after {
+    left: 150%;
+}
+
+.preview-data-card .game-icon {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    transition: opacity 0.3s ease;
+    position: relative;
+    z-index: 2;
+}
+
+.preview-data-info {
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+    padding: 20px;
+    z-index: 3;
+    color: white;
+}
+
+.preview-data-title {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin: 0;
+    padding: 5px 0;
+    word-break: break-word;
+}
+
+.preview-data-ratings-container {
+    display: flex;
+    gap: 8px;
+    margin-top: 8px;
+}
+
+.preview-card-rating, .preview-card-status {
+    display: inline-block;
+    padding: 4px 12px;
+    text-align: center;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: white;
+    text-shadow: 0 1px 1px rgba(0,0,0,0.2);
+    background-color: var(--rating-0);
+}
+
+.form-fields {
+    flex: 1;
+    min-width: 0;
+}
+
+/* Адаптация для мобильных */
+@media (max-width: 768px) {
+    .add-form .form-content {
+        flex-direction: column;
+    }
+
+    .preview-card {
+        flex: 0 0 auto;
+        width: 100%;
+        max-width: 300px;
+        margin: 0 auto 20px;
+    }
+
+    .form-fields {
+        width: 100%;
+    }
 }
