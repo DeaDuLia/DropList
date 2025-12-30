@@ -18,7 +18,7 @@ const importBtn = document.getElementById('importBtn');
 const replaceBtn = document.getElementById('replaceBtn');
 const donateBtn = document.getElementById('donateBtn');
 const toggleAddFormBtn = document.getElementById('toggleAddFormBtn');
-let lastTextFromClipboard = 'test';
+let lastTextFromClipboard = '';
 
 let isAddingGame = false;
 let currentPage = 1;
