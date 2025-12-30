@@ -45,7 +45,9 @@ function initializeDatabase(db) {
         ('В планах'),
         ('В процессе'),
         ('Завершено'),
-        ('Избранное')
+        ('Избранное'),
+        ('Ожидается'),
+        ('Импортировано')
     `);
     db.exec(`
         CREATE TABLE IF NOT EXISTS sections (
@@ -140,6 +142,7 @@ const statements = {
     //Общее
     getRatings: db.prepare('SELECT rating FROM ratings'),
     getStatuses: db.prepare('SELECT status FROM statuses'),
+    getStatusesNoImport: db.prepare(`SELECT status FROM statuses where status <> 'Импортировано'`),
     importData: db.prepare(`
         INSERT OR IGNORE INTO data_cards 
         (name, section, ico_url, rating, status, description) 
@@ -336,6 +339,12 @@ ipcMain.handle('get-statuses', () => {
         .map(row => row.status);
 });
 
+ipcMain.handle('get-statuses-no-import', () => {
+    return statements.getStatusesNoImport
+        .all()
+        .map(row => row.status);
+});
+
 ipcMain.handle('get-data', async (event, section) => {
     return statements.getDataBySection.all(section);
 });
@@ -452,7 +461,7 @@ ipcMain.handle('import-data', async () => {
                             category,
                             item.icoUrl || null,
                             item.rating || '0',
-                            item.status || 'Уточнить',
+                            'Импортировано',
                             item.description || ''
                         );
                     });
@@ -494,18 +503,18 @@ ipcMain.handle('replace-data', async () => {
             db.exec('DELETE FROM tags_assign');
             db.exec('DELETE FROM data_cards');
 
-            db.exec('DELETE FROM ratings');
-            db.exec('DELETE FROM statuses');
+            // db.exec('DELETE FROM ratings');
+            // db.exec('DELETE FROM statuses');
 
             // Импортируем рейтинги и статусы
             if (data.ratings) {
                 data.ratings.forEach(rating => {
-                    db.prepare('INSERT INTO ratings (rating) VALUES (?)').run(rating);
+                    db.prepare('INSERT OR IGNORE  INTO ratings (rating) VALUES (?)').run(rating);
                 });
             }
             if (data.statuses) {
                 data.statuses.forEach(status => {
-                    db.prepare('INSERT INTO statuses (status) VALUES (?)').run(status);
+                    db.prepare('INSERT OR IGNORE INTO statuses (status) VALUES (?)').run(status);
                 });
             }
 

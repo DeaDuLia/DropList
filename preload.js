@@ -4,6 +4,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     //Общие
     getRatings: () => ipcRenderer.invoke('get-ratings'),
     getStatuses: () => ipcRenderer.invoke('get-statuses'),
+    getStatusesNoImport: () => ipcRenderer.invoke('get-statuses-no-import'),
     openExternal: (url, name) => ipcRenderer.send('open-external', url, name),
 
     exportData: () => ipcRenderer.invoke('export-data'),

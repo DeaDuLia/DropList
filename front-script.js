@@ -614,9 +614,11 @@ function sortData(data, sortBy) {
     const statusPriority = {
         'Избранное': 1,
         'Завершено': 2,
-        'Смотрел': 3,
-        'В процессе': 4,
-        'Уточнить': 5
+        'Импортировано': 3,
+        'Смотрел': 4,
+        'В процессе': 5,
+        'Уточнить': 6,
+        'Ожидается': 7
     };
 
     return [...data].sort((a, b) => {
@@ -1093,7 +1095,7 @@ async function showEditableDropdown(field, valueDisplay) {
     if (isRating) {
         values = await window.electronAPI.getRatings();
     } else {
-        values = await window.electronAPI.getStatuses();
+        values = await window.electronAPI.getStatusesNoImport();
     }
 
     // Создаем список
@@ -1201,7 +1203,9 @@ function getStatusColor(status) {
         'В процессе': 'var(--rating-playing)',
         'В планах': 'var(--rating-planed)',
         'Завершено': 'var(--rating-completed)',
-        'Избранное': 'var(--rating-pined)'
+        'Избранное': 'var(--rating-pined)',
+        'Импортировано': 'var(--rating-imported)',
+        'Ожидается': 'var(--rating-waiting)'
     };
     return statusColors[status] || 'var(--rating-not-played)';
 }
