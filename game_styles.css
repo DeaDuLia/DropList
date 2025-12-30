@@ -62,6 +62,8 @@
     --rating-playing: #1abc9c; /* Фиолетовый */
     --rating-completed: #27ae60; /* Бирюзовый */
     --rating-pined: #aa8f02; /* Бирюзовый */
+    --rating-imported: #89009e; /* Бирюзовый */
+    --rating-waiting: #059801;
     --rating-planed: #0296aa; /* Бирюзовый */
 }
 /* Шапка */
@@ -682,6 +684,12 @@ body {
 .card-rating[data-rating="-4"] { background-color: var(--rating--4); }
 .card-rating[data-rating="-5"] { background-color: var(--rating--5); }
 /* Специальные статусы */
+.card-status[data-status="Импортировано"] {
+    background-color: var(--rating-imported);
+}
+.card-status[data-status="Ожидается"] {
+    background-color: var(--rating-waiting);
+}
 .card-status[data-status="Уточнить"] {
     background-color: var(--rating-not-played);
 }
@@ -700,14 +708,14 @@ body {
 }
 .card-status[data-status="Избранное"] {
     background-color: var(--rating-pined);
-    animation: pulse 2s infinite;
-}
-.card-status[data-status="Завершено"] {
-    background-color: var(--rating-completed);
     position: relative;
 }
 .card-status[data-status="Избранное"] {
     background-color: var(--rating-pined);
+    animation: pulse 2s infinite;
+}
+.card-status[data-status="Завершено"] {
+    background-color: var(--rating-completed);
     position: relative;
 }
 
