@@ -1655,7 +1655,6 @@ function setupAddButton() {
                         updatePreview(text, null, null, null);
                         await autoSearchCover(text);
                     }
-
                     document.getElementById('nameInput')?.focus();
                 } catch (error) {
                     console.error('Ошибка чтения буфера обмена:', error);
@@ -1671,6 +1670,8 @@ async function autoSearchCover(title) {
     const icoInput = document.getElementById('icoInput');
     if (icoInput) {
         icoInput.value = 'Ищем обложку...';
+        icoInput.style.color = '#28a745';
+        icoInput.style.borderColor = '#28a745';
         icoInput.disabled = true;
     }
 
@@ -1695,6 +1696,9 @@ async function autoSearchCover(title) {
                 icoInput.disabled = false;
             }
         }
+        icoInput.style.color = null;
+        icoInput.style.borderColor = null;
+
     } catch (error) {
         console.error('Ошибка поиска обложки:', error);
         if (icoInput) {
