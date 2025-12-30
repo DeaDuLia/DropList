@@ -1679,6 +1679,7 @@ async function autoSearchCover(title) {
         const section = document.querySelector('.nav-item.active')?.dataset.section;
         let imageUrl = '';
 
+
         // Можно использовать разные поиски в зависимости от категории
         imageUrl = await window.electronAPI.searchImage(title);
 
