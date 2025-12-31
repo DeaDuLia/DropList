@@ -678,6 +678,7 @@ function getSectionTitle(section) {
     const titles = {
         games: '🎮 Игры',
         movies: '🎬 Кино',
+        cartoons: '🎥 Мульты',
         serials: '📺 Сериалы',
         anime: '🌸 Аниме',
         books: '📚 Книги'
@@ -764,8 +765,9 @@ function showCategoryChangeModal(oldSection, itemName, icoUrl, status, rating) {
             <p>Выберите новую категорию</p>
             <select id="categorySelect" class="edit-select">
                 <option value="games">🎮 Игры</option>
-                <option value="movies">🎬 Кино</option>
                 <option value="serials">📺 Сериалы</option>
+                <option value="movies">🎬 Кино</option>
+                <option value="cartoons">🎥 Мульты</option>
                 <option value="anime">🌸 Аниме</option>
                 <option value="books">📚 Книги</option>
             </select>
@@ -970,7 +972,11 @@ async function addNewData(section) {
         // Перезагружаем данные и рендерим раздел заново
         let data = await window.electronAPI.getData(section);
         await renderSection(section, data, true, false, false, true);
-        filterCards(cardData.name);
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput) {
+            searchInput.value = cardData.name;
+            filterCards(cardData.name);
+        }
     } catch (error) {
         console.error('Ошибка при добавлении:', error);
         await showError(`Ошибка при добавлении: ${error.message}`);
