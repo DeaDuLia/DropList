@@ -1,5 +1,6 @@
 {
   "name": "DropList",
+  "productName": "DropList",
   "version": "1.0.0",
   "main": "main.js",
   "author": "Nikita <nvdeshin@gmail.com>",
@@ -13,21 +14,56 @@
     "build": "electron-builder",
     "build-win": "npm run rebuild && electron-builder --win",
     "build-mac": "npm run rebuild && electron-builder --mac --config.mac.identity=null",
-    "build-linux": "npm run rebuild && electron-builder --linux"
+    "build-linux": "npm run rebuild && electron-builder --linux",
+    "package:win": "electron-packager . DropList --platform=win32 --arch=x64 --icon=icon.ico --out=dist-packaged --overwrite --app-copyright=\"Copyright © 2026 Nikita\" --app-version=1.0.0 --build-version=1.0.0",
+    "package:win-portable": "electron-packager . DropList --platform=win32 --arch=x64 --icon=icon.ico --out=dist-packaged --overwrite --asar --prune=true",
+    "package:all": "npm run package:win",
+    "installer:win": "electron-builder --win --config.extraMetadata.name=DropList"
   },
   "build": {
     "appId": "com.deshin.droplist",
+    "productName": "DropList",
+    "copyright": "Copyright © 2026 Nikita",
     "icon": "icon.ico",
+    "files": [
+      "**/*",
+      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+      "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+      "!**/node_modules/*.d.ts",
+      "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}",
+      "!.editorconfig",
+      "!**/._*",
+      "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}",
+      "!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}",
+      "!**/{appveyor.yml,.travis.yml,circle.yml}",
+      "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}"
+    ],
     "linux": { "target": [] },
     "mac": { "target": [] },
     "win": {
       "signAndEditExecutable": false,
-      "target": ["nsis"],
-      "icon": "icon.ico"
+      "target": "nsis",
+      "icon": "icon.ico",
+      "executableName": "DropList"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "DropList",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "uninstallDisplayName": "DropList"
     },
     "publish": null,
     "extraResources": [
-      { "from": "database.db", "to": "../" }
+      { "from": "database.db", "to": "../" },
+      {
+        "from": "build/app.manifest",
+        "to": ".",
+        "filter": ["**/*"]
+      }
     ]
   },
   "dependencies": {
@@ -36,6 +72,7 @@
   "devDependencies": {
     "electron": "^37.2.0",
     "electron-builder": "^26.0.12",
-    "electron-rebuild": "^3.2.9"
+    "electron-rebuild": "^3.2.9",
+    "electron-packager": "^17.1.2"
   }
 }

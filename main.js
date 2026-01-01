@@ -5,6 +5,12 @@ const path = require('path');
 const Database = require('better-sqlite3');
 const https = require('https');
 
+app.name = 'DropList';
+app.setName('DropList');
+if (process.platform === 'win32') {
+    app.setAppUserModelId('com.deshin.droplist');
+}
+
 function getIconPath() {
     if (process.platform === 'darwin') {
         return path.join(__dirname, 'icon.icns');
@@ -177,6 +183,19 @@ function createWindow() {
             preload: path.join(__dirname, 'preload.js')
         }
     });
+    win.setTitle('DropList');
+    if (process.platform === 'win32') {
+        win.setAppDetails({
+            appId: 'com.deshin.droplist',
+            appIconPath: getIconPath(),
+            appIconIndex: 0,
+            relaunchCommand: process.execPath,
+            relaunchDisplayName: 'DropList'
+        });
+    }
+    if (process.platform === 'darwin') {
+        app.setName('DropList');
+    }
     win.setMenu(null)
     win.loadFile('index.html');
 
@@ -195,6 +214,7 @@ setInterval(() => {
 
 ipcMain.on('open-external', (event, url, name) => {
     const externalWindow = new BrowserWindow({
+        title: 'DropList - Поиск обложки',
         width: 1000,
         height: 800,
         icon: getIconPath(),
@@ -204,6 +224,14 @@ ipcMain.on('open-external', (event, url, name) => {
         },
         show: false
     });
+    externalWindow.setTitle('DropList - Поиск обложки');
+    if (process.platform === 'win32') {
+        externalWindow.setAppDetails({
+            appId: 'com.deshin.droplist',
+            appIconPath: getIconPath(),
+            appIconIndex: 0
+        });
+    }
     externalWindow.setMenu(null)
     externalWindow.loadURL(url);
 
