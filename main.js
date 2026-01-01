@@ -236,7 +236,7 @@ ipcMain.on('open-external', (event, url, name) => {
             nodeIntegration: false,
             preload: path.join(__dirname, 'preload-external.js')
         },
-        show: false
+        show: true
     });
     externalWindow.setTitle('DropList - Поиск обложки');
     if (process.platform === 'win32') {
@@ -247,7 +247,7 @@ ipcMain.on('open-external', (event, url, name) => {
         });
     }
     externalWindow.setMenu(null)
-    externalWindow.loadURL(url);
+    externalWindow.loadFile('loading.html');
 
     // Блокируем навигацию
     externalWindow.webContents.on('will-navigate', (event, navigationUrl) => {
@@ -261,8 +261,18 @@ ipcMain.on('open-external', (event, url, name) => {
     });
 
     externalWindow.webContents.on('did-finish-load', () => {
-        externalWindow.show();
-        externalWindow.webContents.executeJavaScript(`
+        if (externalWindow.webContents.getURL().endsWith('loading.html')) {
+            setTimeout(() => {
+                externalWindow.loadURL(url);
+            }, 500);
+        } else {
+            initializeRealPage(externalWindow, url, name);
+        }
+    });
+});
+
+function initializeRealPage(externalWindow, url, name) {
+    externalWindow.webContents.executeJavaScript(`
             const style = document.createElement('style');
             style.textContent = \`           
                 a { pointer-events: none !important; }
@@ -350,8 +360,7 @@ ipcMain.on('open-external', (event, url, name) => {
                 }, 1500); 
             }  
         `);
-    });
-});
+}
 
 ipcMain.on('message-from-external', (event, imgUrl, name) => {
     // Отправляем сообщение в index.html
