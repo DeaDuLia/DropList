@@ -93,6 +93,13 @@ function initializeDatabase(db) {
             FOREIGN KEY (card_name) REFERENCES data_cards (name)
         )
     `);
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS app_statistics (
+            info TEXT PRIMARY KEY,
+            value TEXT,
+            actual_date DATETIME NOT NULL
+        )
+    `);
 }
 
 async function getGitHubDownloads() {
@@ -168,6 +175,13 @@ const statements = {
     updateDataRating: db.prepare('UPDATE data_cards SET rating = ? WHERE name = ? and section = ?'),
     updateDataStatus: db.prepare('UPDATE data_cards SET status = ? WHERE name = ? and section = ?'),
     getDataCount: db.prepare('select count(*) as allCount from data_cards WHERE name = ? and section = ?'),
+    getStatistic: db.prepare('SELECT value, actual_date FROM app_statistics WHERE info = ?'),
+    setStatistic: db.prepare(`
+        INSERT OR REPLACE INTO app_statistics (info, value, actual_date) 
+        VALUES (?, ?, ?)
+    `),
+    deleteStatistic: db.prepare('DELETE FROM app_statistics WHERE info = ?'),
+    getAllStatistics: db.prepare('SELECT info, value, actual_date FROM app_statistics')
 };
 
 let win;
@@ -346,9 +360,46 @@ ipcMain.on('message-from-external', (event, imgUrl, name) => {
     }
 });
 
+async function getCachedGitHubDownloads() {
+    try {
+        const cachedData = statements.getStatistic.get('last_downloads');
+
+        if (cachedData) {
+            const cacheDate = new Date(cachedData.actual_date);
+            const now = new Date();
+            const diffHours = (now - cacheDate) / (1000 * 60 * 60);
+
+            if (diffHours < 1) {
+                console.log('Using cached downloads count');
+                return parseInt(cachedData.value) || 0;
+            }
+        }
+
+        console.log('Fetching fresh downloads count');
+        const downloads = await getGitHubDownloads();
+
+        statements.setStatistic.run(
+            'last_downloads',
+            downloads.toString(),
+            new Date().toISOString()
+        );
+
+        return downloads;
+
+    } catch (error) {
+        console.error('Error in getCachedGitHubDownloads:', error);
+        const cachedData = statements.getStatistic.get('last_downloads');
+        if (cachedData) {
+            return parseInt(cachedData.value) || 0;
+        }
+
+        return 0;
+    }
+}
+
 ipcMain.handle('get-github-downloads', async () => {
     try {
-        const downloads = await getGitHubDownloads();
+        const downloads = await getCachedGitHubDownloads();
         return { success: true, downloads };
     } catch (error) {
         console.error('Error getting GitHub downloads:', error);

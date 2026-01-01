@@ -19,6 +19,7 @@
     "package:win-portable": "electron-packager . DropList --platform=win32 --arch=x64 --icon=icon.ico --out=dist-packaged --overwrite --asar --prune=true",
     "package:all": "npm run package:win",
     "create-installer": "electron-builder --win --prepackaged=../dist-packaged/DropList-win32-x64"
+
   },
   "build": {
     "appId": "com.deshin.droplist",
@@ -27,6 +28,7 @@
     "icon": "icon.ico",
     "files": [
       "**/*",
+      "!**/dist/*",
       "!**/node_modules/{electron,electron-builder,electron-rebuild,electron-packager}/**",
       "**/node_modules/better-sqlite3/**",
       "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
