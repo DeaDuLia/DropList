@@ -474,6 +474,7 @@ ipcMain.handle('export-data', async () => {
         const data = {
             games: statements.getDataBySection.all('games'),
             movies: statements.getDataBySection.all('movies'),
+            cartoons: statements.getDataBySection.all('cartoons'),
             serials: statements.getDataBySection.all('serials'),
             anime: statements.getDataBySection.all('anime'),
             books: statements.getDataBySection.all('books'),
