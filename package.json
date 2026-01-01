@@ -15,10 +15,10 @@
     "build-win": "npm run rebuild && electron-builder --win",
     "build-mac": "npm run rebuild && electron-builder --mac --config.mac.identity=null",
     "build-linux": "npm run rebuild && electron-builder --linux",
-    "package:win": "electron-packager . DropList --platform=win32 --arch=x64 --icon=icon.ico --out=dist-packaged --overwrite --app-copyright=\"Copyright © 2026 Nikita\" --app-version=1.0.0 --build-version=1.0.0",
+    "package:win": "electron-packager . DropList --platform=win32 --arch=x64 --icon=icon.ico --out=../dist-packaged --overwrite --app-copyright=\"Copyright © 2026 Nikita\" --app-version=1.0.0 --build-version=1.0.0",
     "package:win-portable": "electron-packager . DropList --platform=win32 --arch=x64 --icon=icon.ico --out=dist-packaged --overwrite --asar --prune=true",
     "package:all": "npm run package:win",
-    "create-installer": "electron-builder --win --prepackaged=dist-packaged/DropList-win32-x64"
+    "create-installer": "electron-builder --win --prepackaged=../dist-packaged/DropList-win32-x64"
   },
   "build": {
     "appId": "com.deshin.droplist",
@@ -27,16 +27,15 @@
     "icon": "icon.ico",
     "files": [
       "**/*",
-      "!**/node_modules/*/{CHANGELOG.md,README.md,README,readme.md,readme}",
+      "!**/node_modules/{electron,electron-builder,electron-rebuild,electron-packager}/**",
+      "**/node_modules/better-sqlite3/**",
       "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
       "!**/node_modules/*.d.ts",
-      "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj}",
-      "!.editorconfig",
-      "!**/._*",
-      "!**/{.DS_Store,.git,.hg,.svn,CVS,RCS,SCCS,.gitignore,.gitattributes}",
-      "!**/{__pycache__,thumbs.db,.flowconfig,.idea,.vs,.nyc_output}",
-      "!**/{appveyor.yml,.travis.yml,circle.yml}",
-      "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json}"
+      "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj,vcxproj}",
+      "!**/*.map",
+      "!**/*.log",
+      "!**/README*",
+      "!**/CHANGELOG*"
     ],
     "linux": { "target": [] },
     "mac": { "target": [] },
