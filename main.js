@@ -60,6 +60,7 @@ function initializeDatabase(db) {
         VALUES
         ('games', '🎮'),
         ('movies', '🎬'),
+        ('cartoons', '🎥'),
         ('serials', '📺'),
         ('anime', '🌸'),
         ('books', '📚')
