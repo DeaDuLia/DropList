@@ -379,7 +379,6 @@ async function getCachedGitHubDownloads() {
             const diffHours = (now - cacheDate) / (1000 * 60 * 60);
 
             if (diffHours < 1) {
-                console.log('Using cached downloads count');
                 return parseInt(cachedData.value) || 0;
             }
         }
