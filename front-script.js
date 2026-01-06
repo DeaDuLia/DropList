@@ -404,7 +404,7 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
                         </select>
                     </div>
                     <div class="search-container">
-                        <input type="text" id="searchInput" placeholder="Поиск..." value="${currentFilters.searchQuery}">
+                        <input type="text" id="searchInput" placeholder="Поиск по названию" value="${currentFilters.searchQuery}">
                         <div id="searchSuggestions" class="search-suggestions"></div>
                         <button id="searchBtn"><img src="assets/icons/find.svg" alt="🔍" class="button-icon-no-text"></button>
                         <button id="clearSearchBtn" class="clear-search-btn" ${currentFilters.searchQuery ? '' : 'style="display: none;"'}>✕</button>

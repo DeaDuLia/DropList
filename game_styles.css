@@ -29,6 +29,7 @@
     --dark-input-border-hover-color-2: #FF890F70;
 
     --dark-nav-background: #FFFFFF19;
+    --dark-nav-alt-background: #00000019;
     --dark-nav-active-background: #FFFFFF33;
     --dark-button-background: #6c5ce7;
     --dark-button-hover-background: #5649d1;
@@ -71,7 +72,6 @@
     display: flex;
     background-color: var(--dark-header-background);
     color: var(--dark-header-color);
-    margin-bottom: 30px;
     box-shadow: var(--shadow);
 }
 /* Кнопки на шапке */
@@ -131,11 +131,7 @@
     height: 3px;
     background-color: var(--dark-header-color);
 }
-.nav-item.active:hover {
-    background: linear-gradient(135deg, rgba(108, 92, 231, 0.1) 0%, rgba(141, 67, 172, 0.7) 100%);
-    box-shadow: 0 2px 2px rgba(108, 92, 231, 0.4);
-    backdrop-filter: blur(10px);
-}
+
 
 .nav-item span {
     display: inline-block;
@@ -324,6 +320,15 @@ body {
     box-sizing: border-box;
     border-right: none; /* Убираем правую границу, так как кнопка будет сливаться */
     border-radius: 8px 0 0 8px;
+}
+
+#searchInput:focus {
+    color: var(--rating-completed);
+    border-color: var(--rating-completed);
+}
+
+#searchInput:focus::placeholder {
+    color: var(--rating-completed);
 }
 
 .search-suggestions {
@@ -1397,7 +1402,7 @@ add-form .form-content {
 /* Кнопки фильтров */
 .filter-button {
     opacity: 0.8;
-    background-color: var(--dark-section-background);
+    background-color: var(--dark-nav-alt-background);
     color: var(--dark-input-color);
     border: none;
     border-radius: 0;
@@ -1414,6 +1419,7 @@ add-form .form-content {
     border-radius: 0;
     position: relative;
     overflow: hidden;
+
 }
 
 .filter-button:hover {
@@ -1426,7 +1432,7 @@ add-form .form-content {
 
 .filter-button.active {
     /*background: linear-gradient(135deg, rgba(108, 92, 231, 0.1) 0%, rgba(2, 150, 170, 0.4) 100%);*/
-    background-color: var(--dark-nav-active-background);
+
     box-shadow: 0 2px 2px rgba(108, 92, 231, 0.4);
     backdrop-filter: blur(10px);
     color: white;
