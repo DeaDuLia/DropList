@@ -189,7 +189,7 @@
 }
 
 .header-button:hover, .add-button:hover {
-    background-color: var(--dark-nav-active-background);
+    background-color: #8e44ad;
 }
 /* Анимация кнопок */
 @media (max-width: 800px) {
@@ -224,7 +224,7 @@ body {
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    max-height: calc(100vh - 140px);
+    max-height: calc(100vh - 110px);
 }
 .content-wrapper {
     flex: 1;
