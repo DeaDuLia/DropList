@@ -1750,31 +1750,20 @@ function setupFilterButtons() {
 
 function setupSortButtons() {
     const sortButtons = document.querySelectorAll('.sort-button');
-
-    // Устанавливаем активную кнопку по умолчанию
     sortButtons.forEach(button => {
         if (button.dataset.sort === (currentFilters.sortBy || 'date')) {
             button.classList.add('active');
         } else {
             button.classList.remove('active');
         }
-
-        // Удаляем старые обработчики
         button.replaceWith(button.cloneNode(true));
     });
-
-    // Добавляем новые обработчики
     document.querySelectorAll('.sort-button').forEach(button => {
         button.addEventListener('click', () => {
-            // Снимаем активный класс со всех кнопок
             document.querySelectorAll('.sort-button').forEach(btn => {
                 btn.classList.remove('active');
             });
-
-            // Добавляем активный класс текущей кнопке
             button.classList.add('active');
-
-            // Обновляем фильтр и применяем сортировку
             currentFilters.sortBy = button.dataset.sort;
             filterCards(currentFilters.searchQuery);
         });
