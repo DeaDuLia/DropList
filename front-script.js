@@ -391,40 +391,43 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
     `;
     // Рендерим контент во wrapper
     contentWrapper.innerHTML = `
-        <div class="content-wrapper">
-            <!-- Кнопки фильтрации - ВЕРХНЯЯ СТРОКА -->
-            <div class="filter-controls-panel">
-                <!-- Остальные элементы управления -->
-                <div class="filter-actions-container">
-                    <div class="filter-container">
-                        <select id="sortFilter">
-                            <option value="date">Сортировка</option>
-                            <option value="alphabet">Алфавит</option>
-                            <option value="rating">Рейтинг</option>
-                        </select>
-                    </div>
-                    <div class="search-container">
-                        <input type="text" id="searchInput" placeholder="Поиск по названию" value="${currentFilters.searchQuery}">
-                        <div id="searchSuggestions" class="search-suggestions"></div>
-                        <button id="searchBtn"><img src="assets/icons/find.svg" alt="🔍" class="button-icon-no-text"></button>
-                        <button id="clearSearchBtn" class="clear-search-btn" ${currentFilters.searchQuery ? '' : 'style="display: none;"'}>✕</button>
-                        <button id="randomBtnSection" title="Случайная карточка"><img src="assets/icons/random.svg" alt="🎲" class="button-icon">Случайное</button>
-                        <button id="searchInWeb" title="Поиск в интернете"><img src="assets/icons/find.svg" alt="🔍" class="button-icon">Популярное</button>
-                    </div>
-                    <div class="add-button-container">
-                        <button id="toggleAddFormBtn" class="add-button">+ Добавить</button>
-                    </div>
-                </div>
+    <div class="content-wrapper">
+        <!-- Кнопки фильтрации - ВЕРХНЯЯ СТРОКА -->
+        <div class="filter-controls-panel">
+            <div class="filter-container sort-buttons-container">
+                <button class="sort-button active" data-sort="date" title="По дате добавления">
+                    <img src="assets/icons/sort-date.svg" alt="📅" class="button-icon-no-text">
+                </button>
+                <button class="sort-button" data-sort="alphabet" title="По алфавиту">
+                    <img src="assets/icons/sort-alpha.svg" alt="🔤" class="button-icon-no-text">
+                </button>
+                <button class="sort-button" data-sort="rating" title="По рейтингу и статусу">
+                    <img src="assets/icons/sort-rating.svg" alt="⭐" class="button-icon-no-text">
+                </button>
+            </div>
+            <div class="search-container">
+                <input type="text" id="searchInput" placeholder="Поиск по названию" value="${currentFilters.searchQuery}">
+                <div id="searchSuggestions" class="search-suggestions"></div>
+                <button id="searchBtn"><img src="assets/icons/find.svg" alt="🔍" class="button-icon-no-text"></button>
+                <button id="clearSearchBtn" class="clear-search-btn" ${currentFilters.searchQuery ? '' : 'style="display: none;"'}>✕</button>
+                <button id="randomBtnSection" title="Случайная карточка"><img src="assets/icons/random.svg" alt="🎲" class="button-icon">Случайное</button>
+                <button id="searchInWeb" title="Поиск в интернете"><img src="assets/icons/find.svg" alt="🔍" class="button-icon">Популярное</button>
             </div>
             
-            ${getAddFormHTML(addMoreChecked, addFormVisible)}
-            <div id="dataList" class="data-grid"></div>
-            <div id="loadingIndicator" class="loading-indicator" style="display: none;">
-                <div class="loading-spinner"></div>
-                <p>Загрузка...</p>
+            <!-- Кнопка добавления должна быть ВНЕ search-container -->
+            <div class="add-button-container">
+                <button id="toggleAddFormBtn" class="add-button">+ Добавить</button>
             </div>
         </div>
-    `;
+            
+        ${getAddFormHTML(addMoreChecked, addFormVisible)}
+        <div id="dataList" class="data-grid"></div>
+        <div id="loadingIndicator" class="loading-indicator" style="display: none;">
+            <div class="loading-spinner"></div>
+            <p>Загрузка...</p>
+        </div>
+    </div>
+`;
 
     // Инициализируем секцию
     await initCardSection();
@@ -669,9 +672,8 @@ function sortData(data, sortBy) {
 
 function filterCards(query = '') {
     const statusFilter = currentFilters.statusFilter || 'Все';
-    const sortFilter = document.getElementById('sortFilter');
-    const selectedSort = sortFilter ? sortFilter.value : 'date';
     const clearSearchBtn = document.getElementById('clearSearchBtn');
+    const selectedSort = currentFilters.sortBy || 'date';
 
     // Сохраняем текущие фильтры
     currentFilters = {
@@ -717,13 +719,7 @@ async function initCardSection() {
     ]);
 
     // Добавляем обработчик сортировки
-    const sortFilter = document.getElementById('sortFilter');
-    if (sortFilter) {
-        sortFilter.value = currentFilters.sortBy || 'date';
-        sortFilter.addEventListener('change', () => {
-            filterCards(currentFilters.searchQuery);
-        });
-    }
+    setupSortButtons();
     setupFilterButtons();
     const activeButton = document.querySelector(`.filter-button[data-status="${currentFilters.statusFilter || 'Все'}"]`);
     if (activeButton) {
@@ -1758,6 +1754,39 @@ function setupFilterButtons() {
             });
             button.classList.add('active');
             currentFilters.statusFilter = button.dataset.status;
+            filterCards(currentFilters.searchQuery);
+        });
+    });
+}
+
+function setupSortButtons() {
+    const sortButtons = document.querySelectorAll('.sort-button');
+
+    // Устанавливаем активную кнопку по умолчанию
+    sortButtons.forEach(button => {
+        if (button.dataset.sort === (currentFilters.sortBy || 'date')) {
+            button.classList.add('active');
+        } else {
+            button.classList.remove('active');
+        }
+
+        // Удаляем старые обработчики
+        button.replaceWith(button.cloneNode(true));
+    });
+
+    // Добавляем новые обработчики
+    document.querySelectorAll('.sort-button').forEach(button => {
+        button.addEventListener('click', () => {
+            // Снимаем активный класс со всех кнопок
+            document.querySelectorAll('.sort-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+
+            // Добавляем активный класс текущей кнопке
+            button.classList.add('active');
+
+            // Обновляем фильтр и применяем сортировку
+            currentFilters.sortBy = button.dataset.sort;
             filterCards(currentFilters.searchQuery);
         });
     });

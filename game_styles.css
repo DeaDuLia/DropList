@@ -184,8 +184,12 @@
     transform: scale(1.1);
 }
 
-.header-button:hover, .add-button:hover {
+.header-button:hover {
     background-color: #8e44ad;
+}
+
+.add-button:hover {
+    background-color: var(--dark-nav-active-background);
 }
 /* Анимация кнопок */
 @media (max-width: 800px) {
@@ -307,10 +311,8 @@ body {
     align-items: center;
     min-width: 300px;
     max-width: 100%;
-    flex: 1;
 }
 #searchInput {
-    width: 100%;
     padding: 10px 40px 10px 15px; /* Правое padding для кнопки */
     border: 1px solid var(--dark-input-border);
     background-color: var(--dark-input-background);
@@ -1179,7 +1181,8 @@ input:focus, select:focus {
 }
 
 .add-button-container {
-    flex-shrink: 0;
+    margin-left: auto;
+    margin-right: 0;
 }
 
 .add-button {
@@ -1495,7 +1498,10 @@ add-form .form-content {
 
 .filter-controls-panel {
     display: flex;
-    flex-direction: column;
+    flex-direction: row; /* Важно: горизонтальное расположение */
+    flex-wrap: wrap; /* Позволяет переноситься на мобильных */
+    justify-content: space-between; /* Распределение пространства */
+    align-items: center; /* Выравнивание по вертикали */
     gap: 10px;
     background: rgba(108, 92, 231, 0.05);
     backdrop-filter: blur(10px);
@@ -1506,7 +1512,6 @@ add-form .form-content {
     top: 0;
     z-index: 20;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    margin-top: 0;
 }
 
 .filter-actions-container {
@@ -1536,9 +1541,45 @@ add-form .form-content {
     padding: 0;
 }
 
-.filter-container {
+
+.sort-buttons-container {
     display: flex;
+    gap: 5px;
     align-items: center;
-    flex-shrink: 0;
 }
 
+.sort-button {
+    width: 40px;
+    height: 40px;
+    background-color: var(--dark-nav-background);
+    border: 1px solid var(--dark-input-border);
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    padding: 0;
+
+}
+
+.sort-button:hover {
+    background-color: var(--dark-nav-active-background);
+    border-color: var(--dark-input-border-hover-color);
+    transform: translateY(-1px);
+}
+
+.sort-button.active {
+    filter: brightness(2);
+    border-color: var(--rating-completed);
+}
+
+.sort-button img {
+    width: 16px;
+    height: 16px;
+    filter: invert(0.8);
+}
+
+.sort-button.active img {
+    filter: invert(1) brightness(2);
+}
