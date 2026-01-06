@@ -73,9 +73,7 @@
     align-items: center;
     background-color: var(--dark-header-background);
     color: var(--dark-header-color);
-    padding: 0 20px;
     margin-bottom: 30px;
-    border-radius: 12px;
     box-shadow: var(--shadow);
 }
 /* Кнопки на шапке */
@@ -225,20 +223,18 @@ body {
 /* Секция контента */
 .content-section {
     background: var(--dark-section-background);
-    padding: 25px;
-    border-radius: 12px;
-    box-shadow: var(--shadow);
+    padding-bottom: 25px;
     margin-bottom: 30px;
+    box-shadow: var(--shadow);
     display: flex;
     flex-direction: column;
-    overflow: hidden; /* Важно: скрываем переполнение родителя */
-    max-height: calc(100vh - 200px); /* Ограничиваем высоту */
+    overflow: hidden;
+    max-height: calc(100vh - 200px);
 }
 .content-wrapper {
     flex: 1;
     overflow-y: auto; /* Включаем вертикальный скролл */
     overflow-x: hidden; /* Отключаем горизонтальный скролл */
-    padding-right: 5px; /* Чтобы контент не заезжал под скроллбар */
 }
 
 /* Адаптация для мобильных устройств */
@@ -276,11 +272,12 @@ body {
     z-index: 10;
 }
 .section-title {
-    color: #ffffff !important;               /* Чистый белый */
-    text-shadow: 0 2px 4px rgba(0,0,0,0.3); /* Тень для объёма */
+    color: #ffffff !important;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.3);
     position: relative;
     display: inline-block;
     padding-bottom: 8px;
+    margin: 0;
 }
 .section-title::after {
     content: "";
@@ -289,24 +286,27 @@ body {
     left: 0;
     width: 100%;
     height: 2px;
-    background: linear-gradient(90deg, #6c5ce7, #a29bfe); /* Фиолетовый градиент */
+    background: linear-gradient(90deg, #6c5ce7, #a29bfe);
     border-radius: 2px;
 }
-/* Фильтры */
-.filter-container {
+/* Контейнер для всех элементов справа от заголовка */
+.section-header > div {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    column-gap: 20px;
+    gap: 15px;
+    margin-left: auto;
+    min-width: 0;
+    flex: 1;
+    justify-content: flex-end;
 }
+
 #statusFilter, #sortFilter {
-    padding: 10px 0;
-    border: 1px solid var(--dark-input-hover-background);
     font-size: 1rem;
     transition: all 0.3s ease;
 }
 #statusFilter:focus, #sortFilter:focus {
     outline: none;
-    border-color: var(--dark-primary-color);
     box-shadow: 0 0 0 2px var(--dark-primary-shadow);
 }
 /* Поисковик */
@@ -315,7 +315,8 @@ body {
     display: flex;
     align-items: center;
     min-width: 300px;
-
+    max-width: 100%;
+    flex: 1;
 }
 #searchInput {
     width: 100%;
@@ -956,17 +957,17 @@ input:focus, select:focus {
     border-color: var(--dark-input-border-focus);
     outline: none;
 }
-button {
-    background-color: var(--dark-primary-color);
-    color: white;
-    border: none;
-    border-radius: 8px;
-    font-size: 1rem;
-    cursor: pointer;
-    transition: background-color 0.3s;
-    display: block;
-    width: 100%;
-}
+/*button {*/
+/*    background-color: var(--dark-primary-color);*/
+/*    color: white;*/
+/*    border: none;*/
+/*    border-radius: 8px;*/
+/*    font-size: 1rem;*/
+/*    cursor: pointer;*/
+/*    transition: background-color 0.3s;*/
+/*    display: block;*/
+/*    width: 100%;*/
+/*}*/
 button:hover {
     background-color: #5649d1;
 }
@@ -1174,9 +1175,7 @@ button:hover {
 }
 
 .add-button-container {
-    margin-left: auto;
-    display: flex;
-    align-items: center;
+    flex-shrink: 0;
 }
 
 .add-button {
@@ -1274,6 +1273,10 @@ button:hover {
     white-space: nowrap;
     max-width: 100%;
     flex-shrink: 1;
+    border: none;
+    display: block;
+    width: 100%;
+
 }
 
 .add-button {
@@ -1398,3 +1401,167 @@ add-form .form-content {
         width: 100%;
     }
 }
+
+
+
+/* Кнопки фильтров */
+.filter-button {
+    background-color: var(--dark-nav-background);
+    color: var(--dark-input-color);
+    border: none;
+    border-radius: 0;
+    font-size: 0.9rem;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.3s ease;
+    flex-shrink: 0;
+    height: 25px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    border-radius: 0;
+    position: relative;
+    overflow: hidden;
+    border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.filter-button:last-child {
+    border-right: none;
+}
+
+.filter-button:hover {
+    background-color: var(--dark-nav-active-background);
+    transform: none;
+}
+
+.filter-button.active {
+    background: linear-gradient(135deg, rgba(108, 92, 231, 0.1) 0%, rgba(2, 150, 170, 0.4) 100%);
+    box-shadow: 0 2px 2px rgba(108, 92, 231, 0.4);
+    backdrop-filter: blur(10px);
+    color: white;
+}
+
+.filter-button.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background-color: var(--dark-header-color);
+}
+
+.filter-button::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: -100%;
+    width: 100%;
+    height: 3px;
+    background: linear-gradient(110deg, transparent, #ffffff, transparent);
+    transition: left 0.5s;
+}
+
+.filter-button:hover::after {
+    left: 50%;
+}
+
+
+
+/* Полоска прокрутки для кнопок */
+.filter-buttons-container::-webkit-scrollbar {
+    height: 4px;
+}
+
+.filter-buttons-container::-webkit-scrollbar-track {
+    background: var(--dark-scroll-backgroud);
+    border-radius: 2px;
+}
+
+.filter-buttons-container::-webkit-scrollbar-thumb {
+    background: var(--dark-scroll-tracker);
+    border-radius: 2px;
+}
+
+.filter-buttons-container::-webkit-scrollbar-thumb:hover {
+    background: var(--dark-primary-color);
+}
+
+.filter-controls-header-panel {
+    display: flex;
+    background: rgba(108, 92, 231, 0.05);
+    backdrop-filter: blur(10px);
+    position: sticky;
+    z-index: 20;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.filter-controls-panel {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    background: rgba(108, 92, 231, 0.05);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(108, 92, 231, 0.2);
+    border-radius: 12px;
+    padding: 10px;
+    margin-bottom: 15px;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    margin-top: 0;
+}
+
+.filter-actions-container {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    justify-content: space-between;
+    padding-top: 10px;
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.filter-buttons-container {
+    display: flex;
+    align-items: stretch;
+    overflow-x: auto;
+    padding: 0;
+    width: 100%;
+    margin: 0;
+}
+
+.filter-buttons-group {
+    display: flex;
+    gap: 0;
+    flex-wrap: nowrap;
+    min-width: min-content;
+    width: 100%;
+    padding: 0;
+}
+
+.filter-container {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+}
+
+.filter-buttons-section {
+    margin-top: auto;
+}
+
+/*
+TODO: Перенести нужные свойства в кнопки удалить/сменить/найти/добавить. Отредактировать стиль кнопок в модальых окнах
+/*button {*/
+/*    background-color: var(--dark-primary-color);*/
+/*    color: white;*/
+/*    border: none;*/
+/*    border-radius: 8px;*/
+/*    font-size: 1rem;*/
+/*    cursor: pointer;*/
+/*    transition: background-color 0.3s;*/
+/*    display: block;*/
+/*    width: 100%;*/
+/*}*/

@@ -1,4 +1,3 @@
-
 // Глобальные переменные
 const errorModal = document.getElementById('errorModal');
 const modalMessage = document.getElementById('modalMessage');
@@ -342,9 +341,10 @@ function resetForm() {
 
 async function renderSection(section, data, resetPagination = true, preserveFilters = false, addMoreChecked=false, addFormVisible='') {
     const contentSection = document.getElementById('contentSection');
+    const filterButtonsSection = contentSection.querySelector('.filter-buttons-section');
     const contentWrapper = contentSection.querySelector('.content-wrapper');
 
-    if (!contentWrapper) return;
+    if (!contentWrapper || !filterButtonsSection) return;
 
     // Очистка перед рендером
     cleanupSection();
@@ -354,52 +354,55 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
         allItemsLoaded = false;
     }
 
-    // Сохраняем все данные для фильтрации и пагинации
     window.allSectionData = data;
 
-    // Применяем текущие фильтры
     if (preserveFilters) {
         window.filteredData = filterData(data, currentFilters.searchQuery, currentFilters.statusFilter);
     } else {
         window.filteredData = data;
         currentFilters = { searchQuery: '', statusFilter: 'Все' };
     }
-
-    // Рендерим контент во wrapper
-    contentWrapper.innerHTML = `
-        <div class="section-header">
-            <h1 class="section-title">${getSectionTitle(section)}</h1>
-            <div style="display: flex; flex-wrap: wrap;  margin: 0 0 0 auto">
-                <div class="filter-container">
-                    <select id="statusFilter">
-                        <option value="Все">Все статусы</option>
-                    </select>
-                </div>
-                <div class="filter-container">
-                    <select id="sortFilter">
-                        <option value="date">Сортировка</option>
-                        <option value="alphabet">Алфавит</option>
-                        <option value="rating">Рейтинг</option>
-                    </select>
-                </div>
-                <div class="search-container">
-                    <input type="text" id="searchInput" placeholder="Поиск..." value="${currentFilters.searchQuery}">
-                    <div id="searchSuggestions" class="search-suggestions"></div>
-                    <button id="searchBtn"><img src="assets/icons/find.svg" alt="🔍" class="button-icon-no-text"></button>
-                    <button id="clearSearchBtn" class="clear-search-btn" ${currentFilters.searchQuery ? '' : 'style="display: none;"'}>✕</button>
-                    <button id="randomBtnSection" title="Случайная карточка"><img src="assets/icons/random.svg" alt="🎲" class="button-icon">Случайное</button>
-                    <button id="searchInWeb" title="Поиск в интернете"><img src="assets/icons/find.svg" alt="🔍" class="button-icon">Популярное</button>
-                </div>
-                <div class="add-button-container">
-                    <button id="toggleAddFormBtn" class="add-button">+ Добавить</button>
-                </div>
+    filterButtonsSection.innerHTML = `
+        <div class="filter-buttons-container">
+            <div class="filter-buttons-group" id="statusFilter">
+                <!-- Кнопки статусов будут добавлены динамически -->
             </div>
         </div>
-        ${getAddFormHTML(addMoreChecked, addFormVisible)}
-        <div id="dataList" class="data-grid"></div>
-        <div id="loadingIndicator" class="loading-indicator" style="display: none;">
-            <div class="loading-spinner"></div>
-            <p>Загрузка...</p>
+    `;
+    // Рендерим контент во wrapper
+    contentWrapper.innerHTML = `
+        <div class="content-wrapper">
+            <!-- Кнопки фильтрации - ВЕРХНЯЯ СТРОКА -->
+            <div class="filter-controls-panel">
+                <!-- Остальные элементы управления -->
+                <div class="filter-actions-container">
+                    <div class="filter-container">
+                        <select id="sortFilter">
+                            <option value="date">Сортировка</option>
+                            <option value="alphabet">Алфавит</option>
+                            <option value="rating">Рейтинг</option>
+                        </select>
+                    </div>
+                    <div class="search-container">
+                        <input type="text" id="searchInput" placeholder="Поиск..." value="${currentFilters.searchQuery}">
+                        <div id="searchSuggestions" class="search-suggestions"></div>
+                        <button id="searchBtn"><img src="assets/icons/find.svg" alt="🔍" class="button-icon-no-text"></button>
+                        <button id="clearSearchBtn" class="clear-search-btn" ${currentFilters.searchQuery ? '' : 'style="display: none;"'}>✕</button>
+                        <button id="randomBtnSection" title="Случайная карточка"><img src="assets/icons/random.svg" alt="🎲" class="button-icon">Случайное</button>
+                        <button id="searchInWeb" title="Поиск в интернете"><img src="assets/icons/find.svg" alt="🔍" class="button-icon">Популярное</button>
+                    </div>
+                    <div class="add-button-container">
+                        <button id="toggleAddFormBtn" class="add-button">+ Добавить</button>
+                    </div>
+                </div>
+            </div>
+            
+            ${getAddFormHTML(addMoreChecked, addFormVisible)}
+            <div id="dataList" class="data-grid"></div>
+            <div id="loadingIndicator" class="loading-indicator" style="display: none;">
+                <div class="loading-spinner"></div>
+                <p>Загрузка...</p>
+            </div>
         </div>
     `;
 
@@ -432,6 +435,7 @@ let scrollTimeout;
 function handleScroll() {
     const contentWrapper = document.querySelector('.content-wrapper');
     if (!contentWrapper) return;
+
 
     clearTimeout(scrollTimeout);
     scrollTimeout = setTimeout(() => {
@@ -512,9 +516,8 @@ async function loadStatusFilter() {
         const statuses = await window.electronAPI.getStatuses();
         const statusFilter = document.getElementById('statusFilter');
         if (statusFilter) {
-            statusFilter.innerHTML = `
-                <option value="Все">Все статусы</option>
-                ${statuses.map(s => `<option value="${s}">${s}</option>`).join('')}
+            statusFilter.innerHTML = `<button class="filter-button active" data-status="Все">Все</button>
+                ${statuses.map(s => `<button class="filter-button" data-status="${s}">${s}</button>`).join('')}
             `;
 
             // Добавляем обработчик изменения фильтра
@@ -644,16 +647,15 @@ function sortData(data, sortBy) {
 }
 
 function filterCards(query = '') {
-    const statusFilter = document.getElementById('statusFilter');
+    const statusFilter = currentFilters.statusFilter || 'Все';
     const sortFilter = document.getElementById('sortFilter');
-    const selectedStatus = statusFilter ? statusFilter.value : 'Все';
     const selectedSort = sortFilter ? sortFilter.value : 'date';
     const clearSearchBtn = document.getElementById('clearSearchBtn');
 
     // Сохраняем текущие фильтры
     currentFilters = {
         searchQuery: query,
-        statusFilter: selectedStatus,
+        statusFilter: statusFilter,
         sortBy: selectedSort
     };
 
@@ -662,7 +664,7 @@ function filterCards(query = '') {
     }
 
     // Сначала фильтруем, затем сортируем
-    const filtered = filterData(window.allSectionData, query, selectedStatus);
+    const filtered = filterData(window.allSectionData, query, statusFilter);
     window.filteredData = sortData(filtered, selectedSort);
 
     // Сбрасываем пагинацию и перерисовываем
@@ -701,6 +703,13 @@ async function initCardSection() {
             filterCards(currentFilters.searchQuery);
         });
     }
+    setupFilterButtons();
+    const activeButton = document.querySelector(`.filter-button[data-status="${currentFilters.statusFilter || 'Все'}"]`);
+    if (activeButton) {
+        document.querySelectorAll('.filter-button').forEach(btn => btn.classList.remove('active'));
+        activeButton.classList.add('active');
+    }
+
     const randomBtnSection = document.getElementById('randomBtnSection');
     if (randomBtnSection) {
         randomBtnSection.addEventListener('click', async () => {
@@ -726,6 +735,7 @@ async function initCardSection() {
     setupChangeCategoryButtons();
     setupCardClickHandlers();
     setupPreviewUpdate();
+
 
 }
 
@@ -1717,4 +1727,17 @@ async function autoSearchCover(title) {
             icoInput.disabled = false;
         }
     }
+}
+
+function setupFilterButtons() {
+    document.querySelectorAll('.filter-button').forEach(button => {
+        button.addEventListener('click', () => {
+            document.querySelectorAll('.filter-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            button.classList.add('active');
+            currentFilters.statusFilter = button.dataset.status;
+            filterCards(currentFilters.searchQuery);
+        });
+    });
 }
