@@ -312,7 +312,7 @@ async function loadRatings() {
 // Загрузка статусов
 async function loadStatuses() {
     try {
-        const statuses = await window.electronAPI.getStatuses();
+        const statuses = await window.electronAPI.getStatusesNoImport();
         const statusSelect = document.getElementById('statusSelect');
         if (statusSelect) {
             statusSelect.innerHTML = `
@@ -346,18 +346,7 @@ function getCardIconHTML(game) {
             `;
 }
 
-// Сброс формы
-function resetForm() {
-    const nameInput = document.getElementById('nameInput');
-    const icoInput = document.getElementById('icoInput');
-    const ratingSelect = document.getElementById('ratingSelect');
-    const statusSelect = document.getElementById('statusSelect');
 
-    if (nameInput) nameInput.value = '';
-    if (icoInput) icoInput.value = '';
-    if (ratingSelect) ratingSelect.value = '0';
-    if (statusSelect) statusSelect.value = 'Не играл';
-}
 
 async function renderSection(section, data, resetPagination = true, preserveFilters = false, addMoreChecked=false, addFormVisible='') {
     const contentSection = document.getElementById('contentSection');
@@ -761,7 +750,7 @@ function setupChangeImageButtons() {
         btn.addEventListener('click', async (e) => {
             e.stopPropagation();
             const itemName = btn.dataset.name;
-            const searchUrl = `https://yandex.ru/images/search?text=${encodeURIComponent(itemName + ' cover')}`;
+            const searchUrl = `https://yandex.ru/images/search?text=${encodeURIComponent(itemName + ' обложка')}`;
             window.electronAPI.openExternal(searchUrl, itemName);
         });
     });
@@ -1312,7 +1301,7 @@ function setupIconSearchButton() {
             e.stopPropagation();
             const nameInput = document.getElementById('nameInput');
             if (nameInput && nameInput.value.trim()) {
-                const searchQuery = encodeURIComponent(nameInput.value.trim() + ' cover');
+                const searchQuery = encodeURIComponent(nameInput.value.trim() + ' обложка');
                 const searchUrl = `https://yandex.ru/images/search?text=${searchQuery}`;
                 window.electronAPI.openExternal(searchUrl);
             } else {
@@ -1411,7 +1400,7 @@ function setupTitleClickHandlers() {
             modal.querySelector('#editSearchIconBtn').addEventListener('click', () => {
                 const nameInput = modal.querySelector('#editNameInput');
                 if (nameInput && nameInput.value.trim()) {
-                    const searchQuery = encodeURIComponent(nameInput.value.trim() + ' cover');
+                    const searchQuery = encodeURIComponent(nameInput.value.trim() + ' обложка');
                     const searchUrl = `https://yandex.ru/images/search?text=${searchQuery}`;
                     window.electronAPI.openExternal(searchUrl);
                 } else {

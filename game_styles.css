@@ -118,10 +118,17 @@
     background-color: var(--dark-nav-background);
 }
 .nav-item.active {
+    background: linear-gradient(135deg, rgba(2, 150, 170, 0.4) 0%, rgba(2, 150, 170, 0.4) 100%);
+    box-shadow: 0 2px 2px rgba(108, 92, 231, 0.4);
+    backdrop-filter: blur(10px);
+}
+
+.nav-item.active:first-child {
     background: linear-gradient(135deg, rgba(108, 92, 231, 0.1) 0%, rgba(2, 150, 170, 0.4) 100%);
     box-shadow: 0 2px 2px rgba(108, 92, 231, 0.4);
     backdrop-filter: blur(10px);
 }
+
 .nav-item.active::after {
     content: '';
     position: absolute;
@@ -256,7 +263,7 @@ body {
 }
 
 .content-wrapper::-webkit-scrollbar-thumb:hover {
-    background: var(--dark-primary-color);
+    /*background: var(--dark-primary-color);*/
 }
 /* Шапка секции */
 .section-header {
@@ -445,6 +452,7 @@ body {
 
 .add-form .search-icon-btn,
 .add-form .search-name-btn {
+    cursor: pointer;
     position: absolute;
     right: 4px;
     top: 50%;
