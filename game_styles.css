@@ -520,7 +520,6 @@ body {
 }
 .data-card {
     position: relative;
-    background: var(--card-bg);
     border-radius: 12px;
     box-shadow: var(--shadow);
     overflow: hidden;
