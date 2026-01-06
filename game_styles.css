@@ -29,6 +29,7 @@
     --dark-input-border-hover-color-2: #FF890F70;
 
     --dark-nav-background: #FFFFFF19;
+    --dark-nav-alt-background: #00000019;
     --dark-nav-active-background: #FFFFFF33;
     --dark-button-background: #6c5ce7;
     --dark-button-hover-background: #5649d1;
@@ -69,13 +70,8 @@
 /* Шапка */
 .main-header {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
     background-color: var(--dark-header-background);
     color: var(--dark-header-color);
-    padding: 0 20px;
-    margin-bottom: 30px;
-    border-radius: 12px;
     box-shadow: var(--shadow);
 }
 /* Кнопки на шапке */
@@ -122,6 +118,12 @@
     background-color: var(--dark-nav-background);
 }
 .nav-item.active {
+    background: linear-gradient(135deg, rgba(2, 150, 170, 0.4) 0%, rgba(2, 150, 170, 0.4) 100%);
+    box-shadow: 0 2px 2px rgba(108, 92, 231, 0.4);
+    backdrop-filter: blur(10px);
+}
+
+.nav-item.active:first-child {
     background: linear-gradient(135deg, rgba(108, 92, 231, 0.1) 0%, rgba(2, 150, 170, 0.4) 100%);
     box-shadow: 0 2px 2px rgba(108, 92, 231, 0.4);
     backdrop-filter: blur(10px);
@@ -135,11 +137,7 @@
     height: 3px;
     background-color: var(--dark-header-color);
 }
-.nav-item.active:hover {
-    background: linear-gradient(135deg, rgba(108, 92, 231, 0.1) 0%, rgba(141, 67, 172, 0.7) 100%);
-    box-shadow: 0 2px 2px rgba(108, 92, 231, 0.4);
-    backdrop-filter: blur(10px);
-}
+
 
 .nav-item span {
     display: inline-block;
@@ -148,7 +146,7 @@
 
 
 #randomBtnSection {
-    background-color: var(--dark-button-background); /* Фиолетовый цвет для кнопки случайности */
+    background-color: var(--dark-nav-background); /* Фиолетовый цвет для кнопки случайности */
     color: white;
     border: none;
     border-radius: 8px;
@@ -163,11 +161,11 @@
 }
 
 #randomBtnSection:hover {
-    background-color: #8e44ad;
+    background-color: var(--dark-nav-active-background);
     color: white;
 }
 #searchInWeb {
-    background-color: var(--dark-button-background); /* Фиолетовый цвет для кнопки случайности */
+    background-color: var(--dark-nav-background); /* Фиолетовый цвет для кнопки случайности */
     color: white;
     border: none;
     border-radius: 8px;
@@ -182,7 +180,7 @@
 }
 
 #searchInWeb:hover {
-    background-color: #8e44ad;
+    background-color: var(--dark-nav-active-background);
     color: white;
 }
 
@@ -192,8 +190,12 @@
     transform: scale(1.1);
 }
 
-.header-button:hover, .add-button:hover {
+.header-button:hover {
     background-color: #8e44ad;
+}
+
+.add-button:hover {
+    background-color: var(--dark-nav-active-background);
 }
 /* Анимация кнопок */
 @media (max-width: 800px) {
@@ -219,26 +221,21 @@ body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background-color: var(--dark-body-background);
     color: var(--dark-text-color);
-    padding: 20px;
-    margin: 0 auto;
 }
 /* Секция контента */
 .content-section {
     background: var(--dark-section-background);
-    padding: 25px;
-    border-radius: 12px;
+    padding-bottom: 15px;
     box-shadow: var(--shadow);
-    margin-bottom: 30px;
     display: flex;
     flex-direction: column;
-    overflow: hidden; /* Важно: скрываем переполнение родителя */
-    max-height: calc(100vh - 200px); /* Ограничиваем высоту */
+    overflow: hidden;
+    max-height: calc(100vh - 110px);
 }
 .content-wrapper {
     flex: 1;
     overflow-y: auto; /* Включаем вертикальный скролл */
     overflow-x: hidden; /* Отключаем горизонтальный скролл */
-    padding-right: 5px; /* Чтобы контент не заезжал под скроллбар */
 }
 
 /* Адаптация для мобильных устройств */
@@ -265,7 +262,7 @@ body {
 }
 
 .content-wrapper::-webkit-scrollbar-thumb:hover {
-    background: var(--dark-primary-color);
+    /*background: var(--dark-primary-color);*/
 }
 /* Шапка секции */
 .section-header {
@@ -276,11 +273,12 @@ body {
     z-index: 10;
 }
 .section-title {
-    color: #ffffff !important;               /* Чистый белый */
-    text-shadow: 0 2px 4px rgba(0,0,0,0.3); /* Тень для объёма */
+    color: #ffffff !important;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.3);
     position: relative;
     display: inline-block;
     padding-bottom: 8px;
+    margin: 0;
 }
 .section-title::after {
     content: "";
@@ -289,24 +287,27 @@ body {
     left: 0;
     width: 100%;
     height: 2px;
-    background: linear-gradient(90deg, #6c5ce7, #a29bfe); /* Фиолетовый градиент */
+    background: linear-gradient(90deg, #6c5ce7, #a29bfe);
     border-radius: 2px;
 }
-/* Фильтры */
-.filter-container {
+/* Контейнер для всех элементов справа от заголовка */
+.section-header > div {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    column-gap: 20px;
+    gap: 15px;
+    margin-left: auto;
+    min-width: 0;
+    flex: 1;
+    justify-content: flex-end;
 }
+
 #statusFilter, #sortFilter {
-    padding: 10px 0;
-    border: 1px solid var(--dark-input-hover-background);
     font-size: 1rem;
     transition: all 0.3s ease;
 }
 #statusFilter:focus, #sortFilter:focus {
     outline: none;
-    border-color: var(--dark-primary-color);
     box-shadow: 0 0 0 2px var(--dark-primary-shadow);
 }
 /* Поисковик */
@@ -315,10 +316,9 @@ body {
     display: flex;
     align-items: center;
     min-width: 300px;
-
+    max-width: 100%;
 }
 #searchInput {
-    width: 100%;
     padding: 10px 40px 10px 15px; /* Правое padding для кнопки */
     border: 1px solid var(--dark-input-border);
     background-color: var(--dark-input-background);
@@ -329,12 +329,16 @@ body {
     border-right: none; /* Убираем правую границу, так как кнопка будет сливаться */
     border-radius: 8px 0 0 8px;
 }
+
 #searchInput:focus {
-    box-shadow: 0 0 0 2px var(--dark-input-shadow);
-    border-color: var(--dark-input-border-focus);
-    border-bottom: 4px var(--dark-input-border-focus);
-    outline: none;
+    color: var(--rating-completed);
+    border-color: var(--rating-completed);
 }
+
+#searchInput:focus::placeholder {
+    color: var(--rating-completed);
+}
+
 .search-suggestions {
     position: absolute;
     top: 100%;
@@ -360,12 +364,11 @@ body {
     border-color: var(--dark-input-border-hover-color);
 }
 #searchBtn {
-
     height: 40px;
     width: 40px;
-    background: var(--dark-button-background);
+    background: var(--dark-section-background);
     backdrop-filter: blur(10px);
-    border: 1px solid var(--dark-input-border-focus);
+    border: 1px solid var(--dark-input-border);
     border-left: none;
     border-radius: 0 8px 8px 0;
     cursor: pointer;
@@ -377,12 +380,12 @@ body {
     transition: background-color 0.3s ease;
 }
 
-
 #searchBtn:hover {
-    background-color: #8e44ad;
+    background-color: var(--dark-nav-active-background);
 }
 .clear-search-btn {
-    background-color: var(--dark-button-background);
+    border-radius: 12px;
+    background-color: var(--dark-nav-background);
     border: none;
     cursor: pointer;
     font-size: 1.8rem;
@@ -396,7 +399,7 @@ body {
     justify-content: center;
 }
 .clear-search-btn:hover {
-    background-color: #8e44ad;
+    background-color: var(--dark-nav-active-background);
 }
 /* Форма добавления карточки */
 .add-form {
@@ -448,6 +451,7 @@ body {
 
 .add-form .search-icon-btn,
 .add-form .search-name-btn {
+    cursor: pointer;
     position: absolute;
     right: 4px;
     top: 50%;
@@ -465,11 +469,14 @@ body {
 }
 
 .add-form #addBtn {
+    cursor: pointer;
+    color: white;
+    border: none;
+    border-radius: 8px;
     height: 36px;
     margin-top: 10px;
     background: linear-gradient(135deg, #6c5ce7, #0296aa);
-    font-weight: 500;
-    transition: all 0.2s;
+    width: 100%;
 }
 
 .add-form #addBtn:hover {
@@ -519,7 +526,6 @@ body {
 }
 .data-card {
     position: relative;
-    background: var(--card-bg);
     border-radius: 12px;
     box-shadow: var(--shadow);
     overflow: hidden;
@@ -583,6 +589,7 @@ body {
 .delete-btn,
 .change-image-btn,
 .change-category-btn {
+    border-radius: 8px;
     position: absolute;
     right: 10px;
     color: white;
@@ -752,18 +759,25 @@ body {
     width: 50px;
     height: 50px;
     border-radius: 50%;
-    background-color: var(--dark-primary-color);
+    background: linear-gradient(135deg, rgba(108, 92, 231, 0.9) 0%, rgba(2, 150, 170, 0.5) 100%);
+    box-shadow: 0 2px 2px rgba(108, 92, 231, 0.4);
+    backdrop-filter: blur(10px);
     color: white;
     border: none;
     font-size: 20px;
     cursor: pointer;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
     display: none;
     justify-content: center;
     align-items: center;
     z-index: 99;
     transition: all 0.3s ease;
 }
+
+.scroll-to-top {
+    right: 50px; /* Отступ от правого края контейнера */
+    bottom: 50px;
+}
+
 .scroll-to-top:hover {
     background-color: #5649d1;
     transform: translateY(-3px);
@@ -956,20 +970,20 @@ input:focus, select:focus {
     border-color: var(--dark-input-border-focus);
     outline: none;
 }
-button {
-    background-color: var(--dark-primary-color);
-    color: white;
-    border: none;
-    border-radius: 8px;
-    font-size: 1rem;
-    cursor: pointer;
-    transition: background-color 0.3s;
-    display: block;
-    width: 100%;
-}
-button:hover {
-    background-color: #5649d1;
-}
+/*button {*/
+/*    background-color: var(--dark-primary-color);*/
+/*    color: white;*/
+/*    border: none;*/
+/*    border-radius: 8px;*/
+/*    font-size: 1rem;*/
+/*    cursor: pointer;*/
+/*    transition: background-color 0.3s;*/
+/*    display: block;*/
+/*    width: 100%;*/
+/*}*/
+/*button:hover {*/
+/*    background-color: #5649d1;*/
+/*}*/
 
 @media (max-width: 768px) {
     .data-grid {
@@ -1175,12 +1189,11 @@ button:hover {
 
 .add-button-container {
     margin-left: auto;
-    display: flex;
-    align-items: center;
+    margin-right: 0;
 }
 
 .add-button {
-    background-color: var(--dark-button-background);
+    background-color: var(--dark-nav-background);
     color: var(--dark-button-color);
     border: none;
     border-radius: 8px;
@@ -1274,18 +1287,13 @@ button:hover {
     white-space: nowrap;
     max-width: 100%;
     flex-shrink: 1;
+    border: none;
+    display: block;
+    width: 100%;
+
 }
 
-.add-button {
-    background-color: var(--dark-button-background);
-    color: var(--dark-button-color);
-    font-size: 1rem;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    white-space: nowrap;
-    max-width: 100%; /* Ограничиваем максимальную ширину */
-    flex-shrink: 1;
-}
+
 
 add-form .form-content {
     display: flex;
@@ -1397,4 +1405,188 @@ add-form .form-content {
     .form-fields {
         width: 100%;
     }
+}
+
+
+
+/* Кнопки фильтров */
+.filter-button {
+    opacity: 0.8;
+    background-color: var(--dark-nav-alt-background);
+    color: var(--dark-input-color);
+    border: none;
+    border-radius: 0;
+    font-size: 0.9rem;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: all 0.3s ease;
+    flex-shrink: 0;
+    height: 25px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex: 1;
+    border-radius: 0;
+    position: relative;
+    overflow: hidden;
+
+}
+
+.filter-button:hover {
+    opacity: 1;
+}
+
+.filter-button:last-child {
+    border-right: none;
+}
+
+.filter-button.active {
+    /*background: linear-gradient(135deg, rgba(108, 92, 231, 0.1) 0%, rgba(2, 150, 170, 0.4) 100%);*/
+
+    box-shadow: 0 2px 2px rgba(108, 92, 231, 0.4);
+    backdrop-filter: blur(10px);
+    color: white;
+}
+
+.filter-button.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 1px;
+    background-color: var(--dark-header-color);
+}
+
+.filter-button::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: -100%;
+    width: 100%;
+    height: 3px;
+    background: linear-gradient(110deg, transparent, #ffffff, transparent);
+    transition: left 0.5s;
+}
+
+.filter-button:hover::after {
+    left: 50%;
+}
+
+
+
+/* Полоска прокрутки для кнопок */
+.filter-buttons-container::-webkit-scrollbar {
+    height: 4px;
+}
+
+.filter-buttons-container::-webkit-scrollbar-track {
+    background: var(--dark-scroll-backgroud);
+    border-radius: 2px;
+}
+
+.filter-buttons-container::-webkit-scrollbar-thumb {
+    background: var(--dark-scroll-tracker);
+    border-radius: 2px;
+}
+
+.filter-buttons-container::-webkit-scrollbar-thumb:hover {
+    background: var(--dark-primary-color);
+}
+
+.filter-controls-header-panel {
+    display: flex;
+    background: rgba(108, 92, 231, 0.05);
+    backdrop-filter: blur(10px);
+    position: sticky;
+    z-index: 20;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.filter-controls-panel {
+    display: flex;
+    flex-direction: row; /* Важно: горизонтальное расположение */
+    flex-wrap: wrap; /* Позволяет переноситься на мобильных */
+    justify-content: space-between; /* Распределение пространства */
+    align-items: center; /* Выравнивание по вертикали */
+    gap: 10px;
+    background: rgba(108, 92, 231, 0.05);
+    backdrop-filter: blur(10px);
+    border: 1px solid rgba(108, 92, 231, 0.2);
+    padding: 10px;
+    margin-bottom: 15px;
+    position: sticky;
+    top: 0;
+    z-index: 20;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.filter-actions-container {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 10px;
+    justify-content: space-between;
+    padding-top: 10px;
+}
+
+.filter-buttons-container {
+    display: flex;
+    align-items: stretch;
+    overflow-x: auto;
+    padding: 0;
+    width: 100%;
+    margin: 0;
+}
+
+.filter-buttons-group {
+    display: flex;
+    gap: 0;
+    flex-wrap: nowrap;
+    min-width: min-content;
+    width: 100%;
+    padding: 0;
+}
+
+
+.sort-buttons-container {
+    display: flex;
+    gap: 5px;
+    align-items: center;
+}
+
+.sort-button {
+    width: 40px;
+    height: 40px;
+    background-color: var(--dark-nav-background);
+    border: 1px solid var(--dark-input-border);
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    padding: 0;
+
+}
+
+.sort-button:hover {
+    background-color: var(--dark-nav-active-background);
+    border-color: var(--dark-input-border-hover-color);
+    transform: translateY(-1px);
+}
+
+.sort-button.active {
+    filter: brightness(2);
+    border-color: var(--rating-completed);
+}
+
+.sort-button img {
+    width: 16px;
+    height: 16px;
+    filter: invert(0.8);
+}
+
+.sort-button.active img {
+    filter: invert(1) brightness(2);
 }

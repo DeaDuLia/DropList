@@ -1,4 +1,3 @@
-
 // Глобальные переменные
 const errorModal = document.getElementById('errorModal');
 const modalMessage = document.getElementById('modalMessage');
@@ -43,20 +42,40 @@ async function updateDownloadsCount() {
     }
 }
 
-window.addEventListener('scroll', () => {
-    if (window.pageYOffset > 300) {
+scrollToTopBtn.addEventListener('click', () => {
+    const contentWrapper = document.querySelector('.content-wrapper');
+    if (contentWrapper) {
+        contentWrapper.scrollTo({
+            top: 0,
+            behavior: 'smooth'
+        });
+    }
+});
+
+function setupContentWrapperScroll() {
+    const contentWrapper = document.querySelector('.content-wrapper');
+    if (contentWrapper) {
+        // Удаляем старый обработчик, если есть
+        contentWrapper.removeEventListener('scroll', handleContentWrapperScroll);
+
+        // Добавляем новый обработчик
+        contentWrapper.addEventListener('scroll', handleContentWrapperScroll);
+
+        // Инициализируем видимость кнопки при загрузке
+        handleContentWrapperScroll();
+    }
+}
+
+function handleContentWrapperScroll() {
+    const contentWrapper = document.querySelector('.content-wrapper');
+    if (!contentWrapper || !scrollToTopBtn) return;
+
+    if (contentWrapper.scrollTop > 300) {
         scrollToTopBtn.classList.add('visible');
     } else {
         scrollToTopBtn.classList.remove('visible');
     }
-});
-
-scrollToTopBtn.addEventListener('click', () => {
-    window.scrollTo({
-        top: 0,
-        behavior: 'smooth'
-    });
-});
+}
 
 exportBtn.addEventListener('click', async () => {
     try {
@@ -293,7 +312,7 @@ async function loadRatings() {
 // Загрузка статусов
 async function loadStatuses() {
     try {
-        const statuses = await window.electronAPI.getStatuses();
+        const statuses = await window.electronAPI.getStatusesNoImport();
         const statusSelect = document.getElementById('statusSelect');
         if (statusSelect) {
             statusSelect.innerHTML = `
@@ -327,24 +346,14 @@ function getCardIconHTML(game) {
             `;
 }
 
-// Сброс формы
-function resetForm() {
-    const nameInput = document.getElementById('nameInput');
-    const icoInput = document.getElementById('icoInput');
-    const ratingSelect = document.getElementById('ratingSelect');
-    const statusSelect = document.getElementById('statusSelect');
 
-    if (nameInput) nameInput.value = '';
-    if (icoInput) icoInput.value = '';
-    if (ratingSelect) ratingSelect.value = '0';
-    if (statusSelect) statusSelect.value = 'Не играл';
-}
 
 async function renderSection(section, data, resetPagination = true, preserveFilters = false, addMoreChecked=false, addFormVisible='') {
     const contentSection = document.getElementById('contentSection');
+    const filterButtonsSection = contentSection.querySelector('.filter-buttons-section');
     const contentWrapper = contentSection.querySelector('.content-wrapper');
 
-    if (!contentWrapper) return;
+    if (!contentWrapper || !filterButtonsSection) return;
 
     // Очистка перед рендером
     cleanupSection();
@@ -354,54 +363,60 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
         allItemsLoaded = false;
     }
 
-    // Сохраняем все данные для фильтрации и пагинации
     window.allSectionData = data;
 
-    // Применяем текущие фильтры
     if (preserveFilters) {
         window.filteredData = filterData(data, currentFilters.searchQuery, currentFilters.statusFilter);
     } else {
         window.filteredData = data;
         currentFilters = { searchQuery: '', statusFilter: 'Все' };
     }
-
-    // Рендерим контент во wrapper
-    contentWrapper.innerHTML = `
-        <div class="section-header">
-            <h1 class="section-title">${getSectionTitle(section)}</h1>
-            <div style="display: flex; flex-wrap: wrap;  margin: 0 0 0 auto">
-                <div class="filter-container">
-                    <select id="statusFilter">
-                        <option value="Все">Все статусы</option>
-                    </select>
-                </div>
-                <div class="filter-container">
-                    <select id="sortFilter">
-                        <option value="date">Сортировка</option>
-                        <option value="alphabet">Алфавит</option>
-                        <option value="rating">Рейтинг</option>
-                    </select>
-                </div>
-                <div class="search-container">
-                    <input type="text" id="searchInput" placeholder="Поиск..." value="${currentFilters.searchQuery}">
-                    <div id="searchSuggestions" class="search-suggestions"></div>
-                    <button id="searchBtn"><img src="assets/icons/find.svg" alt="🔍" class="button-icon-no-text"></button>
-                    <button id="clearSearchBtn" class="clear-search-btn" ${currentFilters.searchQuery ? '' : 'style="display: none;"'}>✕</button>
-                    <button id="randomBtnSection" title="Случайная карточка"><img src="assets/icons/random.svg" alt="🎲" class="button-icon">Случайное</button>
-                    <button id="searchInWeb" title="Поиск в интернете"><img src="assets/icons/find.svg" alt="🔍" class="button-icon">Популярное</button>
-                </div>
-                <div class="add-button-container">
-                    <button id="toggleAddFormBtn" class="add-button">+ Добавить</button>
-                </div>
+    filterButtonsSection.innerHTML = `
+        <div class="filter-buttons-container">
+            <div class="filter-buttons-group" id="statusFilter">
+                <!-- Кнопки статусов будут добавлены динамически -->
             </div>
         </div>
+    `;
+    // Рендерим контент во wrapper
+    contentWrapper.innerHTML = `
+    <div class="content-wrapper">
+        <!-- Кнопки фильтрации - ВЕРХНЯЯ СТРОКА -->
+        <div class="filter-controls-panel">
+            <div class="filter-container sort-buttons-container">
+                <button class="sort-button active" data-sort="date" title="По дате добавления">
+                    <img src="assets/icons/sort-date.svg" alt="📅" class="button-icon-no-text">
+                </button>
+                <button class="sort-button" data-sort="alphabet" title="По алфавиту">
+                    <img src="assets/icons/sort-alpha.svg" alt="🔤" class="button-icon-no-text">
+                </button>
+                <button class="sort-button" data-sort="rating" title="По рейтингу и статусу">
+                    <img src="assets/icons/sort-rating.svg" alt="⭐" class="button-icon-no-text">
+                </button>
+            </div>
+            <div class="search-container">
+                <input type="text" id="searchInput" placeholder="Поиск по названию" value="${currentFilters.searchQuery}">
+                <div id="searchSuggestions" class="search-suggestions"></div>
+                <button id="searchBtn"><img src="assets/icons/find.svg" alt="🔍" class="button-icon-no-text"></button>
+                <button id="clearSearchBtn" class="clear-search-btn" ${currentFilters.searchQuery ? '' : 'style="display: none;"'}>✕</button>
+                <button id="randomBtnSection" title="Случайная карточка"><img src="assets/icons/random.svg" alt="🎲" class="button-icon">Случайное</button>
+                <button id="searchInWeb" title="Поиск в интернете"><img src="assets/icons/find.svg" alt="🔍" class="button-icon">Популярное</button>
+            </div>
+            
+            <!-- Кнопка добавления должна быть ВНЕ search-container -->
+            <div class="add-button-container">
+                <button id="toggleAddFormBtn" class="add-button">+ Добавить</button>
+            </div>
+        </div>
+            
         ${getAddFormHTML(addMoreChecked, addFormVisible)}
         <div id="dataList" class="data-grid"></div>
         <div id="loadingIndicator" class="loading-indicator" style="display: none;">
             <div class="loading-spinner"></div>
             <p>Загрузка...</p>
         </div>
-    `;
+    </div>
+`;
 
     // Инициализируем секцию
     await initCardSection();
@@ -417,6 +432,7 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
 
     // Добавляем обработчик прокрутки для бесконечной загрузки
     contentWrapper.addEventListener('scroll', handleScroll);
+    setupContentWrapperScroll();
 }
 
 function filterData(data, searchQuery, statusFilter) {
@@ -432,6 +448,7 @@ let scrollTimeout;
 function handleScroll() {
     const contentWrapper = document.querySelector('.content-wrapper');
     if (!contentWrapper) return;
+
 
     clearTimeout(scrollTimeout);
     scrollTimeout = setTimeout(() => {
@@ -512,9 +529,8 @@ async function loadStatusFilter() {
         const statuses = await window.electronAPI.getStatuses();
         const statusFilter = document.getElementById('statusFilter');
         if (statusFilter) {
-            statusFilter.innerHTML = `
-                <option value="Все">Все статусы</option>
-                ${statuses.map(s => `<option value="${s}">${s}</option>`).join('')}
+            statusFilter.innerHTML = `<button class="filter-button active" data-status="Все">Все</button>
+                ${statuses.map(s => `<button class="filter-button" data-status="${s}">${s}</button>`).join('')}
             `;
 
             // Добавляем обработчик изменения фильтра
@@ -644,16 +660,14 @@ function sortData(data, sortBy) {
 }
 
 function filterCards(query = '') {
-    const statusFilter = document.getElementById('statusFilter');
-    const sortFilter = document.getElementById('sortFilter');
-    const selectedStatus = statusFilter ? statusFilter.value : 'Все';
-    const selectedSort = sortFilter ? sortFilter.value : 'date';
+    const statusFilter = currentFilters.statusFilter || 'Все';
     const clearSearchBtn = document.getElementById('clearSearchBtn');
+    const selectedSort = currentFilters.sortBy || 'date';
 
     // Сохраняем текущие фильтры
     currentFilters = {
         searchQuery: query,
-        statusFilter: selectedStatus,
+        statusFilter: statusFilter,
         sortBy: selectedSort
     };
 
@@ -662,7 +676,7 @@ function filterCards(query = '') {
     }
 
     // Сначала фильтруем, затем сортируем
-    const filtered = filterData(window.allSectionData, query, selectedStatus);
+    const filtered = filterData(window.allSectionData, query, statusFilter);
     window.filteredData = sortData(filtered, selectedSort);
 
     // Сбрасываем пагинацию и перерисовываем
@@ -694,13 +708,14 @@ async function initCardSection() {
     ]);
 
     // Добавляем обработчик сортировки
-    const sortFilter = document.getElementById('sortFilter');
-    if (sortFilter) {
-        sortFilter.value = currentFilters.sortBy || 'date';
-        sortFilter.addEventListener('change', () => {
-            filterCards(currentFilters.searchQuery);
-        });
+    setupSortButtons();
+    setupFilterButtons();
+    const activeButton = document.querySelector(`.filter-button[data-status="${currentFilters.statusFilter || 'Все'}"]`);
+    if (activeButton) {
+        document.querySelectorAll('.filter-button').forEach(btn => btn.classList.remove('active'));
+        activeButton.classList.add('active');
     }
+
     const randomBtnSection = document.getElementById('randomBtnSection');
     if (randomBtnSection) {
         randomBtnSection.addEventListener('click', async () => {
@@ -727,6 +742,7 @@ async function initCardSection() {
     setupCardClickHandlers();
     setupPreviewUpdate();
 
+
 }
 
 function setupChangeImageButtons() {
@@ -734,7 +750,7 @@ function setupChangeImageButtons() {
         btn.addEventListener('click', async (e) => {
             e.stopPropagation();
             const itemName = btn.dataset.name;
-            const searchUrl = `https://yandex.ru/images/search?text=${encodeURIComponent(itemName + ' cover')}`;
+            const searchUrl = `https://yandex.ru/images/search?text=${encodeURIComponent(itemName + ' обложка')}`;
             window.electronAPI.openExternal(searchUrl, itemName);
         });
     });
@@ -1285,7 +1301,7 @@ function setupIconSearchButton() {
             e.stopPropagation();
             const nameInput = document.getElementById('nameInput');
             if (nameInput && nameInput.value.trim()) {
-                const searchQuery = encodeURIComponent(nameInput.value.trim() + ' cover');
+                const searchQuery = encodeURIComponent(nameInput.value.trim() + ' обложка');
                 const searchUrl = `https://yandex.ru/images/search?text=${searchQuery}`;
                 window.electronAPI.openExternal(searchUrl);
             } else {
@@ -1384,7 +1400,7 @@ function setupTitleClickHandlers() {
             modal.querySelector('#editSearchIconBtn').addEventListener('click', () => {
                 const nameInput = modal.querySelector('#editNameInput');
                 if (nameInput && nameInput.value.trim()) {
-                    const searchQuery = encodeURIComponent(nameInput.value.trim() + ' cover');
+                    const searchQuery = encodeURIComponent(nameInput.value.trim() + ' обложка');
                     const searchUrl = `https://yandex.ru/images/search?text=${searchQuery}`;
                     window.electronAPI.openExternal(searchUrl);
                 } else {
@@ -1717,4 +1733,50 @@ async function autoSearchCover(title) {
             icoInput.disabled = false;
         }
     }
+}
+
+function setupFilterButtons() {
+    document.querySelectorAll('.filter-button').forEach(button => {
+        button.addEventListener('click', () => {
+            document.querySelectorAll('.filter-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+            button.classList.add('active');
+            currentFilters.statusFilter = button.dataset.status;
+            filterCards(currentFilters.searchQuery);
+        });
+    });
+}
+
+function setupSortButtons() {
+    const sortButtons = document.querySelectorAll('.sort-button');
+
+    // Устанавливаем активную кнопку по умолчанию
+    sortButtons.forEach(button => {
+        if (button.dataset.sort === (currentFilters.sortBy || 'date')) {
+            button.classList.add('active');
+        } else {
+            button.classList.remove('active');
+        }
+
+        // Удаляем старые обработчики
+        button.replaceWith(button.cloneNode(true));
+    });
+
+    // Добавляем новые обработчики
+    document.querySelectorAll('.sort-button').forEach(button => {
+        button.addEventListener('click', () => {
+            // Снимаем активный класс со всех кнопок
+            document.querySelectorAll('.sort-button').forEach(btn => {
+                btn.classList.remove('active');
+            });
+
+            // Добавляем активный класс текущей кнопке
+            button.classList.add('active');
+
+            // Обновляем фильтр и применяем сортировку
+            currentFilters.sortBy = button.dataset.sort;
+            filterCards(currentFilters.searchQuery);
+        });
+    });
 }
