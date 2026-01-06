@@ -128,7 +128,6 @@
     box-shadow: 0 2px 2px rgba(108, 92, 231, 0.4);
     backdrop-filter: blur(10px);
 }
-
 .nav-item.active::after {
     content: '';
     position: absolute;
