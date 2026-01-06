@@ -42,20 +42,40 @@ async function updateDownloadsCount() {
     }
 }
 
-window.addEventListener('scroll', () => {
-    if (window.pageYOffset > 300) {
+scrollToTopBtn.addEventListener('click', () => {
+    const contentWrapper = document.querySelector('.content-wrapper');
+    if (contentWrapper) {
+        contentWrapper.scrollTo({
+            top: 0,
+            behavior: 'smooth'
+        });
+    }
+});
+
+function setupContentWrapperScroll() {
+    const contentWrapper = document.querySelector('.content-wrapper');
+    if (contentWrapper) {
+        // Удаляем старый обработчик, если есть
+        contentWrapper.removeEventListener('scroll', handleContentWrapperScroll);
+
+        // Добавляем новый обработчик
+        contentWrapper.addEventListener('scroll', handleContentWrapperScroll);
+
+        // Инициализируем видимость кнопки при загрузке
+        handleContentWrapperScroll();
+    }
+}
+
+function handleContentWrapperScroll() {
+    const contentWrapper = document.querySelector('.content-wrapper');
+    if (!contentWrapper || !scrollToTopBtn) return;
+
+    if (contentWrapper.scrollTop > 300) {
         scrollToTopBtn.classList.add('visible');
     } else {
         scrollToTopBtn.classList.remove('visible');
     }
-});
-
-scrollToTopBtn.addEventListener('click', () => {
-    window.scrollTo({
-        top: 0,
-        behavior: 'smooth'
-    });
-});
+}
 
 exportBtn.addEventListener('click', async () => {
     try {
@@ -420,6 +440,7 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
 
     // Добавляем обработчик прокрутки для бесконечной загрузки
     contentWrapper.addEventListener('scroll', handleScroll);
+    setupContentWrapperScroll();
 }
 
 function filterData(data, searchQuery, statusFilter) {
