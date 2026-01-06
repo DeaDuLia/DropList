@@ -47,11 +47,11 @@
     --shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 
     /* Цвета рейтингов */
-    --rating-5: #2ecc71; /* Ярко-зелёный */
-    --rating-4: #27ae60;
-    --rating-3: #3498db; /* Голубой */
-    --rating-2: #f1c40f; /* Жёлтый */
-    --rating-1: #f39c12; /* Оранжевый */
+    --rating-5: #007734; /* Ярко-зелёный */
+    --rating-4: #006977;
+    --rating-3: #34a1db; /* Голубой */
+    --rating-2: #c69007; /* Жёлтый */
+    --rating-1: #c65707; /* Оранжевый */
     --rating-0: #95a5a6; /* Серый */
     --rating--1: #e74c3c; /* Красный */
     --rating--2: #c0392b;
@@ -60,9 +60,9 @@
     --rating--5: #4d1a12; /* Тёмно-красный */
     --rating-not-played: #95a5a6;
     --rating-played: #a29bfe;
-    --rating-playing: #1abc9c; /* Фиолетовый */
-    --rating-completed: #27ae60; /* Бирюзовый */
-    --rating-pined: #aa8f02; /* Бирюзовый */
+    --rating-playing: #0c8a6f; /* Фиолетовый */
+    --rating-completed: #007734; /* Бирюзовый */
+    --rating-pined: #8f6d00; /* Бирюзовый */
     --rating-imported: #89009e; /* Бирюзовый */
     --rating-waiting: #059801;
     --rating-planed: #0296aa; /* Бирюзовый */
@@ -339,12 +339,12 @@ body {
 }
 
 #searchInput:focus {
-    color: var(--rating-completed);
-    border-color: var(--rating-completed);
+    color: #91c9d6;
+    border-color: #91c9d6;
 }
 
 #searchInput:focus::placeholder {
-    color: var(--rating-completed);
+    color: #6da0af;
 }
 
 .search-suggestions {
@@ -1288,7 +1288,7 @@ input:focus, select:focus {
 }
 .header-button {
     border-radius: 0;
-    background: rgba(0, 200, 216, 0.7);
+    background: #006977;
     color: var(--dark-button-color);
     font-size: 1rem;
     cursor: pointer;
@@ -1587,7 +1587,7 @@ add-form .form-content {
 
 .sort-button.active {
     filter: brightness(2);
-    border-color: var(--rating-completed);
+    border-color: #20c8f3;
 }
 
 .sort-button img {

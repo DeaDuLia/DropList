@@ -1696,8 +1696,8 @@ async function autoSearchCover(title) {
     const icoInput = document.getElementById('icoInput');
     if (icoInput) {
         icoInput.value = 'Ищем обложку...';
-        icoInput.style.color = '#28a745';
-        icoInput.style.borderColor = '#28a745';
+        icoInput.style.color = '#91c9d6';
+        icoInput.style.borderColor = '#91c9d6';
         icoInput.disabled = true;
     }
 
