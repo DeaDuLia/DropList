@@ -69,8 +69,6 @@
 /* Шапка */
 .main-header {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
     background-color: var(--dark-header-background);
     color: var(--dark-header-color);
     margin-bottom: 30px;
@@ -146,7 +144,7 @@
 
 
 #randomBtnSection {
-    background-color: var(--dark-button-background); /* Фиолетовый цвет для кнопки случайности */
+    background-color: var(--dark-nav-background); /* Фиолетовый цвет для кнопки случайности */
     color: white;
     border: none;
     border-radius: 8px;
@@ -161,11 +159,11 @@
 }
 
 #randomBtnSection:hover {
-    background-color: #8e44ad;
+    background-color: var(--dark-nav-active-background);
     color: white;
 }
 #searchInWeb {
-    background-color: var(--dark-button-background); /* Фиолетовый цвет для кнопки случайности */
+    background-color: var(--dark-nav-background); /* Фиолетовый цвет для кнопки случайности */
     color: white;
     border: none;
     border-radius: 8px;
@@ -180,7 +178,7 @@
 }
 
 #searchInWeb:hover {
-    background-color: #8e44ad;
+    background-color: var(--dark-nav-active-background);
     color: white;
 }
 
@@ -191,7 +189,7 @@
 }
 
 .header-button:hover, .add-button:hover {
-    background-color: #8e44ad;
+    background-color: var(--dark-nav-active-background);
 }
 /* Анимация кнопок */
 @media (max-width: 800px) {
@@ -217,19 +215,16 @@ body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background-color: var(--dark-body-background);
     color: var(--dark-text-color);
-    padding: 20px;
-    margin: 0 auto;
 }
 /* Секция контента */
 .content-section {
     background: var(--dark-section-background);
-    padding-bottom: 25px;
-    margin-bottom: 30px;
+    padding-bottom: 15px;
     box-shadow: var(--shadow);
     display: flex;
     flex-direction: column;
     overflow: hidden;
-    max-height: calc(100vh - 200px);
+    max-height: calc(100vh - 140px);
 }
 .content-wrapper {
     flex: 1;
@@ -466,11 +461,14 @@ body {
 }
 
 .add-form #addBtn {
+    cursor: pointer;
+    color: white;
+    border: none;
+    border-radius: 8px;
     height: 36px;
     margin-top: 10px;
     background: linear-gradient(135deg, #6c5ce7, #0296aa);
-    font-weight: 500;
-    transition: all 0.2s;
+    width: 100%;
 }
 
 .add-form #addBtn:hover {
@@ -583,6 +581,7 @@ body {
 .delete-btn,
 .change-image-btn,
 .change-category-btn {
+    border-radius: 8px;
     position: absolute;
     right: 10px;
     color: white;
@@ -967,9 +966,9 @@ input:focus, select:focus {
 /*    display: block;*/
 /*    width: 100%;*/
 /*}*/
-button:hover {
-    background-color: #5649d1;
-}
+/*button:hover {*/
+/*    background-color: #5649d1;*/
+/*}*/
 
 @media (max-width: 768px) {
     .data-grid {
@@ -1178,7 +1177,7 @@ button:hover {
 }
 
 .add-button {
-    background-color: var(--dark-button-background);
+    background-color: var(--dark-nav-background);
     color: var(--dark-button-color);
     border: none;
     border-radius: 8px;
@@ -1278,16 +1277,7 @@ button:hover {
 
 }
 
-.add-button {
-    background-color: var(--dark-button-background);
-    color: var(--dark-button-color);
-    font-size: 1rem;
-    cursor: pointer;
-    transition: all 0.3s ease;
-    white-space: nowrap;
-    max-width: 100%; /* Ограничиваем максимальную ширину */
-    flex-shrink: 1;
-}
+
 
 add-form .form-content {
     display: flex;
@@ -1405,7 +1395,8 @@ add-form .form-content {
 
 /* Кнопки фильтров */
 .filter-button {
-    background-color: var(--dark-nav-background);
+    opacity: 0.8;
+    background-color: var(--dark-section-background);
     color: var(--dark-input-color);
     border: none;
     border-radius: 0;
@@ -1422,20 +1413,19 @@ add-form .form-content {
     border-radius: 0;
     position: relative;
     overflow: hidden;
-    border-right: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.filter-button:hover {
+    opacity: 1;
 }
 
 .filter-button:last-child {
     border-right: none;
 }
 
-.filter-button:hover {
-    background-color: var(--dark-nav-active-background);
-    transform: none;
-}
-
 .filter-button.active {
-    background: linear-gradient(135deg, rgba(108, 92, 231, 0.1) 0%, rgba(2, 150, 170, 0.4) 100%);
+    /*background: linear-gradient(135deg, rgba(108, 92, 231, 0.1) 0%, rgba(2, 150, 170, 0.4) 100%);*/
+    background-color: var(--dark-nav-active-background);
     box-shadow: 0 2px 2px rgba(108, 92, 231, 0.4);
     backdrop-filter: blur(10px);
     color: white;
@@ -1503,7 +1493,6 @@ add-form .form-content {
     background: rgba(108, 92, 231, 0.05);
     backdrop-filter: blur(10px);
     border: 1px solid rgba(108, 92, 231, 0.2);
-    border-radius: 12px;
     padding: 10px;
     margin-bottom: 15px;
     position: sticky;
@@ -1520,7 +1509,6 @@ add-form .form-content {
     gap: 10px;
     justify-content: space-between;
     padding-top: 10px;
-    border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
 .filter-buttons-container {
@@ -1547,20 +1535,3 @@ add-form .form-content {
     flex-shrink: 0;
 }
 
-.filter-buttons-section {
-    margin-top: auto;
-}
-
-/*
-TODO: Перенести нужные свойства в кнопки удалить/сменить/найти/добавить. Отредактировать стиль кнопок в модальых окнах
-/*button {*/
-/*    background-color: var(--dark-primary-color);*/
-/*    color: white;*/
-/*    border: none;*/
-/*    border-radius: 8px;*/
-/*    font-size: 1rem;*/
-/*    cursor: pointer;*/
-/*    transition: background-color 0.3s;*/
-/*    display: block;*/
-/*    width: 100%;*/
-/*}*/
