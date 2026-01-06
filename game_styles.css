@@ -325,12 +325,7 @@ body {
     border-right: none; /* Убираем правую границу, так как кнопка будет сливаться */
     border-radius: 8px 0 0 8px;
 }
-#searchInput:focus {
-    box-shadow: 0 0 0 2px var(--dark-input-shadow);
-    border-color: var(--dark-input-border-focus);
-    border-bottom: 4px var(--dark-input-border-focus);
-    outline: none;
-}
+
 .search-suggestions {
     position: absolute;
     top: 100%;
@@ -356,12 +351,11 @@ body {
     border-color: var(--dark-input-border-hover-color);
 }
 #searchBtn {
-
     height: 40px;
     width: 40px;
-    background: var(--dark-button-background);
+    background: var(--dark-section-background);
     backdrop-filter: blur(10px);
-    border: 1px solid var(--dark-input-border-focus);
+    border: 1px solid var(--dark-input-border);
     border-left: none;
     border-radius: 0 8px 8px 0;
     cursor: pointer;
@@ -373,12 +367,12 @@ body {
     transition: background-color 0.3s ease;
 }
 
-
 #searchBtn:hover {
-    background-color: #8e44ad;
+    background-color: var(--dark-nav-active-background);
 }
 .clear-search-btn {
-    background-color: var(--dark-button-background);
+    border-radius: 12px;
+    background-color: var(--dark-nav-background);
     border: none;
     cursor: pointer;
     font-size: 1.8rem;
@@ -392,7 +386,7 @@ body {
     justify-content: center;
 }
 .clear-search-btn:hover {
-    background-color: #8e44ad;
+    background-color: var(--dark-nav-active-background);
 }
 /* Форма добавления карточки */
 .add-form {
