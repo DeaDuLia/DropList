@@ -1,40 +1,36 @@
-# DropList 🎮🎬📚
+# Все списки и заметки вместе с DropList
 
-**Умный органайзер для игр, фильмов и книг**  
-Больше не теряйте понравившиеся тайтлы в заметках — храните всё в одном месте с удобной системой фильтрации!
+**Легко храните и делитесь заметками с друзьями!**  
+**DropList** нужен, чтобы быстро сохранить, определить приоритет, в любой момент легко поделиться с друзьями или на крайний случай ткнуть в рандомный фильм для просмотра.
 
-![Скриншот интерфейса](https://private-user-images.githubusercontent.com/50991329/464204438-90b5b400-71bf-4b16-af2b-c75b8fb31f45.png?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NTIwNjcyMTMsIm5iZiI6MTc1MjA2NjkxMywicGF0aCI6Ii81MDk5MTMyOS80NjQyMDQ0MzgtOTBiNWI0MDAtNzFiZi00YjE2LWFmMmItYzc1YjhmYjMxZjQ1LnBuZz9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNTA3MDklMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjUwNzA5VDEzMTUxM1omWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPWZjMmQzOTBlNjA0YjRjNTIzMWYzYmVkNmJhNTY3MDE0NDhkZDhkODVlOTVmMmM1NTNjMjJiMzQ1ZGYzODg3NTMmWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0In0.i1xd4XJbTZEYfQ-qQUp9uYp8Ez3z2dQr3TdFfGCnbJE)
+![Скриншот интерфейса](https://private-user-images.githubusercontent.com/50991329/533349602-a7f99bfa-5298-47c9-a2e9-64507920bd99.png?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3Njc4NzY2NTMsIm5iZiI6MTc2Nzg3NjM1MywicGF0aCI6Ii81MDk5MTMyOS81MzMzNDk2MDItYTdmOTliZmEtNTI5OC00N2M5LWEyZTktNjQ1MDc5MjBiZDk5LnBuZz9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNjAxMDglMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjYwMTA4VDEyNDU1M1omWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPTI5ZTQxNzM1YTAyNDc2ODBjMjE3ZjIzNWM1MzNjYzEyNjIyYWM2OWZmNjQ4ZWVhMmNiYTc3ZmYyMWVhOTllODcmWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0In0.0VxfeKy77L7bG5XvOqGZohq63-HLXBGV1CNhyID4hYA)
 
-## 💡 Идея
-Знакомо, когда натыкаешься на крутой фильм или игру, сохраняешь «на потом», а потом:
-- Не можешь вспомнить название («Та игра с синим мечом...»)
-- Тратишь кучу времени на выбор («Что бы такого глянуть вечером?»)
-- Забываешь, что планировал посмотреть 
+## Для чего приложение и как оно появилось?
 
-**DropList** решает эти проблемы:
-- 📌 Единое хранилище для всех категорий
-- 🏷️ Гибкая система статусов и рейтингов
-- 🔍 Мгновенный поиск по коллекции
+1. Вечером после работы или стримов каждый раз искал, что посмотреть перед сном или во время перекуса, но не мог выбрать что-то конкретное - мне не хочется тратить время и силы (мне лень, да), поэтому раньше я забивал болт и уходил смотреть YouTube.
+2. Ещё бывало, наткнёшься на крутой момент из анимешки или на скриншот из игры, в памяти картинка откладывается, но вот найти в интернете по описанию уже проблема.
+3. Так же когда друзья просили поделиться чем-то крутым, я не мог вспомнить что-то конкретное вот так сразу
 
-## ✨ Функции
-| Категории       | Управление                  | Фильтрация        |
-|----------------|-----------------------------|------------------|
-| 🎮 Игры        | ✅ Добавление                | 🔍 По названию   |
-| 🎬 Кино        | ✏️ Редактирование           | 🏷️ По статусу    |
-| 📺 Сериалы     | 🗑️ Удаление                | |
-| 🌸 Аниме       | 🖼️ Автопоиск обложек       |    |
-| 📚 Книги       | 📤Импорт / экспорт каталога |                  |
+Моё дело скопировать название и сделать 1 клик. Дальше **DropList** сделает всё сам:
+1. Если вы скопировали название, то при нажатии кнопки "добавить", приложение само подтянет необходимую информацию и обложку из интернета.
+![Быстрое добавление](https://private-user-images.githubusercontent.com/50991329/533366166-f064ced4-348a-4fc4-b849-d4e77c605966.gif?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3Njc4NzkzODAsIm5iZiI6MTc2Nzg3OTA4MCwicGF0aCI6Ii81MDk5MTMyOS81MzMzNjYxNjYtZjA2NGNlZDQtMzQ4YS00ZmM0LWI4NDktZDRlNzdjNjA1OTY2LmdpZj9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNjAxMDglMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjYwMTA4VDEzMzEyMFomWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPWNhNDg3ZjBjODM2OWZkYjE5M2M5OTdjMzNjNzBjYTc2MTE2ODQyNzY5MjkxNjJhNDVjYWJkOThmZGNkNDg4ZDImWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0In0.UdpCjHLICeHinVTBTx-1HNzbYE1IF0iyyv0YnglbeNA)
+2. Есть встроенный поисковик обложек, если вы ходите поискать лучший вариант
+![Поиск обложки](https://private-user-images.githubusercontent.com/50991329/533370614-e8bc1000-37c7-4dc9-a628-d132557d03f3.gif?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3Njc4ODAwMzcsIm5iZiI6MTc2Nzg3OTczNywicGF0aCI6Ii81MDk5MTMyOS81MzMzNzA2MTQtZThiYzEwMDAtMzdjNy00ZGM5LWE2MjgtZDEzMjU1N2QwM2YzLmdpZj9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNjAxMDglMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjYwMTA4VDEzNDIxN1omWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPTQ1NmZlYTNhMjI0NTRiOTc3MDMxZGMzNzMzNGQxYzI2NDMyZjRjMWNhOTAxMjYwZTkyYmM5MDgzMWMwNDg3MzImWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0In0.R11IlrXTcHA8AXzqm8h3Aa5ngskQXPbK8fQRBEN1rSE)
+3. У каждой заметки есть статусы и рейтинг/оценка для быстрой сортировки - что охотнее посмотреть, чем не стыдно поделиться
+![Сортировка](https://private-user-images.githubusercontent.com/50991329/533373488-6b064926-81ac-4a3d-a242-ccbb01c1eab8.gif?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3Njc4ODA1MjksIm5iZiI6MTc2Nzg4MDIyOSwicGF0aCI6Ii81MDk5MTMyOS81MzMzNzM0ODgtNmIwNjQ5MjYtODFhYy00YTNkLWEyNDItY2NiYjAxYzFlYWI4LmdpZj9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNjAxMDglMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjYwMTA4VDEzNTAyOVomWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPWJkYTY0ZWRhM2E0Y2I0YzNjMWIxOThmOGM0NDg0MDNmOWMwMGIxMDcwY2I1NmMwZmI0NTFlOGQ3MDdhNjk3NWQmWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0In0.7QdvKWB6xR7TM8hfGzgvSVTMMj7tOVmbcsr8p5N2av8)
+4. Заметками можно делиться с друзьями с помощью кнопок "импорт/экспорт"
+![Быстрое добавление](https://private-user-images.githubusercontent.com/50991329/533380633-d4073d72-5303-46e5-b9f6-53095571da73.gif?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3Njc4ODEyOTUsIm5iZiI6MTc2Nzg4MDk5NSwicGF0aCI6Ii81MDk5MTMyOS81MzMzODA2MzMtZDQwNzNkNzItNTMwMy00NmU1LWI5ZjYtNTMwOTU1NzFkYTczLmdpZj9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNjAxMDglMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjYwMTA4VDE0MDMxNVomWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPTU5MTEyOTE3NjUwNGIwMzFkMWUyZDA5YmM0YWJjMTg5ZGEyODBiNzg4ZjUzZWRmYTBlNmIxMDY5OTRiZTg1ZDAmWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0In0.gqeEsGm8oKQg9PQ9jkAzvQ5lyh_1gjqSNRcgR1oFvrg)
+5. Так же реализована проверка новых обновлений с GitHub, чтобы не не проверять самому
+![Обновление](https://private-user-images.githubusercontent.com/50991329/533381289-2d4429fb-0b11-484f-b994-c7148c4e41bb.png?jwt=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3Njc4ODEyOTUsIm5iZiI6MTc2Nzg4MDk5NSwicGF0aCI6Ii81MDk5MTMyOS81MzMzODEyODktMmQ0NDI5ZmItMGIxMS00ODRmLWI5OTQtYzcxNDhjNGU0MWJiLnBuZz9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNjAxMDglMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjYwMTA4VDE0MDMxNVomWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPTNlZDZjNWM1ZjNhYTllMTZkZGQ0YzRlMDc1ZTVhMjA2OWFmZjA1MWU2MWMyY2Q0M2I0YjYyZDg5ZjkyNjNlMDAmWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0In0.BHcAWmhrM9pQHhpDzyIxWTVvkeWC1ZV_tKBy66imlPc)
 
-## 🚀 Установка
-1. Скачайте последнюю версию:
-    - [Windows (.rar)](https://example.com/DropList.exe)
-2. Распаковать архив в удобную папку
-3. Готово! Приложение работает **оффлайн**
+## Распространение приложения
+Поспрашивал у друзей и знакомых - оказалось, что часто люди сталкиваются с похожими проблемами, поэтому решил выложить приложение в открытый доступ.
+Буду рад, если найдутся ребята, кому приложение действительно окажется полезным.
 
-## 🎥 Демонстрация
-![Работа приложения](https://private-user-images.githubusercontent.com/50991329/464207481-7fa9b2e8-d56b-4b7f-9d8c-af9a2b05d9f2.gif?jwt=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJnaXRodWIuY29tIiwiYXVkIjoicmF3LmdpdGh1YnVzZXJjb250ZW50LmNvbSIsImtleSI6ImtleTUiLCJleHAiOjE3NTIwNjc2ODIsIm5iZiI6MTc1MjA2NzM4MiwicGF0aCI6Ii81MDk5MTMyOS80NjQyMDc0ODEtN2ZhOWIyZTgtZDU2Yi00YjdmLTlkOGMtYWY5YTJiMDVkOWYyLmdpZj9YLUFtei1BbGdvcml0aG09QVdTNC1ITUFDLVNIQTI1NiZYLUFtei1DcmVkZW50aWFsPUFLSUFWQ09EWUxTQTUzUFFLNFpBJTJGMjAyNTA3MDklMkZ1cy1lYXN0LTElMkZzMyUyRmF3czRfcmVxdWVzdCZYLUFtei1EYXRlPTIwMjUwNzA5VDEzMjMwMlomWC1BbXotRXhwaXJlcz0zMDAmWC1BbXotU2lnbmF0dXJlPTY3MjI1YTgzZTg0ZjI1YWQ5YmUzYzM0NDlkMTc1N2RhNDViMDZjNWQxM2JhOGRlOTg2ZDllNWQ5ZDc5ZDJjNGUmWC1BbXotU2lnbmVkSGVhZGVycz1ob3N0In0.siye0HmpWoDROjOUfDCs1RyUSNT892xtPPjsSb8G4co)
+Установщик на гитхаб: [Релизы](https://github.com/DeaDuLia/DropList/releases)
 
-## 📦 Технологии
+Так же на гитхаб есть исходный код, чтобы было видно, что в приложении нет чего-то зловредного кроме моего спагетти кода, который мне нужно будет рефакторить и оптимизировать (Я спешил поделиться, не бейте)
+## Технологии
 - **Frontend**: Electron + HTML/CSS/JS
 - **Хранение данных**: Локальная база (SQLite)
 - **Кроссплатформенность**: Windows

@@ -4,11 +4,148 @@ const fs = require('fs');
 const path = require('path');
 const Database = require('better-sqlite3');
 const https = require('https');
+const { autoUpdater } = require('electron-updater');
+const log = require('electron-log');
+const userDataPath = app.getPath('userData');
+const dbPath = path.join(userDataPath, 'database.db');
+autoUpdater.logger = log;
+autoUpdater.logger.transports.file.level = 'info';
 
 app.name = 'DropList';
 app.setName('DropList');
 if (process.platform === 'win32') {
     app.setAppUserModelId('com.deshin.droplist');
+}
+
+async function checkForUpdates(manualCheck = false) {
+    const win = BrowserWindow.getFocusedWindow();
+
+    try {
+        // Получаем информацию о пропущенных версиях
+        const skippedVersion = statements.getStatistic.get('skipped_version');
+        const lastCheck = statements.getStatistic.get('last_update_check');
+
+
+        if (!manualCheck) {
+            if (lastCheck) {
+                const lastCheckDate = new Date(lastCheck.actual_date);
+                const now = new Date();
+                const diffHours = (now - lastCheckDate) / (1000 * 60 * 60);
+
+                // Проверяем не чаще чем раз в 4 часа
+                if (diffHours < 4) {
+                    return;
+                }
+            }
+        }
+
+        // Получаем текущую версию
+        const currentVersion = app.getVersion();
+
+        // Получаем информацию о релизах с GitHub
+        const releases = await getGitHubReleases();
+
+        if (!releases || releases.length === 0) {
+            return;
+        }
+
+        const latestRelease = releases[0];
+        const latestVersion = latestRelease.tag_name.replace('v', '');
+
+        // Проверяем, пропущена ли текущая версия
+        if (skippedVersion && skippedVersion.value === latestVersion && !manualCheck) {
+            return;
+        }
+
+        // Сравниваем версии
+        if (isNewerVersion(latestVersion, currentVersion)) {
+            win.webContents.send('update-available', {
+                currentVersion: app.getVersion(),
+                version: latestVersion,
+                releaseNotes: latestRelease.body || 'Новые улучшения и исправления ошибок',
+                releaseDate: latestRelease.published_at,
+                url: latestRelease.html_url
+            });
+        } else if (manualCheck) {
+            win.webContents.send('no-update-available', {
+                currentVersion: currentVersion,
+                message: 'У вас установлена последняя версия'
+            });
+        }
+
+        // Сохраняем дату последней проверки
+        statements.setStatistic.run(
+            'last_update_check',
+            new Date().toISOString(),
+            new Date().toISOString()
+        );
+
+    } catch (error) {
+        console.error('Ошибка при проверке обновлений:', error);
+        if (win && manualCheck) {
+            win.webContents.send('update-error', {
+                error: 'Не удалось проверить обновления'
+            });
+        }
+    }
+}
+
+// Функция для получения релизов с GitHub
+async function getGitHubReleases() {
+    return new Promise((resolve, reject) => {
+        const options = {
+            hostname: 'api.github.com',
+            path: '/repos/DeaDuLia/DropList/releases',
+            headers: {
+                'User-Agent': 'DropList-App',
+                'Accept': 'application/vnd.github.v3+json'
+            }
+        };
+
+        https.get(options, (res) => {
+            let data = '';
+            res.on('data', (chunk) => {
+                data += chunk;
+            });
+            res.on('end', () => {
+                try {
+                    const releases = JSON.parse(data);
+                    resolve(releases || []);
+                } catch (e) {
+                    console.error('Ошибка парсинга релизов:', e);
+                    reject(e);
+                }
+            });
+        }).on('error', (err) => {
+            console.error('GitHub API request failed:', err);
+            reject(err);
+        });
+    });
+}
+
+// Функция сравнения версий
+function isNewerVersion(newVersion, currentVersion) {
+    const newParts = newVersion.split('.').map(Number);
+    const currentParts = currentVersion.split('.').map(Number);
+
+    for (let i = 0; i < Math.max(newParts.length, currentParts.length); i++) {
+        const newPart = newParts[i] || 0;
+        const currentPart = currentParts[i] || 0;
+
+        if (newPart > currentPart) return true;
+        if (newPart < currentPart) return false;
+    }
+
+    return false;
+}
+
+// Функция для пропуска версии
+function skipVersion(version) {
+    statements.setStatistic.run(
+        'skipped_version',
+        version,
+        new Date().toISOString()
+    );
 }
 
 function getIconPath() {
@@ -146,7 +283,7 @@ async function getGitHubDownloads() {
     });
 }
 
-const db = new Database('database.db', {
+const db = new Database(dbPath, {
     timeout: 5000 // увеличить таймаут ожидания
 });
 db.pragma('journal_mode = WAL');
@@ -218,6 +355,12 @@ function createWindow() {
 }
 
 app.whenReady().then(createWindow);
+
+app.whenReady().then(() => {
+    setTimeout(() => {
+        checkForUpdates(false);
+    }, 3000);
+});
 
 app.on('before-quit', () => {
     db.pragma('wal_checkpoint(FULL)');
@@ -725,6 +868,22 @@ ipcMain.on('window-control', (event, action) => {
 ipcMain.handle('is-window-maximized', () => {
     const win = BrowserWindow.getFocusedWindow();
     return win ? win.isMaximized() : false;
+});
+
+ipcMain.handle('check-for-updates', async (event, manualCheck = false) => {
+    await checkForUpdates(manualCheck);
+});
+
+ipcMain.handle('skip-version', (event, version) => {
+    skipVersion(version);
+});
+
+ipcMain.handle('get-current-version', () => {
+    return app.getVersion();
+});
+
+ipcMain.handle('open-release-page', (event, url) => {
+    shell.openExternal(url);
 });
 
 

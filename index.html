@@ -88,6 +88,41 @@
     </div>
 </div>
 <button id="scrollToTopBtn" class="scroll-to-top" title="Наверх">↑</button>
+<div id="updateModal" class="modal update-modal">
+    <div class="modal-content" style="max-width: 500px;">
+        <h3>Доступно обновление!</h3>
+        <div class="update-info">
+            <p><strong>Текущая версия:</strong> <span id="currentVersion"></span></p>
+            <p><strong>Новая версия:</strong> <span id="newVersion"></span></p>
+            <p><strong>Дата релиза:</strong> <span id="releaseDate"></span></p>
+            <div class="release-notes">
+                <h4>Что нового:</h4>
+                <div id="releaseNotes" class="release-notes-content"></div>
+            </div>
+        </div>
+        <div class="update-actions">
+            <button id="updateNowBtn" class="modal-button update-btn">Обновить сейчас</button>
+            <button id="updateLaterBtn" class="modal-button later-btn">Напомнить позже</button>
+            <button id="skipVersionBtn" class="modal-button skip-btn">Пропустить эту версию</button>
+        </div>
+    </div>
+</div>
+
+<div id="noUpdateModal" class="modal">
+    <div class="modal-content" style="max-width: 400px;">
+        <h3>✅ Актуальная версия</h3>
+        <p id="noUpdateMessage"></p>
+        <button class="modal-button" id="closeNoUpdateModal">OK</button>
+    </div>
+</div>
+
+<div id="updateErrorModal" class="modal">
+    <div class="modal-content" style="max-width: 400px;">
+        <h3>⚠️ Ошибка проверки обновлений</h3>
+        <p id="updateErrorMessage"></p>
+        <button class="modal-button" id="closeUpdateErrorModal">OK</button>
+    </div>
+</div>
 <script src="front-script.js"></script>
 </body>
 </html>

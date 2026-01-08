@@ -33,3 +33,18 @@ contextBridge.exposeInMainWorld('electronAPI', {
     searchImage: (title) => ipcRenderer.invoke('search-image', title)
 });
 
+contextBridge.exposeInMainWorld('updateAPI', {
+    checkForUpdates: (manualCheck) => ipcRenderer.invoke('check-for-updates', manualCheck),
+    skipVersion: (version) => ipcRenderer.invoke('skip-version', version),
+    openReleasePage: (url) => ipcRenderer.invoke('open-release-page', url),
+    onUpdateAvailable: (callback) => {
+        ipcRenderer.on('update-available', (event, data) => callback(data));
+    },
+    onNoUpdateAvailable: (callback) => {
+        ipcRenderer.on('no-update-available', (event, data) => callback(data));
+    },
+    onUpdateError: (callback) => {
+        ipcRenderer.on('update-error', (event, data) => callback(data));
+    }
+});
+
