@@ -30,6 +30,45 @@ let currentFilters = {
     statusFilter: 'Все'
 };
 
+document.addEventListener('DOMContentLoaded', () => {
+    const minimizeBtn = document.getElementById('minimizeBtn');
+    const maximizeBtn = document.getElementById('maximizeBtn');
+    const closeBtn = document.getElementById('closeBtn');
+
+    if (minimizeBtn) {
+        minimizeBtn.addEventListener('click', () => {
+            window.electronAPI.minimizeWindow();
+        });
+    }
+
+    if (maximizeBtn) {
+        maximizeBtn.addEventListener('click', () => {
+            window.electronAPI.maximizeWindow();
+        });
+
+        // Обновляем иконку при изменении состояния окна
+        window.electronAPI.isWindowMaximized().then(isMaximized => {
+            updateMaximizeButtonIcon(isMaximized);
+        });
+    }
+
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+            window.electronAPI.closeWindow();
+        });
+    }
+
+    // Слушаем события изменения состояния окна
+    window.electronAPI.onMessageFromMain((data) => {
+        // Это уже существующий обработчик
+    });
+
+    // Добавляем обработчик для состояния maximize
+    // Нужно добавить в preload.js отправку события 'window-maximize-state'
+});
+
+
+
 async function updateDownloadsCount() {
     try {
         const result = await window.electronAPI.getGitHubDownloads();
@@ -1124,12 +1163,37 @@ async function showEditableDropdown(field, valueDisplay) {
     const list = document.createElement('div');
     list.className = 'editable-select-list';
 
-    // Позиционируем список рядом с полем
+    // Получаем позицию элемента
     const rect = valueDisplay.getBoundingClientRect();
+    const viewportHeight = window.innerHeight;
+    const listHeight = Math.min(values.length * 32 + 20, 250); // Предполагаемая высота списка
+
+    // Определяем, где показывать список: снизу или сверху
+    const spaceBelow = viewportHeight - rect.bottom - 10;
+    const spaceAbove = rect.top - 10;
+
+    let listTop;
+    let openDirection = 'below';
+
+    // Если внизу достаточно места или места сверху меньше
+    if (spaceBelow >= listHeight || spaceBelow >= spaceAbove) {
+        // Показываем снизу
+        listTop = rect.bottom + 5;
+        openDirection = 'below';
+    } else {
+        // Показываем сверху
+        listTop = rect.top - listHeight - 5;
+        openDirection = 'above';
+    }
+
+    // Позиционируем список
     list.style.position = 'fixed';
-    list.style.top = (rect.bottom + 5) + 'px';
+    list.style.top = listTop + 'px';
     list.style.left = rect.left + 'px';
     list.style.minWidth = rect.width + 'px';
+
+    // Добавляем класс направления для стилей CSS
+    list.dataset.direction = openDirection;
 
     // Добавляем опции
     values.forEach(value => {
@@ -1164,7 +1228,6 @@ async function showEditableDropdown(field, valueDisplay) {
         overlay.onclick = null;
     }
 }
-
 async function updateFieldValue(field, valueDisplay, newValue, itemName, isRating) {
     try {
         const section = document.querySelector('.nav-item.active')?.dataset.section;
@@ -1696,8 +1759,8 @@ async function autoSearchCover(title) {
     const icoInput = document.getElementById('icoInput');
     if (icoInput) {
         icoInput.value = 'Ищем обложку...';
-        icoInput.style.color = '#28a745';
-        icoInput.style.borderColor = '#28a745';
+        icoInput.style.color = '#91c9d6';
+        icoInput.style.borderColor = '#91c9d6';
         icoInput.disabled = true;
     }
 
@@ -1750,31 +1813,20 @@ function setupFilterButtons() {
 
 function setupSortButtons() {
     const sortButtons = document.querySelectorAll('.sort-button');
-
-    // Устанавливаем активную кнопку по умолчанию
     sortButtons.forEach(button => {
         if (button.dataset.sort === (currentFilters.sortBy || 'date')) {
             button.classList.add('active');
         } else {
             button.classList.remove('active');
         }
-
-        // Удаляем старые обработчики
         button.replaceWith(button.cloneNode(true));
     });
-
-    // Добавляем новые обработчики
     document.querySelectorAll('.sort-button').forEach(button => {
         button.addEventListener('click', () => {
-            // Снимаем активный класс со всех кнопок
             document.querySelectorAll('.sort-button').forEach(btn => {
                 btn.classList.remove('active');
             });
-
-            // Добавляем активный класс текущей кнопке
             button.classList.add('active');
-
-            // Обновляем фильтр и применяем сортировку
             currentFilters.sortBy = button.dataset.sort;
             filterCards(currentFilters.searchQuery);
         });

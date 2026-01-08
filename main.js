@@ -26,12 +26,12 @@ function initializeDatabase(db) {
     `);
     db.exec(`
   INSERT OR IGNORE INTO ratings (rating) VALUES
-      ('0'),
-      ('1'),
-      ('2'),
-      ('3'),
-      ('4'),
       ('5'),
+      ('4'),
+      ('3'),
+      ('2'),
+      ('1'),
+      ('0'),
       ('-1'),
       ('-2'),
       ('-3'),
@@ -191,6 +191,8 @@ function createWindow() {
         width: 1280,
         height: 800,
         icon: getIconPath(),
+        frame: false, // Убираем стандартную рамку Windows
+        titleBarStyle: 'hidden', // Скрываем стандартную панель заголовка
         webPreferences: {
             nodeIntegration: false,
             sandbox: true,
@@ -698,3 +700,31 @@ ipcMain.handle('search-image', async (event, title) => {
         }, 10000);
     });
 });
+
+ipcMain.on('window-control', (event, action) => {
+    const win = BrowserWindow.getFocusedWindow();
+    if (!win) return;
+
+    switch (action) {
+        case 'minimize':
+            win.minimize();
+            break;
+        case 'maximize':
+            if (win.isMaximized()) {
+                win.unmaximize();
+            } else {
+                win.maximize();
+            }
+            break;
+        case 'close':
+            win.close();
+            break;
+    }
+});
+
+ipcMain.handle('is-window-maximized', () => {
+    const win = BrowserWindow.getFocusedWindow();
+    return win ? win.isMaximized() : false;
+});
+
+

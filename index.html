@@ -3,29 +3,41 @@
 <head>
     <meta charset="UTF-8">
     <title>DropList</title>
-    <link rel="stylesheet" href="game_styles.css">
-</head>
+    <link rel="stylesheet" href="main_styles.css">
+    </head>
 <body>
+<div class="custom-title-bar" id="customTitleBar">
+    <div class="title-bar-drag-area">
+        <div class="window-title">
+            <span>DropList</span>
+        </div>
+    </div>
+    <div class="window-controls">
+        <button class="window-control minimize" id="minimizeBtn" title="Свернуть"></button>
+        <button class="window-control maximize" id="maximizeBtn" title="Развернуть"></button>
+        <button class="window-control close" id="closeBtn" title="Закрыть"></button>
+    </div>
+</div>
 <header class="main-header">
     <nav class="main-nav">
         <ul class="nav-list">
             <li class="nav-item active" data-section="games">
-                <span>🎮 Игры</span>
+                <img src="assets/icons/games.svg" alt="🎮" class="button-icon"><span>Игры</span>
             </li>
             <li class="nav-item" data-section="serials">
-                <span>📺 Сериалы</span>
+                <img src="assets/icons/serials.svg" alt="📺" class="button-icon"><span>Сериалы</span>
             </li>
             <li class="nav-item" data-section="movies">
-                <span>🎬 Кино</span>
+                <img src="assets/icons/movies.svg" alt="🎬" class="button-icon"><span>Кино</span>
             </li>
             <li class="nav-item" data-section="cartoons">
-                <span>🎥 Мульты</span>
+                <img src="assets/icons/cartoons.svg" alt="🎥" class="button-icon"><span>Мульты</span>
             </li>
             <li class="nav-item" data-section="anime">
-                <span>🌸 Аниме</span>
+                <img src="assets/icons/anime.svg" alt="🌸" class="button-icon"><span>Аниме</span>
             </li>
             <li class="nav-item" data-section="books">
-                <span>📚 Книги</span>
+                <img src="assets/icons/books.svg" alt="📚" class="button-icon"><span>Книги</span>
             </li>
         </ul>
     </nav>
@@ -33,7 +45,7 @@
         <button id="replaceBtn" class="header-button" title="Заменить все данные"><img src="assets/icons/synchronyze.svg" alt="🔄" class="button-icon"></button>
         <button id="importBtn" class="header-button" title="Импорт данных"><img src="assets/icons/import.svg" alt="" class="button-icon"></button>
         <button id="exportBtn" class="header-button" title="Экспорт данных"><img src="assets/icons/export.svg" alt="" class="button-icon"></button>
-        <button id="donateBtn" class="header-button" title="Поддержать разработчика">❤️ Поддержать</button>
+        <button id="donateBtn" class="header-button" title="Поддержать разработчика"><img src="assets/icons/donate.svg" alt="❤️" class="button-icon"> Поддержать</button>
         <span id="downloadsCount" class="downloads-count" title="Всего загрузок приложения">📥 0</span>
     </div>
 </header>
@@ -55,7 +67,6 @@
     <div class="modal-content" style="max-width: 500px;">
         <h3>Поддержать разработчика</h3>
         <p>Если вам нравится приложение, вы можете поддержать его развитие:</p>
-
         <div class="donate-methods">
             <div class="donate-method">
                 <h2>📧Почта для связи</h2>
@@ -73,7 +84,6 @@
                      alt="QR код для доната">
             </div>
         </div>
-
         <button class="modal-button-close" id="closeDonateModal">Закрыть</button>
     </div>
 </div>
