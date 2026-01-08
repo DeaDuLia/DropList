@@ -30,6 +30,45 @@ let currentFilters = {
     statusFilter: 'Все'
 };
 
+document.addEventListener('DOMContentLoaded', () => {
+    const minimizeBtn = document.getElementById('minimizeBtn');
+    const maximizeBtn = document.getElementById('maximizeBtn');
+    const closeBtn = document.getElementById('closeBtn');
+
+    if (minimizeBtn) {
+        minimizeBtn.addEventListener('click', () => {
+            window.electronAPI.minimizeWindow();
+        });
+    }
+
+    if (maximizeBtn) {
+        maximizeBtn.addEventListener('click', () => {
+            window.electronAPI.maximizeWindow();
+        });
+
+        // Обновляем иконку при изменении состояния окна
+        window.electronAPI.isWindowMaximized().then(isMaximized => {
+            updateMaximizeButtonIcon(isMaximized);
+        });
+    }
+
+    if (closeBtn) {
+        closeBtn.addEventListener('click', () => {
+            window.electronAPI.closeWindow();
+        });
+    }
+
+    // Слушаем события изменения состояния окна
+    window.electronAPI.onMessageFromMain((data) => {
+        // Это уже существующий обработчик
+    });
+
+    // Добавляем обработчик для состояния maximize
+    // Нужно добавить в preload.js отправку события 'window-maximize-state'
+});
+
+
+
 async function updateDownloadsCount() {
     try {
         const result = await window.electronAPI.getGitHubDownloads();

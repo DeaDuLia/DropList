@@ -1,6 +1,10 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
+    minimizeWindow: () => ipcRenderer.send('window-control', 'minimize'),
+    maximizeWindow: () => ipcRenderer.send('window-control', 'maximize'),
+    closeWindow: () => ipcRenderer.send('window-control', 'close'),
+    isWindowMaximized: () => ipcRenderer.invoke('is-window-maximized'),
     //Общие
     getRatings: () => ipcRenderer.invoke('get-ratings'),
     getStatuses: () => ipcRenderer.invoke('get-statuses'),
@@ -28,3 +32,4 @@ contextBridge.exposeInMainWorld('electronAPI', {
     openSearch: (url) => ipcRenderer.invoke('search-in-browser', url),
     searchImage: (title) => ipcRenderer.invoke('search-image', title)
 });
+

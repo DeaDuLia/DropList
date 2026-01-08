@@ -1599,3 +1599,160 @@ add-form .form-content {
 .sort-button.active img {
     filter: invert(1) brightness(2);
 }
+
+.custom-title-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 32px;
+    background-color: var(--dark-header-background);
+    color: var(--dark-header-color);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    -webkit-app-region: drag;
+    z-index: 10000;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+}
+
+.title-bar-drag-area {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    height: 100%;
+    padding-left: 12px;
+    -webkit-app-region: drag;
+}
+
+.window-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    opacity: 0.9;
+}
+
+.window-logo {
+    width: 16px;
+    height: 16px;
+    filter: invert(1) brightness(2);
+}
+
+.window-controls {
+    display: flex;
+    align-items: center;
+    height: 100%;
+    -webkit-app-region: no-drag;
+}
+
+.window-control {
+    width: 46px;
+    height: 100%;
+    background: transparent;
+    border: none;
+    color: var(--dark-header-color);
+    font-size: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+}
+
+.window-control:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.window-control.close:hover {
+    background-color: #e81123;
+    color: white;
+}
+
+.window-control.minimize:hover,
+.window-control.maximize:hover {
+    background-color: rgba(255, 255, 255, 0.2);
+}
+
+.window-control i {
+    font-size: 10px;
+}
+
+/* Сдвигаем основное содержимое вниз на высоту панели заголовка */
+body {
+    padding-top: 32px;
+    height: calc(100vh - 32px);
+}
+
+.main-header {
+    margin-top: 0;
+}
+
+/* Адаптация для мобильных устройств */
+@media (max-width: 768px) {
+    .custom-title-bar {
+        height: 40px;
+    }
+
+    body {
+        padding-top: 40px;
+        height: calc(100vh - 40px);
+    }
+
+    .window-control {
+        width: 50px;
+    }
+
+    .window-title {
+        font-size: 13px;
+    }
+}
+
+/* Добавляем возможность перетаскивания для всей панели заголовка */
+.custom-title-bar *:not(.window-controls, .window-control) {
+    -webkit-app-region: drag;
+}
+
+/* game_styles.css */
+.window-control {
+    width: 46px;
+    height: 100%;
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    position: relative;
+}
+
+/* SVG как background-image */
+.window-control.minimize {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cline x1='2' y1='6' x2='10' y2='6' stroke='%23ffffff' stroke-width='1.5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 12px;
+}
+
+.window-control.maximize {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Crect x='2' y='2' width='8' height='8' stroke='%23ffffff' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 10px;
+}
+
+.window-control.close {
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cline x1='2' y1='2' x2='10' y2='10' stroke='%23ffffff' stroke-width='1.5'/%3E%3Cline x1='10' y1='2' x2='2' y2='10' stroke='%23ffffff' stroke-width='1.5'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 12px;
+}
+
+.window-control:hover {
+    background-color: rgba(255, 255, 255, 0.1);
+}
+
+.window-control.close:hover {
+    background-color: #e81123;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cline x1='2' y1='2' x2='10' y2='10' stroke='%23ffffff' stroke-width='1.5'/%3E%3Cline x1='10' y1='2' x2='2' y2='10' stroke='%23ffffff' stroke-width='1.5'/%3E%3C/svg%3E");
+}
