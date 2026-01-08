@@ -1,0 +1,90 @@
+{
+  "name": "DropList",
+  "productName": "DropList",
+  "version": "1.2.0",
+  "main": "main.js",
+  "author": "Nikita <nvdeshin@gmail.com>",
+  "description": "Media catalog application",
+  "scripts": {
+    "start": "electron .",
+    "pack": "electron-builder --dir",
+    "dist": "electron-builder",
+    "postinstall": "electron-builder install-app-deps",
+    "rebuild": "electron-rebuild -f -w better-sqlite3",
+    "build": "electron-builder",
+    "build-win": "npm run rebuild && electron-builder --win",
+    "build-mac": "npm run rebuild && electron-builder --mac --config.mac.identity=null",
+    "build-linux": "npm run rebuild && electron-builder --linux",
+    "package:win": "electron-packager . DropList --platform=win32 --arch=x64 --icon=icon.ico --out=../dist-packaged --overwrite --app-copyright=\"Copyright © 2026 Nikita\" --app-version=1.0.0 --build-version=1.0.0 --asar",
+    "package:win-portable": "electron-packager . DropList --platform=win32 --arch=x64 --icon=icon.ico --out=dist-packaged --overwrite --asar --prune=true",
+    "package:all": "npm run package:win",
+    "create-installer": "electron-builder --win --prepackaged=../dist-packaged/DropList-win32-x64"
+  },
+  "build": {
+    "appId": "com.deshin.droplist",
+    "productName": "DropList",
+    "copyright": "Copyright © 2026 Nikita",
+    "icon": "icon.ico",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/better-sqlite3/**",
+      "**/*.node"
+    ],
+    "files": [
+      "**/*",
+      "!**/dist/*",
+      "!**/node_modules/{electron,electron-builder,electron-rebuild,electron-packager}/**",
+      "**/node_modules/better-sqlite3/**",
+      "!**/node_modules/*/{test,__tests__,tests,powered-test,example,examples}",
+      "!**/node_modules/*.d.ts",
+      "!**/*.{iml,o,hprof,orig,pyc,pyo,rbc,swp,csproj,sln,xproj,vcxproj}",
+      "!**/*.map",
+      "!**/*.log",
+      "!**/README*",
+      "!**/CHANGELOG*"
+    ],
+    "linux": {
+      "target": []
+    },
+    "mac": {
+      "target": []
+    },
+    "win": {
+      "signAndEditExecutable": false,
+      "target": "nsis",
+      "icon": "icon.ico",
+      "executableName": "DropList"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "DropList",
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "uninstallDisplayName": "DropList"
+    },
+    "publish": null,
+    "extraResources": [
+      {
+        "from": "build/app.manifest",
+        "to": ".",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ]
+  },
+  "dependencies": {
+    "better-sqlite3": "^12.2.0",
+    "electron-log": "^5.4.3",
+    "electron-updater": "^6.7.3"
+  },
+  "devDependencies": {
+    "electron": "^37.2.0",
+    "electron-builder": "^26.0.12",
+    "electron-packager": "^17.1.2",
+    "electron-rebuild": "^3.2.9"
+  }
+}

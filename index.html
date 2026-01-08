@@ -1,0 +1,128 @@
+<!DOCTYPE html>
+<html lang="UTF-8">
+<head>
+    <meta charset="UTF-8">
+    <title>DropList</title>
+    <link rel="stylesheet" href="main_styles.css">
+    </head>
+<body>
+<div class="custom-title-bar" id="customTitleBar">
+    <div class="title-bar-drag-area">
+        <div class="window-title">
+            <span>DropList</span>
+        </div>
+    </div>
+    <div class="window-controls">
+        <button class="window-control minimize" id="minimizeBtn" title="Свернуть"></button>
+        <button class="window-control maximize" id="maximizeBtn" title="Развернуть"></button>
+        <button class="window-control close" id="closeBtn" title="Закрыть"></button>
+    </div>
+</div>
+<header class="main-header">
+    <nav class="main-nav">
+        <ul class="nav-list">
+            <li class="nav-item active" data-section="games">
+                <img src="assets/icons/games.svg" alt="🎮" class="button-icon"><span>Игры</span>
+            </li>
+            <li class="nav-item" data-section="serials">
+                <img src="assets/icons/serials.svg" alt="📺" class="button-icon"><span>Сериалы</span>
+            </li>
+            <li class="nav-item" data-section="movies">
+                <img src="assets/icons/movies.svg" alt="🎬" class="button-icon"><span>Кино</span>
+            </li>
+            <li class="nav-item" data-section="cartoons">
+                <img src="assets/icons/cartoons.svg" alt="🎥" class="button-icon"><span>Мульты</span>
+            </li>
+            <li class="nav-item" data-section="anime">
+                <img src="assets/icons/anime.svg" alt="🌸" class="button-icon"><span>Аниме</span>
+            </li>
+            <li class="nav-item" data-section="books">
+                <img src="assets/icons/books.svg" alt="📚" class="button-icon"><span>Книги</span>
+            </li>
+        </ul>
+    </nav>
+    <div class="header-buttons">
+        <button id="replaceBtn" class="header-button" title="Заменить все данные"><img src="assets/icons/synchronyze.svg" alt="🔄" class="button-icon"></button>
+        <button id="importBtn" class="header-button" title="Импорт данных"><img src="assets/icons/import.svg" alt="" class="button-icon"></button>
+        <button id="exportBtn" class="header-button" title="Экспорт данных"><img src="assets/icons/export.svg" alt="" class="button-icon"></button>
+        <button id="donateBtn" class="header-button" title="Поддержать разработчика"><img src="assets/icons/donate.svg" alt="❤️" class="button-icon"> Поддержать</button>
+        <span id="downloadsCount" class="downloads-count" title="Всего загрузок приложения">📥 0</span>
+    </div>
+</header>
+<div id="contentSection" class="content-section">
+    <div class="filter-buttons-section">
+        <!-- Контент будет рендериться здесь через JS -->
+    </div>
+    <div class="content-wrapper">
+        <!-- Контент будет рендериться здесь через JS -->
+    </div>
+</div>
+<div id="errorModal" class="modal">
+    <div class="modal-content">
+        <p id="modalMessage"></p>
+        <button class="modal-button" id="modalClose">OK</button>
+    </div>
+</div>
+<div id="donateModal" class="modal donate-modal">
+    <div class="modal-content" style="max-width: 500px;">
+        <h3>Поддержать разработчика</h3>
+        <p>Если вам нравится приложение, вы можете поддержать его развитие:</p>
+        <div class="donate-methods">
+            <div class="donate-method">
+                <h2>📧Почта для связи</h2>
+                <p>nvdeshin@gmail.com</p>
+                <button class="copy-btn" data-text="nvdeshin@gmail.com">Копировать</button>
+            </div>
+            <div class="donate-method">
+                <h2>Ссылка для доната</h2>
+                <p>www.tbank.ru/rm/r_LoCtXRkiVO.vLkPckLzyM/cNGSO52096</p>
+                <button class="copy-btn" data-text="https://www.tinkoff.ru/rm/r_LoCtXRkiVO.vLkPckLzyM/cNGSO52096">Копировать</button>
+            </div>
+            <div class="qr-code-container">
+                <h2>Или отсканируйте QR-код</h2>
+                <img src="https://api.qrserver.com/v1/create-qr-code/?size=150x150&data=https://www.tinkoff.ru/rm/r_LoCtXRkiVO.vLkPckLzyM/cNGSO52096"
+                     alt="QR код для доната">
+            </div>
+        </div>
+        <button class="modal-button-close" id="closeDonateModal">Закрыть</button>
+    </div>
+</div>
+<button id="scrollToTopBtn" class="scroll-to-top" title="Наверх">↑</button>
+<div id="updateModal" class="modal update-modal">
+    <div class="modal-content" style="max-width: 500px;">
+        <h3>Доступно обновление!</h3>
+        <div class="update-info">
+            <p><strong>Текущая версия:</strong> <span id="currentVersion"></span></p>
+            <p><strong>Новая версия:</strong> <span id="newVersion"></span></p>
+            <p><strong>Дата релиза:</strong> <span id="releaseDate"></span></p>
+            <div class="release-notes">
+                <h4>Что нового:</h4>
+                <div id="releaseNotes" class="release-notes-content"></div>
+            </div>
+        </div>
+        <div class="update-actions">
+            <button id="updateNowBtn" class="modal-button update-btn">Обновить сейчас</button>
+            <button id="updateLaterBtn" class="modal-button later-btn">Напомнить позже</button>
+            <button id="skipVersionBtn" class="modal-button skip-btn">Пропустить эту версию</button>
+        </div>
+    </div>
+</div>
+
+<div id="noUpdateModal" class="modal">
+    <div class="modal-content" style="max-width: 400px;">
+        <h3>✅ Актуальная версия</h3>
+        <p id="noUpdateMessage"></p>
+        <button class="modal-button" id="closeNoUpdateModal">OK</button>
+    </div>
+</div>
+
+<div id="updateErrorModal" class="modal">
+    <div class="modal-content" style="max-width: 400px;">
+        <h3>⚠️ Ошибка проверки обновлений</h3>
+        <p id="updateErrorMessage"></p>
+        <button class="modal-button" id="closeUpdateErrorModal">OK</button>
+    </div>
+</div>
+<script src="front-script.js"></script>
+</body>
+</html>
