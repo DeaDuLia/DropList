@@ -1163,12 +1163,37 @@ async function showEditableDropdown(field, valueDisplay) {
     const list = document.createElement('div');
     list.className = 'editable-select-list';
 
-    // Позиционируем список рядом с полем
+    // Получаем позицию элемента
     const rect = valueDisplay.getBoundingClientRect();
+    const viewportHeight = window.innerHeight;
+    const listHeight = Math.min(values.length * 32 + 20, 250); // Предполагаемая высота списка
+
+    // Определяем, где показывать список: снизу или сверху
+    const spaceBelow = viewportHeight - rect.bottom - 10;
+    const spaceAbove = rect.top - 10;
+
+    let listTop;
+    let openDirection = 'below';
+
+    // Если внизу достаточно места или места сверху меньше
+    if (spaceBelow >= listHeight || spaceBelow >= spaceAbove) {
+        // Показываем снизу
+        listTop = rect.bottom + 5;
+        openDirection = 'below';
+    } else {
+        // Показываем сверху
+        listTop = rect.top - listHeight - 5;
+        openDirection = 'above';
+    }
+
+    // Позиционируем список
     list.style.position = 'fixed';
-    list.style.top = (rect.bottom + 5) + 'px';
+    list.style.top = listTop + 'px';
     list.style.left = rect.left + 'px';
     list.style.minWidth = rect.width + 'px';
+
+    // Добавляем класс направления для стилей CSS
+    list.dataset.direction = openDirection;
 
     // Добавляем опции
     values.forEach(value => {
@@ -1203,7 +1228,6 @@ async function showEditableDropdown(field, valueDisplay) {
         overlay.onclick = null;
     }
 }
-
 async function updateFieldValue(field, valueDisplay, newValue, itemName, isRating) {
     try {
         const section = document.querySelector('.nav-item.active')?.dataset.section;
