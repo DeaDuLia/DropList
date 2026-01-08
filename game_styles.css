@@ -229,6 +229,7 @@ body {
     font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
     background-color: var(--dark-body-background);
     color: var(--dark-text-color);
+    overflow: hidden;
 }
 /* Секция контента */
 .content-section {
@@ -239,6 +240,7 @@ body {
     flex-direction: column;
     overflow: hidden;
     max-height: calc(100vh - 110px);
+    height: 100%;
 }
 .content-wrapper {
     flex: 1;
@@ -1683,7 +1685,7 @@ add-form .form-content {
 /* Сдвигаем основное содержимое вниз на высоту панели заголовка */
 body {
     padding-top: 32px;
-    height: calc(100vh - 32px);
+    height: 100vh;
 }
 
 .main-header {
@@ -1698,7 +1700,7 @@ body {
 
     body {
         padding-top: 40px;
-        height: calc(100vh - 40px);
+        height: 100vh;
     }
 
     .window-control {
