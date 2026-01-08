@@ -23,7 +23,7 @@ async function checkForUpdates(manualCheck = false) {
         const skippedVersion = statements.getStatistic.get('skipped_version');
         const lastCheck = statements.getStatistic.get('last_update_check');
 
-        // Если это не ручная проверка, проверяем частоту
+
         if (!manualCheck) {
             if (lastCheck) {
                 const lastCheckDate = new Date(lastCheck.actual_date);
@@ -51,15 +51,14 @@ async function checkForUpdates(manualCheck = false) {
         const latestVersion = latestRelease.tag_name.replace('v', '');
 
         // Проверяем, пропущена ли текущая версия
-        if (skippedVersion && skippedVersion.value === latestVersion) {
-            // Эта версия была пропущена
+        if (skippedVersion && skippedVersion.value === latestVersion && !manualCheck) {
             return;
         }
 
         // Сравниваем версии
         if (isNewerVersion(latestVersion, currentVersion)) {
-            // Есть новое обновление
             win.webContents.send('update-available', {
+                currentVersion: app.getVersion(),
                 version: latestVersion,
                 releaseNotes: latestRelease.body || 'Новые улучшения и исправления ошибок',
                 releaseDate: latestRelease.published_at,
@@ -353,9 +352,12 @@ function createWindow() {
 
 }
 
+app.whenReady().then(createWindow);
+
 app.whenReady().then(() => {
-    checkForUpdates(false);
-    createWindow();
+    setTimeout(() => {
+        checkForUpdates(false);
+    }, 3000);
 });
 
 app.on('before-quit', () => {

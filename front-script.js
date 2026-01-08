@@ -61,23 +61,9 @@ document.addEventListener('DOMContentLoaded', () => {
             window.electronAPI.closeWindow();
         });
     }
-
-    // Слушаем события изменения состояния окна
-    window.electronAPI.onMessageFromMain((data) => {
-        // Это уже существующий обработчик
-    });
-
-    // Добавляем обработчик для состояния maximize
-    // Нужно добавить в preload.js отправку события 'window-maximize-state'
 });
 
 async function initUpdateSystem() {
-    // Показываем текущую версию в заголовке
-    const currentVersion = await window.updateAPI.getCurrentVersion();
-    const windowTitle = document.querySelector('.window-title span');
-    if (windowTitle) {
-        windowTitle.parentElement.setAttribute('data-version', currentVersion);
-    }
 
     // Подписываемся на события обновлений
     window.updateAPI.onUpdateAvailable((data) => {
@@ -103,7 +89,7 @@ function addUpdateButton() {
     updateButton.id = 'checkUpdateBtn';
     updateButton.className = 'header-button';
     updateButton.title = 'Проверить обновления';
-    updateButton.innerHTML = '<img src="assets/icons/update.svg" alt="🔄" class="button-icon"> Обновления';
+    updateButton.innerHTML = '<img src="assets/icons/update.svg" alt="🔄" class="button-icon">';
 
     updateButton.addEventListener('click', async () => {
         await window.updateAPI.checkForUpdates(true);
@@ -121,7 +107,7 @@ function addUpdateButton() {
 function showUpdateModal(data) {
     currentUpdateInfo = data;
 
-    document.getElementById('currentVersion').textContent = window.updateAPI.getCurrentVersion();
+    document.getElementById('currentVersion').textContent = data.currentVersion;
     document.getElementById('newVersion').textContent = data.version;
     document.getElementById('releaseDate').textContent = new Date(data.releaseDate).toLocaleDateString('ru-RU');
     document.getElementById('releaseNotes').innerHTML = formatReleaseNotes(data.releaseNotes);
@@ -142,15 +128,10 @@ function showUpdateModal(data) {
         window.updateAPI.skipVersion(data.version);
         updateModal.style.display = 'none';
     };
-
-    document.getElementById('openReleasePageBtn').onclick = () => {
-        window.updateAPI.openReleasePage(data.url);
-        updateModal.style.display = 'none';
-    };
 }
 
 function showNoUpdateModal(data) {
-    document.getElementById('noUpdateMessage').textContent = data.message + ` (Версия ${data.currentVersion})`;
+    document.getElementById('noUpdateMessage').textContent = data.message + ` (${data.currentVersion})`;
     noUpdateModal.style.display = 'block';
 
     document.getElementById('closeNoUpdateModal').onclick = () => {
