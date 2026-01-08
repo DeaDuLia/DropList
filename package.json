@@ -19,7 +19,6 @@
     "package:win-portable": "electron-packager . DropList --platform=win32 --arch=x64 --icon=icon.ico --out=dist-packaged --overwrite --asar --prune=true",
     "package:all": "npm run package:win",
     "create-installer": "electron-builder --win --prepackaged=../dist-packaged/DropList-win32-x64"
-
   },
   "build": {
     "appId": "com.deshin.droplist",
@@ -39,8 +38,12 @@
       "!**/README*",
       "!**/CHANGELOG*"
     ],
-    "linux": { "target": [] },
-    "mac": { "target": [] },
+    "linux": {
+      "target": []
+    },
+    "mac": {
+      "target": []
+    },
     "win": {
       "signAndEditExecutable": false,
       "target": "nsis",
@@ -59,21 +62,28 @@
     },
     "publish": null,
     "extraResources": [
-      { "from": "database.db", "to": "../" },
+      {
+        "from": "database.db",
+        "to": "../"
+      },
       {
         "from": "build/app.manifest",
         "to": ".",
-        "filter": ["**/*"]
+        "filter": [
+          "**/*"
+        ]
       }
     ]
   },
   "dependencies": {
-    "better-sqlite3": "^12.2.0"
+    "better-sqlite3": "^12.2.0",
+    "electron-log": "^5.4.3",
+    "electron-updater": "^6.7.3"
   },
   "devDependencies": {
     "electron": "^37.2.0",
     "electron-builder": "^26.0.12",
-    "electron-rebuild": "^3.2.9",
-    "electron-packager": "^17.1.2"
+    "electron-packager": "^17.1.2",
+    "electron-rebuild": "^3.2.9"
   }
 }

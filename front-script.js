@@ -17,6 +17,10 @@ const importBtn = document.getElementById('importBtn');
 const replaceBtn = document.getElementById('replaceBtn');
 const donateBtn = document.getElementById('donateBtn');
 const toggleAddFormBtn = document.getElementById('toggleAddFormBtn');
+const updateModal = document.getElementById('updateModal');
+const noUpdateModal = document.getElementById('noUpdateModal');
+const updateErrorModal = document.getElementById('updateErrorModal');
+let currentUpdateInfo = null;
 let lastTextFromClipboard = '';
 
 let isAddingGame = false;
@@ -67,7 +71,121 @@ document.addEventListener('DOMContentLoaded', () => {
     // Нужно добавить в preload.js отправку события 'window-maximize-state'
 });
 
+async function initUpdateSystem() {
+    // Показываем текущую версию в заголовке
+    const currentVersion = await window.updateAPI.getCurrentVersion();
+    const windowTitle = document.querySelector('.window-title span');
+    if (windowTitle) {
+        windowTitle.parentElement.setAttribute('data-version', currentVersion);
+    }
 
+    // Подписываемся на события обновлений
+    window.updateAPI.onUpdateAvailable((data) => {
+        showUpdateModal(data);
+    });
+
+    window.updateAPI.onNoUpdateAvailable((data) => {
+        showNoUpdateModal(data);
+    });
+
+    window.updateAPI.onUpdateError((data) => {
+        showUpdateErrorModal(data);
+    });
+
+    // Добавляем кнопку проверки обновлений в шапку
+    addUpdateButton();
+}
+
+function addUpdateButton() {
+    const headerButtons = document.querySelector('.header-buttons');
+
+    const updateButton = document.createElement('button');
+    updateButton.id = 'checkUpdateBtn';
+    updateButton.className = 'header-button';
+    updateButton.title = 'Проверить обновления';
+    updateButton.innerHTML = '<img src="assets/icons/update.svg" alt="🔄" class="button-icon"> Обновления';
+
+    updateButton.addEventListener('click', async () => {
+        await window.updateAPI.checkForUpdates(true);
+    });
+
+    // Вставляем перед кнопкой доната
+    const donateBtn = document.getElementById('donateBtn');
+    if (donateBtn) {
+        headerButtons.insertBefore(updateButton, donateBtn);
+    } else {
+        headerButtons.appendChild(updateButton);
+    }
+}
+
+function showUpdateModal(data) {
+    currentUpdateInfo = data;
+
+    document.getElementById('currentVersion').textContent = window.updateAPI.getCurrentVersion();
+    document.getElementById('newVersion').textContent = data.version;
+    document.getElementById('releaseDate').textContent = new Date(data.releaseDate).toLocaleDateString('ru-RU');
+    document.getElementById('releaseNotes').innerHTML = formatReleaseNotes(data.releaseNotes);
+
+    updateModal.style.display = 'block';
+
+    // Назначаем обработчики кнопок
+    document.getElementById('updateNowBtn').onclick = () => {
+        window.updateAPI.openReleasePage(data.url);
+        updateModal.style.display = 'none';
+    };
+
+    document.getElementById('updateLaterBtn').onclick = () => {
+        updateModal.style.display = 'none';
+    };
+
+    document.getElementById('skipVersionBtn').onclick = () => {
+        window.updateAPI.skipVersion(data.version);
+        updateModal.style.display = 'none';
+    };
+
+    document.getElementById('openReleasePageBtn').onclick = () => {
+        window.updateAPI.openReleasePage(data.url);
+        updateModal.style.display = 'none';
+    };
+}
+
+function showNoUpdateModal(data) {
+    document.getElementById('noUpdateMessage').textContent = data.message + ` (Версия ${data.currentVersion})`;
+    noUpdateModal.style.display = 'block';
+
+    document.getElementById('closeNoUpdateModal').onclick = () => {
+        noUpdateModal.style.display = 'none';
+    };
+}
+
+function showUpdateErrorModal(data) {
+    document.getElementById('updateErrorMessage').textContent = data.error;
+    updateErrorModal.style.display = 'block';
+
+    document.getElementById('closeUpdateErrorModal').onclick = () => {
+        updateErrorModal.style.display = 'none';
+    };
+}
+
+function formatReleaseNotes(notes) {
+    if (!notes) return '<p>Нет информации об изменениях</p>';
+
+    // Преобразуем markdown в простой HTML
+    let formatted = notes
+        .replace(/### (.*?)(\r\n|\n)/g, '<h4>$1</h4>')
+        .replace(/## (.*?)(\r\n|\n)/g, '<h3>$1</h3>')
+        .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+        .replace(/\*(.*?)\*/g, '<em>$1</em>')
+        .replace(/- (.*?)(\r\n|\n)/g, '<li>$1</li>')
+        .replace(/\r\n|\n/g, '<br>');
+
+    // Если есть маркированные списки
+    if (formatted.includes('<li>')) {
+        formatted = formatted.replace(/<li>/g, '• ').replace(/<\/li>/g, '<br>');
+    }
+
+    return formatted;
+}
 
 async function updateDownloadsCount() {
     try {
@@ -326,6 +444,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     await updateDownloadsCount();
     await loadRatings();
     await loadStatuses();
+    await initUpdateSystem();
 
     // Загружаем игры по умолчанию
     const games = await window.electronAPI.getData('games');
