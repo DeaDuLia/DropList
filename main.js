@@ -6,6 +6,8 @@ const Database = require('better-sqlite3');
 const https = require('https');
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
+const userDataPath = app.getPath('userData');
+const dbPath = path.join(userDataPath, 'database.db');
 autoUpdater.logger = log;
 autoUpdater.logger.transports.file.level = 'info';
 
@@ -281,7 +283,7 @@ async function getGitHubDownloads() {
     });
 }
 
-const db = new Database('database.db', {
+const db = new Database(dbPath, {
     timeout: 5000 // увеличить таймаут ожидания
 });
 db.pragma('journal_mode = WAL');
