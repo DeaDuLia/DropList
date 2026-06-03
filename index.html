@@ -46,6 +46,9 @@
         <button id="importBtn" class="header-button" title="Импорт данных"><img src="assets/icons/import.svg" alt="" class="button-icon"></button>
         <button id="exportBtn" class="header-button" title="Экспорт данных"><img src="assets/icons/export.svg" alt="" class="button-icon"></button>
         <button id="donateBtn" class="header-button" title="Поддержать разработчика"><img src="assets/icons/donate.svg" alt="❤️" class="button-icon"> Поддержать</button>
+        <button id="authBtn" class="header-button" title="Войти">
+            <img src="assets/icons/user.svg" alt="👤" class="button-icon"> Войти
+        </button>
         <span id="downloadsCount" class="downloads-count" title="Всего загрузок приложения">📥 0</span>
     </div>
 </header>
@@ -123,6 +126,38 @@
         <button class="modal-button" id="closeUpdateErrorModal">OK</button>
     </div>
 </div>
+<div id="authModal" class="modal">
+    <div class="modal-content" style="max-width: 400px;">
+        <div id="authLoginForm">
+            <h3>Вход</h3>
+            <div class="form-group">
+                <input type="email" id="loginEmail" placeholder="Email" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <input type="password" id="loginPassword" placeholder="Пароль">
+            </div>
+            <button id="loginBtn" class="modal-button" style="width: 100%; margin-bottom: 10px;">Войти</button>
+            <p style="text-align: center; margin: 10px 0;">
+                <a href="#" id="showRegisterBtn" style="color: #a29bfe;">Нет аккаунта? Зарегистрироваться</a>
+            </p>
+        </div>
+        <div id="authRegisterForm" style="display: none;">
+            <h3>Регистрация</h3>
+            <div class="form-group">
+                <input type="email" id="registerEmail" placeholder="Email" autocomplete="off">
+            </div>
+            <div class="form-group">
+                <input type="password" id="registerPassword" placeholder="Пароль (мин. 6 символов)">
+            </div>
+            <button id="registerBtn" class="modal-button" style="width: 100%; margin-bottom: 10px;">Зарегистрироваться</button>
+            <p style="text-align: center; margin: 10px 0;">
+                <a href="#" id="showLoginBtn" style="color: #a29bfe;">Уже есть аккаунт? Войти</a>
+            </p>
+        </div>
+        <button class="modal-button-close" id="closeAuthModal" style="margin-top: 10px;">Закрыть</button>
+    </div>
+</div>
+
 <script src="front-script.js"></script>
 </body>
 </html>

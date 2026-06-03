@@ -1,6 +1,15 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
+    authSignIn: (email, password) => ipcRenderer.invoke('auth-sign-in', email, password),
+    authSignUp: (email, password) => ipcRenderer.invoke('auth-sign-up', email, password),
+    authSignOut: () => ipcRenderer.invoke('auth-sign-out'),
+    authGetCurrentUser: () => ipcRenderer.invoke('auth-get-current-user'),
+    onRestoreSession: (callback) => {
+        ipcRenderer.on('restore-session', (event, user) => callback(user));
+    },
+
+
     minimizeWindow: () => ipcRenderer.send('window-control', 'minimize'),
     maximizeWindow: () => ipcRenderer.send('window-control', 'maximize'),
     closeWindow: () => ipcRenderer.send('window-control', 'close'),

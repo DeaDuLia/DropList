@@ -34,7 +34,19 @@ let currentFilters = {
     statusFilter: 'Все'
 };
 
+let currentUser = null;
+const authBtn = document.getElementById('authBtn');
+const authModal = document.getElementById('authModal');
+const closeAuthModal = document.getElementById('closeAuthModal');
+const loginBtn = document.getElementById('loginBtn');
+const registerBtn = document.getElementById('registerBtn');
+const showRegisterBtn = document.getElementById('showRegisterBtn');
+const showLoginBtn = document.getElementById('showLoginBtn');
+const authLoginForm = document.getElementById('authLoginForm');
+const authRegisterForm = document.getElementById('authRegisterForm');
+
 document.addEventListener('DOMContentLoaded', () => {
+
     const minimizeBtn = document.getElementById('minimizeBtn');
     const maximizeBtn = document.getElementById('maximizeBtn');
     const closeBtn = document.getElementById('closeBtn');
@@ -420,8 +432,127 @@ function showError(message) {
     });
 }
 
+function updateAuthButton(email) {
+    if (email) {
+        authBtn.innerHTML = `<img src="assets/icons/user.svg" alt="👤" class="button-icon"> ${email.split('@')[0]}`;
+        authBtn.title = "Нажмите для выхода";
+    } else {
+        authBtn.innerHTML = `<img src="assets/icons/user.svg" alt="👤" class="button-icon"> Войти`;
+        authBtn.title = "Войти";
+    }
+}
+
+// Обработчики модального окна
+authBtn.addEventListener('click', () => {
+    if (currentUser) {
+        // Если уже авторизован - спрашиваем о выходе
+        showConfirmModal('Выход', 'Вы уверены, что хотите выйти?', 'Выйти', 'Отмена').then(async (confirmed) => {
+            if (confirmed) {
+                const result = await window.electronAPI.authSignOut();
+                if (result.success) {
+                    currentUser = null;
+                    updateAuthButton(null);
+                    await showError('Вы вышли из аккаунта');
+                } else {
+                    await showError('Ошибка выхода: ' + result.error);
+                }
+            }
+        });
+    } else {
+        authModal.style.display = 'block';
+    }
+});
+
+closeAuthModal.addEventListener('click', () => {
+    authModal.style.display = 'none';
+});
+
+showRegisterBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    authLoginForm.style.display = 'none';
+    authRegisterForm.style.display = 'block';
+});
+
+showLoginBtn.addEventListener('click', (e) => {
+    e.preventDefault();
+    authRegisterForm.style.display = 'none';
+    authLoginForm.style.display = 'block';
+});
+
+loginBtn.addEventListener('click', async () => {
+    const email = document.getElementById('loginEmail').value.trim();
+    const password = document.getElementById('loginPassword').value;
+
+    if (!email || !password) {
+        await showError('Введите email и пароль');
+        return;
+    }
+
+    const result = await window.electronAPI.authSignIn(email, password);
+    if (result.success) {
+        currentUser = result;
+        updateAuthButton(result.email);
+        authModal.style.display = 'none';
+        document.getElementById('loginEmail').value = '';
+        document.getElementById('loginPassword').value = '';
+        await showError('Добро пожаловать, ' + result.email.split('@')[0] + '!');
+    } else {
+        await showError(result.error);
+    }
+});
+
+registerBtn.addEventListener('click', async () => {
+    const email = document.getElementById('registerEmail').value.trim();
+    const password = document.getElementById('registerPassword').value;
+
+    if (!email || !password) {
+        await showError('Введите email и пароль');
+        return;
+    }
+
+    if (password.length < 6) {
+        await showError('Пароль должен быть не менее 6 символов');
+        return;
+    }
+
+    const result = await window.electronAPI.authSignUp(email, password);
+    if (result.success) {
+        currentUser = result;
+        updateAuthButton(result.email);
+        authModal.style.display = 'none';
+        document.getElementById('registerEmail').value = '';
+        document.getElementById('registerPassword').value = '';
+        await showError('Регистрация прошла успешно! Добро пожаловать!');
+    } else {
+        await showError(result.error);
+    }
+});
+
+// Закрытие модалки по клику вне
+authModal.addEventListener('click', (e) => {
+    if (e.target === authModal) {
+        authModal.style.display = 'none';
+    }
+});
+
 // Инициализация при загрузке
 document.addEventListener('DOMContentLoaded', async () => {
+    window.electronAPI.onRestoreSession(async (user) => {
+        if (user) {
+            currentUser = user;
+            updateAuthButton(user.email);
+        } else {
+            currentUser = null;
+            updateAuthButton(null);
+        }
+    });
+
+// Проверяем текущего пользователя при старте
+    const savedUser = await window.electronAPI.authGetCurrentUser();
+    if (savedUser.isAuthenticated) {
+        currentUser = savedUser;
+        updateAuthButton(savedUser.email);
+    }
     await updateDownloadsCount();
     await loadRatings();
     await loadStatuses();

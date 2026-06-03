@@ -6,10 +6,27 @@ const Database = require('better-sqlite3');
 const https = require('https');
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
+const { initializeApp } = require('firebase/app');
+const { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } = require('firebase/auth');
+
+
 const userDataPath = app.getPath('userData');
 const dbPath = path.join(userDataPath, 'database.db');
 autoUpdater.logger = log;
 autoUpdater.logger.transports.file.level = 'info';
+
+const firebaseConfig = {
+    apiKey: "AIzaSyB2LCEEzysqG4emgQhsem1d9zxYoxSdiJ8",
+    authDomain: "server-5241.firebaseapp.com",
+    databaseURL: "https://server-5241-default-rtdb.europe-west1.firebasedatabase.app",
+    projectId: "server-5241",
+    storageBucket: "server-5241.appspot.com",
+    messagingSenderId: "15312140467",
+    appId: "1:15312140467:web:cbef4965a1ad2a6a2b98c6"
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const auth = getAuth(firebaseApp);
 
 app.name = 'DropList';
 app.setName('DropList');
@@ -157,6 +174,16 @@ function getIconPath() {
 }
 function initializeDatabase(db) {
     db.exec(`
+        CREATE TABLE IF NOT EXISTS user_session (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            email TEXT,
+            uid TEXT,
+            is_authenticated INTEGER DEFAULT 0,
+            last_login DATETIME
+        )
+    `);
+
+    db.exec(`
         CREATE TABLE IF NOT EXISTS ratings (
             rating TEXT PRIMARY KEY
         )
@@ -237,6 +264,26 @@ function initializeDatabase(db) {
             actual_date DATETIME NOT NULL
         )
     `);
+}
+
+function saveUserSession(email, uid) {
+    const stmt = db.prepare(`
+        INSERT OR REPLACE INTO user_session (id, email, uid, is_authenticated, last_login)
+        VALUES (1, ?, ?, 1, datetime('now'))
+    `);
+    stmt.run(email, uid);
+}
+
+function clearUserSession() {
+    const stmt = db.prepare(`
+        UPDATE user_session SET is_authenticated = 0, email = NULL, uid = NULL, last_login = NULL WHERE id = 1
+    `);
+    stmt.run();
+}
+
+function getStoredUser() {
+    const stmt = db.prepare(`SELECT email, uid, is_authenticated FROM user_session WHERE id = 1`);
+    return stmt.get();
 }
 
 async function getGitHubDownloads() {
@@ -351,6 +398,17 @@ function createWindow() {
     }
     win.setMenu(null)
     win.loadFile('index.html');
+    win.webContents.on('did-finish-load', () => {
+        const storedUser = getStoredUser();
+        if (storedUser && storedUser.is_authenticated) {
+            win.webContents.send('restore-session', {
+                email: storedUser.email,
+                uid: storedUser.uid
+            });
+        } else {
+            win.webContents.send('restore-session', null);
+        }
+    });
 
 }
 
@@ -886,4 +944,57 @@ ipcMain.handle('open-release-page', (event, url) => {
     shell.openExternal(url);
 });
 
+ipcMain.handle('auth-sign-in', async (event, email, password) => {
+    try {
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+        saveUserSession(user.email, user.uid);
+        return { success: true, email: user.email, uid: user.uid };
+    } catch (error) {
+        let errorMessage = 'Ошибка входа';
+        switch (error.code) {
+            case 'auth/invalid-email': errorMessage = 'Неверный формат email'; break;
+            case 'auth/user-not-found': errorMessage = 'Пользователь не найден'; break;
+            case 'auth/wrong-password': errorMessage = 'Неверный пароль'; break;
+            case 'auth/too-many-requests': errorMessage = 'Слишком много попыток'; break;
+            default: errorMessage = error.message;
+        }
+        return { success: false, error: errorMessage };
+    }
+});
 
+ipcMain.handle('auth-sign-up', async (event, email, password) => {
+    try {
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+        saveUserSession(user.email, user.uid);
+        return { success: true, email: user.email, uid: user.uid };
+    } catch (error) {
+        let errorMessage = 'Ошибка регистрации';
+        switch (error.code) {
+            case 'auth/invalid-email': errorMessage = 'Неверный формат email'; break;
+            case 'auth/email-already-in-use': errorMessage = 'Email уже используется'; break;
+            case 'auth/weak-password': errorMessage = 'Пароль слишком слабый (мин. 6 символов)'; break;
+            default: errorMessage = error.message;
+        }
+        return { success: false, error: errorMessage };
+    }
+});
+
+ipcMain.handle('auth-sign-out', async () => {
+    try {
+        await signOut(auth);
+        clearUserSession();
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+});
+
+ipcMain.handle('auth-get-current-user', async () => {
+    const storedUser = getStoredUser();
+    if (storedUser && storedUser.is_authenticated) {
+        return { isAuthenticated: true, email: storedUser.email, uid: storedUser.uid };
+    }
+    return { isAuthenticated: false };
+});
