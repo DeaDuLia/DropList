@@ -8,7 +8,7 @@ const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
 const { initializeApp } = require('firebase/app');
 const { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } = require('firebase/auth');
-
+const { getFirestore, doc, setDoc, getDoc } = require('firebase/firestore');
 
 const userDataPath = app.getPath('userData');
 const dbPath = path.join(userDataPath, 'database.db');
@@ -16,22 +16,88 @@ autoUpdater.logger = log;
 autoUpdater.logger.transports.file.level = 'info';
 
 const firebaseConfig = {
-    apiKey: "AIzaSyB2LCEEzysqG4emgQhsem1d9zxYoxSdiJ8",
-    authDomain: "server-5241.firebaseapp.com",
-    databaseURL: "https://server-5241-default-rtdb.europe-west1.firebasedatabase.app",
-    projectId: "server-5241",
-    storageBucket: "server-5241.appspot.com",
-    messagingSenderId: "15312140467",
-    appId: "1:15312140467:web:cbef4965a1ad2a6a2b98c6"
+    apiKey: "AIzaSyALdaI9VkFIkN_gTTJKohahnAcdZqCxgRQ",
+    authDomain: "droplist-3fa8b.firebaseapp.com",
+    projectId: "droplist-3fa8b",
+    storageBucket: "droplist-3fa8b.firebasestorage.app",
+    messagingSenderId: "920691108684",
+    appId: "1:920691108684:web:c06a303e820e311c8a3de9"
 };
 
 const firebaseApp = initializeApp(firebaseConfig);
 const auth = getAuth(firebaseApp);
+const db_firestore = getFirestore(firebaseApp);
 
 app.name = 'DropList';
 app.setName('DropList');
 if (process.platform === 'win32') {
     app.setAppUserModelId('com.deshin.droplist');
+}
+
+async function writeHelloWorldToFirestore(uid, email, idToken) {
+    console.log('🔥 НАЧИНАЕМ ЗАПИСЬ В FIRESTORE');
+    console.log('📧 email:', email);
+    console.log('🆔 uid:', uid);
+    console.log('🔑 Токен:', idToken ? `${idToken.substring(0, 50)}... (${idToken.length} символов)` : 'ТОКЕН ОТСУТСТВУЕТ БЛЯТЬ');
+
+    if (!idToken) {
+        console.error('❌ НЕТ ТОКЕНА! Запись невозможна');
+        return false;
+    }
+
+    try {
+        const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}`;
+
+        console.log('🌐 URL запроса:', url);
+
+        const response = await fetch(url, {
+            method: 'PATCH',
+            headers: {
+                'Authorization': `Bearer ${idToken}`, // ВОТ СУКА ТОКЕН
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                fields: {
+                    hello: { stringValue: 'world' },
+                    email: { stringValue: email },
+                    lastLogin: { timestampValue: new Date().toISOString() },
+                    createdAt: { timestampValue: new Date().toISOString() }
+                }
+            })
+        });
+
+        console.log('📡 Статус ответа:', response.status);
+
+        if (!response.ok) {
+            const errorText = await response.text();
+            console.error('❌ ТЕЛО ОШИБКИ:', errorText);
+            throw new Error(`HTTP ${response.status}: ${errorText}`);
+        }
+
+        const result = await response.json();
+        console.log('✅ УСПЕШНО ЗАПИСАНО!', result);
+        return true;
+
+    } catch (error) {
+        console.error('❌ ОШИБКА ЗАПИСИ:', error.message);
+        return false;
+    }
+}
+
+
+// Функция для получения данных пользователя из Firestore
+async function getUserDataFromFirestore(uid) {
+    try {
+        const userDocRef = doc(db_firestore, 'users', uid);
+        const docSnap = await getDoc(userDocRef);
+        if (docSnap.exists()) {
+            return docSnap.data();
+        }
+        return null;
+    } catch (error) {
+        console.error('Ошибка чтения из Firestore:', error);
+        return null;
+    }
 }
 
 async function checkForUpdates(manualCheck = false) {
@@ -178,6 +244,7 @@ function initializeDatabase(db) {
             id INTEGER PRIMARY KEY CHECK (id = 1),
             email TEXT,
             uid TEXT,
+            id_token TEXT,  -- СОХРАНЯЕМ ТОКЕН СУКА
             is_authenticated INTEGER DEFAULT 0,
             last_login DATETIME
         )
@@ -266,23 +333,27 @@ function initializeDatabase(db) {
     `);
 }
 
-function saveUserSession(email, uid) {
+function saveUserSession(email, uid, idToken) {
     const stmt = db.prepare(`
-        INSERT OR REPLACE INTO user_session (id, email, uid, is_authenticated, last_login)
-        VALUES (1, ?, ?, 1, datetime('now'))
+        INSERT OR REPLACE INTO user_session (id, email, uid, id_token, is_authenticated, last_login)
+        VALUES (1, ?, ?, ?, 1, datetime('now'))
     `);
-    stmt.run(email, uid);
+    stmt.run(email, uid, idToken);
+    console.log('💾 Сохранили сессию с токеном:', idToken ? `${idToken.substring(0, 30)}...` : 'НЕТ ТОКЕНА БЛЯТЬ');
 }
 
 function clearUserSession() {
     const stmt = db.prepare(`
-        UPDATE user_session SET is_authenticated = 0, email = NULL, uid = NULL, last_login = NULL WHERE id = 1
+        UPDATE user_session 
+        SET is_authenticated = 0, email = NULL, uid = NULL, id_token = NULL, last_login = NULL 
+        WHERE id = 1
     `);
     stmt.run();
+    console.log('🗑️ Сессия очищена');
 }
 
 function getStoredUser() {
-    const stmt = db.prepare(`SELECT email, uid, is_authenticated FROM user_session WHERE id = 1`);
+    const stmt = db.prepare(`SELECT email, uid, id_token, is_authenticated FROM user_session WHERE id = 1`);
     return stmt.get();
 }
 
@@ -375,15 +446,17 @@ function createWindow() {
         width: 1280,
         height: 800,
         icon: getIconPath(),
-        frame: false, // Убираем стандартную рамку Windows
-        titleBarStyle: 'hidden', // Скрываем стандартную панель заголовка
+        frame: false,
+        titleBarStyle: 'hidden',
         webPreferences: {
             nodeIntegration: false,
             sandbox: true,
             preload: path.join(__dirname, 'preload.js')
         }
     });
+
     win.setTitle('DropList');
+
     if (process.platform === 'win32') {
         win.setAppDetails({
             appId: 'com.deshin.droplist',
@@ -393,13 +466,33 @@ function createWindow() {
             relaunchDisplayName: 'DropList'
         });
     }
+
     if (process.platform === 'darwin') {
         app.setName('DropList');
     }
-    win.setMenu(null)
+
+    win.setMenu(null);
+
+    // ⚡⚡⚡ СНАЧАЛА ДОСТАЁМ ПОЛЬЗОВАТЕЛЯ ИЗ БД
+    const storedUser = getStoredUser();
+
+    // ⚡⚡⚡ ТУТ ЖЕ ФИГАЧИМ ЗАПИСЬ В FIRESTORE, ПОКА СТРАНИЦА ГРУЗИТСЯ
+    if (storedUser && storedUser.is_authenticated && storedUser.id_token) {
+        console.log('⚡ НЕМЕДЛЕННОЕ ВОССТАНОВЛЕНИЕ ДАННЫХ');
+
+        // Асинхронно пишем в Firestore, НЕ БЛОКИРУЕМ загрузку страницы
+        writeHelloWorldToFirestore(
+            storedUser.uid,
+            storedUser.email,
+            storedUser.id_token
+        ).catch(err => console.error('Ошибка записи:', err));
+    }
+
+    // ТОЛЬКО ПОСЛЕ ЭТОГО ЗАГРУЖАЕМ СТРАНИЦУ
     win.loadFile('index.html');
+
+    // А ЭТО ОТПРАВЛЯЕТ ДАННЫЕ НА ФРОНТ, КОГДА СТРАНИЦА УЖЕ ЗАГРУЗИЛАСЬ
     win.webContents.on('did-finish-load', () => {
-        const storedUser = getStoredUser();
         if (storedUser && storedUser.is_authenticated) {
             win.webContents.send('restore-session', {
                 email: storedUser.email,
@@ -409,7 +502,6 @@ function createWindow() {
             win.webContents.send('restore-session', null);
         }
     });
-
 }
 
 app.whenReady().then(createWindow);
@@ -946,11 +1038,27 @@ ipcMain.handle('open-release-page', (event, url) => {
 
 ipcMain.handle('auth-sign-in', async (event, email, password) => {
     try {
+        console.log('🔐 ПЫТАЕМСЯ ВОЙТИ:', email);
+
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
-        saveUserSession(user.email, user.uid);
+
+        console.log('✅ ВОШЛИ, uid:', user.uid);
+
+        // ПОЛУЧАЕМ ТОКЕН
+        const idToken = await user.getIdToken();
+        console.log('🔑 ПОЛУЧИЛИ ТОКЕН:', idToken.substring(0, 50) + '... (ДЛИНА: ' + idToken.length + ')');
+
+        // СОХРАНЯЕМ ВСЁ В БД
+        saveUserSession(user.email, user.uid, idToken);
+
+        // ПИШЕМ HELLO WORLD С ТОКЕНОМ
+        await writeHelloWorldToFirestore(user.uid, user.email, idToken);
+
         return { success: true, email: user.email, uid: user.uid };
+
     } catch (error) {
+        console.error('❌ ОШИБКА ВХОДА:', error);
         let errorMessage = 'Ошибка входа';
         switch (error.code) {
             case 'auth/invalid-email': errorMessage = 'Неверный формат email'; break;
@@ -965,11 +1073,23 @@ ipcMain.handle('auth-sign-in', async (event, email, password) => {
 
 ipcMain.handle('auth-sign-up', async (event, email, password) => {
     try {
+        console.log('📝 РЕГИСТРАЦИЯ:', email);
+
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
-        saveUserSession(user.email, user.uid);
+
+        console.log('✅ ЗАРЕГАЛИСЬ, uid:', user.uid);
+
+        const idToken = await user.getIdToken();
+        console.log('🔑 ПОЛУЧИЛИ ТОКЕН:', idToken.substring(0, 50) + '...');
+
+        saveUserSession(user.email, user.uid, idToken);
+        await writeHelloWorldToFirestore(user.uid, user.email, idToken);
+
         return { success: true, email: user.email, uid: user.uid };
+
     } catch (error) {
+        console.error('❌ ОШИБКА РЕГИСТРАЦИИ:', error);
         let errorMessage = 'Ошибка регистрации';
         switch (error.code) {
             case 'auth/invalid-email': errorMessage = 'Неверный формат email'; break;
@@ -981,20 +1101,30 @@ ipcMain.handle('auth-sign-up', async (event, email, password) => {
     }
 });
 
-ipcMain.handle('auth-sign-out', async () => {
-    try {
-        await signOut(auth);
-        clearUserSession();
-        return { success: true };
-    } catch (error) {
-        return { success: false, error: error.message };
-    }
-});
-
 ipcMain.handle('auth-get-current-user', async () => {
     const storedUser = getStoredUser();
     if (storedUser && storedUser.is_authenticated) {
         return { isAuthenticated: true, email: storedUser.email, uid: storedUser.uid };
     }
     return { isAuthenticated: false };
+});
+
+ipcMain.handle('auth-sign-out', async () => {
+    try {
+        await signOut(auth);
+        clearUserSession();
+        console.log('👋 ВЫШЛИ ИЗ АККАУНТА');
+        return { success: true };
+    } catch (error) {
+        console.error('❌ ОШИБКА ВЫХОДА:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+ipcMain.handle('firestore-get-user-data', async (event, uid) => {
+    return await getUserDataFromFirestore(uid);
+});
+
+ipcMain.handle('firestore-write-hello', async (event, uid, email) => {
+    return await writeHelloWorldToFirestore(uid, email);
 });

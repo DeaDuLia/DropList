@@ -8,7 +8,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onRestoreSession: (callback) => {
         ipcRenderer.on('restore-session', (event, user) => callback(user));
     },
-
+    firestoreGetUserData: (uid) => ipcRenderer.invoke('firestore-get-user-data', uid),
+    firestoreWriteHello: (uid, email) => ipcRenderer.invoke('firestore-write-hello', uid, email),
 
     minimizeWindow: () => ipcRenderer.send('window-control', 'minimize'),
     maximizeWindow: () => ipcRenderer.send('window-control', 'maximize'),
