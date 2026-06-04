@@ -75,6 +75,58 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+function showSyncChoiceModal(localData, remoteData, localTime, remoteTime) {
+    return new Promise((resolve) => {
+        const modal = document.createElement('div');
+        modal.className = 'modal';
+        modal.style.display = 'block';
+
+        const localDate = localTime ? new Date(localTime).toLocaleString() : 'никогда';
+        const remoteDate = remoteTime ? new Date(remoteTime).toLocaleString() : 'никогда';
+
+        modal.innerHTML = `
+            <div class="modal-content" style="max-width: 500px;">
+                <h3>⚠️ Конфликт синхронизации</h3>
+                <p>Локальные и облачные данные различаются.</p>
+                <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; margin: 15px 0;">
+                    <p>📁 Локальные: ${localDate}</p>
+                    <p>☁️ Облачные: ${remoteDate}</p>
+                </div>
+                <p>Что вы хотите сохранить?</p>
+                <div style="display: flex; gap: 10px; margin-top: 20px;">
+                    <button id="syncLocalBtn" class="modal-button" style="flex: 1; background: #6c5ce7;">Локальные данные</button>
+                    <button id="syncRemoteBtn" class="modal-button" style="flex: 1; background: #00b894;">Облачные данные</button>
+                </div>
+                <button id="syncCancelBtn" class="modal-button-close" style="margin-top: 15px;">Отмена</button>
+            </div>
+        `;
+
+        document.body.appendChild(modal);
+
+        modal.querySelector('#syncLocalBtn').onclick = () => {
+            document.body.removeChild(modal);
+            resolve('local');
+        };
+
+        modal.querySelector('#syncRemoteBtn').onclick = () => {
+            document.body.removeChild(modal);
+            resolve('remote');
+        };
+
+        modal.querySelector('#syncCancelBtn').onclick = () => {
+            document.body.removeChild(modal);
+            resolve(null);
+        };
+
+        modal.onclick = (e) => {
+            if (e.target === modal) {
+                document.body.removeChild(modal);
+                resolve(null);
+            }
+        };
+    });
+}
+
 async function initUpdateSystem() {
 
     // Подписываемся на события обновлений
@@ -544,6 +596,32 @@ document.addEventListener('DOMContentLoaded', async () => {
         } else {
             currentUser = null;
             updateAuthButton(null);
+        }
+    });
+
+    window.electronAPI.onSyncRequired(async (syncData) => {
+        if (syncData.needChoice && syncData.localData && syncData.remoteData) {
+            const choice = await showSyncChoiceModal(
+                syncData.localData,
+                syncData.remoteData,
+                syncData.localSyncTime,
+                syncData.remoteSyncTime
+            );
+
+            if (choice) {
+                const result = await window.electronAPI.syncApplyChoice(choice, syncData.localData, syncData.remoteData);
+                if (result.success) {
+                    await showError(`Данные синхронизированы (выбрано: ${choice === 'local' ? 'локальные' : 'облачные'})`);
+                    // Перезагружаем текущий раздел
+                    const section = document.querySelector('.nav-item.active')?.dataset.section;
+                    if (section) {
+                        const data = await window.electronAPI.getData(section);
+                        await renderSection(section, data, true);
+                    }
+                } else {
+                    await showError('Ошибка синхронизации: ' + result.error);
+                }
+            }
         }
     });
 

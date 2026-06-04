@@ -8,8 +8,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onRestoreSession: (callback) => {
         ipcRenderer.on('restore-session', (event, user) => callback(user));
     },
-    firestoreGetUserData: (uid) => ipcRenderer.invoke('firestore-get-user-data', uid),
-    firestoreWriteHello: (uid, email) => ipcRenderer.invoke('firestore-write-hello', uid, email),
+    syncApplyChoice: (choice, localData, remoteData) => ipcRenderer.invoke('sync-apply-choice', choice, localData, remoteData),
+    getAllLocalData: () => ipcRenderer.invoke('get-all-local-data'),
+    onSyncRequired: (callback) => {
+        ipcRenderer.on('sync-required', (event, data) => callback(data));
+    },
 
     minimizeWindow: () => ipcRenderer.send('window-control', 'minimize'),
     maximizeWindow: () => ipcRenderer.send('window-control', 'maximize'),

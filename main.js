@@ -34,69 +34,261 @@ if (process.platform === 'win32') {
     app.setAppUserModelId('com.deshin.droplist');
 }
 
-async function writeHelloWorldToFirestore(uid, email, idToken) {
-    console.log('🔥 НАЧИНАЕМ ЗАПИСЬ В FIRESTORE');
-    console.log('📧 email:', email);
-    console.log('🆔 uid:', uid);
-    console.log('🔑 Токен:', idToken ? `${idToken.substring(0, 50)}... (${idToken.length} символов)` : 'ТОКЕН ОТСУТСТВУЕТ БЛЯТЬ');
+// ========== НОВЫЕ ФУНКЦИИ ДЛЯ СИНХРОНИЗАЦИИ ==========
 
-    if (!idToken) {
-        console.error('❌ НЕТ ТОКЕНА! Запись невозможна');
-        return false;
+// Получить ВСЕ данные из локальной SQLite (один запрос)
+function getAllLocalData() {
+    const sections = ['games', 'movies', 'cartoons', 'serials', 'anime', 'books'];
+    const allData = {};
+
+    for (const section of sections) {
+        allData[section] = statements.getDataBySection.all(section);
     }
 
-    try {
-        const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}`;
+    return allData;
+}
 
-        console.log('🌐 URL запроса:', url);
+// Сохранить ВСЕ данные в локальную SQLite (транзакцией)
+function saveAllLocalData(allData) {
+    const sections = ['games', 'movies', 'cartoons', 'serials', 'anime', 'books'];
 
-        const response = await fetch(url, {
-            method: 'PATCH',
-            headers: {
-                'Authorization': `Bearer ${idToken}`, // ВОТ СУКА ТОКЕН
-                'Content-Type': 'application/json'
-            },
-            body: JSON.stringify({
-                fields: {
-                    hello: { stringValue: 'world' },
-                    email: { stringValue: email },
-                    lastLogin: { timestampValue: new Date().toISOString() },
-                    createdAt: { timestampValue: new Date().toISOString() }
-                }
-            })
-        });
-
-        console.log('📡 Статус ответа:', response.status);
-
-        if (!response.ok) {
-            const errorText = await response.text();
-            console.error('❌ ТЕЛО ОШИБКИ:', errorText);
-            throw new Error(`HTTP ${response.status}: ${errorText}`);
+    const transaction = db.transaction(() => {
+        // Очищаем все секции
+        for (const section of sections) {
+            db.prepare(`DELETE FROM data_cards WHERE section = ?`).run(section);
         }
 
-        const result = await response.json();
-        console.log('✅ УСПЕШНО ЗАПИСАНО!', result);
-        return true;
+        // Вставляем новые данные
+        for (const [section, items] of Object.entries(allData)) {
+            if (items && Array.isArray(items)) {
+                for (const item of items) {
+                    statements.importData.run(
+                        item.name, section, item.icoUrl || null,
+                        item.rating || '0', item.status || 'Уточнить', item.description || ''
+                    );
+                }
+            }
+        }
+    });
+
+    transaction();
+}
+
+// Получить данные пользователя из Firestore (ОДИН ЗАПРОС)
+async function getUserDataFromFirestore(uid, idToken) {
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}`;
+
+    const response = await fetch(url, {
+        method: 'GET',
+        headers: { 'Authorization': `Bearer ${idToken}` }
+    });
+
+    if (response.status === 404) {
+        return null; // Документа нет
+    }
+
+    if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+    }
+
+    const data = await response.json();
+
+    // Парсим данные из Firestore формата
+    if (!data.fields || !data.fields.data) {
+        return null;
+    }
+
+    const result = {};
+    const dataFields = data.fields.data.mapValue.fields;
+
+    for (const [section, sectionData] of Object.entries(dataFields)) {
+        if (sectionData.arrayValue && sectionData.arrayValue.values) {
+            result[section] = sectionData.arrayValue.values.map(item => {
+                const fields = item.mapValue.fields;
+                return {
+                    name: fields.name?.stringValue || '',
+                    icoUrl: fields.icoUrl?.stringValue || '',
+                    rating: fields.rating?.stringValue || '0',
+                    status: fields.status?.stringValue || 'Уточнить',
+                    description: fields.description?.stringValue || ''
+                };
+            });
+        } else {
+            result[section] = [];
+        }
+    }
+
+    return {
+        data: result,
+        lastSync: data.fields.lastSync?.timestampValue || null
+    };
+}
+
+// Сохранить ВСЕ данные пользователя в Firestore (ОДИН ЗАПРОС)
+async function saveUserDataToFirestore(uid, idToken, allData, lastSync) {
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}?updateMask.fieldPaths=data&updateMask.fieldPaths=lastSync`;
+
+    // Преобразуем локальные данные в формат Firestore
+    const formattedData = {};
+    for (const [section, items] of Object.entries(allData)) {
+        formattedData[section] = {
+            arrayValue: {
+                values: items.map(item => ({
+                    mapValue: {
+                        fields: {
+                            name: { stringValue: item.name || '' },
+                            icoUrl: { stringValue: item.icoUrl || '' },
+                            rating: { stringValue: item.rating || '0' },
+                            status: { stringValue: item.status || 'Уточнить' },
+                            description: { stringValue: item.description || '' }
+                        }
+                    }
+                }))
+            }
+        };
+    }
+
+    const body = {
+        fields: {
+            data: { mapValue: { fields: formattedData } },
+            lastSync: { timestampValue: lastSync }
+        }
+    };
+
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+            'Authorization': `Bearer ${idToken}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+
+    return true;
+}
+
+// Синхронизация: сравнить время и показать выбор
+async function syncUserData(uid, idToken, email) {
+    try {
+        // 1. СНАЧАЛА получаем ТОЛЬКО время (лёгкий запрос)
+        const localLastSync = statements.getStatistic.get('last_firestore_update');
+        const localSyncTime = localLastSync ? localLastSync.value : null;
+
+        // 2. Получаем удалённые данные (тоже лёгкие, пока только время)
+        const remote = await getUserDataFromFirestore(uid, idToken);
+        const remoteSyncTime = remote?.lastSync || null;
+
+        // 3. Если нет удалённых данных — тогда читаем локальные
+        if (!remote || !remote.data || Object.keys(remote.data).length === 0) {
+            console.log('[i] No remote data, saving local');
+            const localData = getAllLocalData(); // 👈 ЧИТАЕМ ТОЛЬКО СЕЙЧАС
+            await saveUserDataToFirestore(uid, idToken, localData, new Date().toISOString());
+            statements.setStatistic.run('last_firestore_update', new Date().toISOString(), new Date().toISOString());
+            return { action: 'local_to_cloud', success: true };
+        }
+
+        // 4. Сравниваем времена
+        const localTime = localSyncTime ? new Date(localSyncTime) : null;
+        const remoteTime = remoteSyncTime ? new Date(remoteSyncTime) : null;
+
+        console.log('[i] Local Time:', localTime);
+        console.log('[i] Remote Time:', remoteTime);
+
+        // 5. Если синхронизированы — ВООБЩЕ НИЧЕГО НЕ ЧИТАЕМ
+        if (localTime && remoteTime && Math.abs(localTime - remoteTime) < 5000) {
+            console.log('[+] Data synced');
+            return { action: 'synced', success: true };
+        }
+
+        // 6. ТОЛЬКО ЕСЛИ ЕСТЬ РАЗЛИЧИЕ — читаем и локальные, и удалённые данные
+        console.log('[i] Data sync needed, loading full data...');
+        const localData = getAllLocalData(); // 👈 ЧИТАЕМ ТОЛЬКО СЕЙЧАС
+
+        return {
+            success: true,
+            needChoice: true,
+            localData: localData,
+            remoteData: remote.data,
+            localSyncTime: localSyncTime,
+            remoteSyncTime: remoteSyncTime
+        };
 
     } catch (error) {
-        console.error('❌ ОШИБКА ЗАПИСИ:', error.message);
-        return false;
+        console.error('Sync error:', error);
+        return { success: false, error: error.message };
     }
 }
 
-
-// Функция для получения данных пользователя из Firestore
-async function getUserDataFromFirestore(uid) {
+// Применить выбор пользователя
+async function applySyncChoice(uid, idToken, choice, localData, remoteData) {
     try {
-        const userDocRef = doc(db_firestore, 'users', uid);
-        const docSnap = await getDoc(userDocRef);
-        if (docSnap.exists()) {
-            return docSnap.data();
+        const now = new Date().toISOString();
+
+        if (choice === 'local') {
+            // Локальные данные → в облако (данные + время)
+            await saveUserDataToFirestore(uid, idToken, localData, now);
+            statements.setStatistic.run('last_firestore_update', now, now);
+            return { success: true, source: 'local' };
+
+        } else if (choice === 'remote') {
+            // Облачные данные → локально
+            saveAllLocalData(remoteData);
+            statements.setStatistic.run('last_firestore_update', now, now);
+            // Также обновляем время в Firestore (чтобы совпадало)
+            await updateFirestoreTimestamp(uid, idToken, now);
+            return { success: true, source: 'remote' };
         }
-        return null;
+
+        // choice не 'local' и не 'remote' — ошибка
+        return { success: false, error: 'Неверный выбор' };
+
     } catch (error) {
-        console.error('Ошибка чтения из Firestore:', error);
-        return null;
+        console.error('Ошибка применения выбора:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// Функция для пакетной синхронизации после любого изменения
+async function syncAfterChange() {
+    const storedUser = getStoredUser();
+    if (!storedUser || !storedUser.is_authenticated || !storedUser.id_token) {
+        console.log('⏭️ Skip sync: not authenticated');
+        return false;
+    }
+
+    try {
+        // 1. Получаем все локальные данные
+        const localData = getAllLocalData();
+
+        // 2. Получаем текущее UTC время
+        const now = new Date().toISOString();
+
+        // 3. Сохраняем данные в Firestore (обновляем и data, и lastSync)
+        const saveResult = await saveUserDataToFirestore(
+            storedUser.uid,
+            storedUser.id_token,
+            localData,
+            now
+        );
+
+        if (!saveResult) {
+            throw new Error('Failed to save to Firestore');
+        }
+
+        // 4. Обновляем локальную статистику
+        statements.setStatistic.run('last_firestore_update', now, now);
+
+        console.log('✅ Data synced to Firestore at:', now);
+        return true;
+
+    } catch (error) {
+        console.error('Sync after change error:', error);
+        return false;
     }
 }
 
@@ -339,7 +531,7 @@ function saveUserSession(email, uid, idToken) {
         VALUES (1, ?, ?, ?, 1, datetime('now'))
     `);
     stmt.run(email, uid, idToken);
-    console.log('💾 Сохранили сессию с токеном:', idToken ? `${idToken.substring(0, 30)}...` : 'НЕТ ТОКЕНА БЛЯТЬ');
+    console.log('[i] Session saved with token:', idToken ? `${idToken.substring(0, 30)}...` : 'NO TOKEN');
 }
 
 function clearUserSession() {
@@ -349,7 +541,7 @@ function clearUserSession() {
         WHERE id = 1
     `);
     stmt.run();
-    console.log('🗑️ Сессия очищена');
+    console.log('[i] Session cleared');
 }
 
 function getStoredUser() {
@@ -478,14 +670,12 @@ function createWindow() {
 
     // ⚡⚡⚡ ТУТ ЖЕ ФИГАЧИМ ЗАПИСЬ В FIRESTORE, ПОКА СТРАНИЦА ГРУЗИТСЯ
     if (storedUser && storedUser.is_authenticated && storedUser.id_token) {
-        console.log('⚡ НЕМЕДЛЕННОЕ ВОССТАНОВЛЕНИЕ ДАННЫХ');
-
-        // Асинхронно пишем в Firestore, НЕ БЛОКИРУЕМ загрузку страницы
-        writeHelloWorldToFirestore(
-            storedUser.uid,
-            storedUser.email,
-            storedUser.id_token
-        ).catch(err => console.error('Ошибка записи:', err));
+        console.log('[i] IMMEDIATE DATA RESTORE');
+        syncUserData(storedUser.uid, storedUser.id_token, storedUser.email).then(syncResult => {
+            if (win && syncResult.needChoice) {
+                win.webContents.send('sync-required', syncResult);
+            }
+        }).catch(err => console.error('Data Sync Error:', err));
     }
 
     // ТОЛЬКО ПОСЛЕ ЭТОГО ЗАГРУЖАЕМ СТРАНИЦУ
@@ -678,7 +868,7 @@ async function getCachedGitHubDownloads() {
             }
         }
 
-        console.log('Fetching fresh downloads count');
+        console.log('[i] Fetching fresh downloads count');
         const downloads = await getGitHubDownloads();
 
         statements.setStatistic.run(
@@ -733,27 +923,95 @@ ipcMain.handle('get-data', async (event, section) => {
 });
 
 ipcMain.handle('add-data', (event, section, data) => {
-    return statements.addData.run(data.name, section, data.icoUrl || null, data.rating, data.status || 'Уточнить');
+    const result = statements.addData.run(data.name, section, data.icoUrl || null, data.rating, data.status || 'Уточнить');
+    statements.setStatistic.run('last_firestore_update', new Date().toISOString(), new Date().toISOString());
+    return result;
 });
 
 ipcMain.handle('delete-data', (event, section, dataName) => {
-    return statements.deleteData.run(dataName, section);
+    // 1. Всегда обновляем локально
+    const result = statements.deleteData.run(dataName, section);
+    const now = new Date().toISOString();
+    statements.setStatistic.run('last_firestore_update', now, now);
+
+    // 2. Если авторизован — обновляем время в Firestore
+    const storedUser = getStoredUser();
+    if (storedUser && storedUser.is_authenticated && storedUser.id_token) {
+        // Обновляем только время, не перезаписывая данные
+        updateFirestoreTimestamp(storedUser.uid, storedUser.id_token, now).catch(err => {
+            console.error('[x] Failed to update Firestore timestamp:', err);
+        });
+    }
+
+    return result;
 });
 
-ipcMain.handle('move-to-category', async (event,data) => {
-    return statements.updateSection.run(data.newCategory, data.name, data.oldCategory);
+ipcMain.handle('move-to-category', (event, data) => {
+    const result = statements.updateSection.run(data.newCategory, data.name, data.oldCategory);
+    const now = new Date().toISOString();
+    statements.setStatistic.run('last_firestore_update', now, now);
+
+    // 2. Если авторизован — обновляем время в Firestore
+    const storedUser = getStoredUser();
+    if (storedUser && storedUser.is_authenticated && storedUser.id_token) {
+        // Обновляем только время, не перезаписывая данные
+        updateFirestoreTimestamp(storedUser.uid, storedUser.id_token, now).catch(err => {
+            console.error('Failed to update Firestore timestamp:', err);
+        });
+    }
+
+    return result;
 });
 
-ipcMain.handle('update-data', async (event, section, oldName, newName, newIcoUrl) => {
-    return statements.updateData.run(newName, newIcoUrl, oldName, section);
+ipcMain.handle('update-data', (event, section, oldName, newName, newIcoUrl) => {
+    const result = statements.updateData.run(newName, newIcoUrl, oldName, section);
+    const now = new Date().toISOString();
+    statements.setStatistic.run('last_firestore_update', now, now);
+
+    // 2. Если авторизован — обновляем время в Firestore
+    const storedUser = getStoredUser();
+    if (storedUser && storedUser.is_authenticated && storedUser.id_token) {
+        // Обновляем только время, не перезаписывая данные
+        updateFirestoreTimestamp(storedUser.uid, storedUser.id_token, now).catch(err => {
+            console.error('Failed to update Firestore timestamp:', err);
+        });
+    }
+
+    return result;
 });
 
-ipcMain.handle('update-data-rating', async (event,section, dataName, rating) => {
-    return statements.updateDataRating.run(rating, dataName, section);
+ipcMain.handle('update-data-rating', (event, section, dataName, rating) => {
+    const result = statements.updateDataRating.run(rating, dataName, section);
+    const now = new Date().toISOString();
+    statements.setStatistic.run('last_firestore_update', now, now);
+
+    // 2. Если авторизован — обновляем время в Firestore
+    const storedUser = getStoredUser();
+    if (storedUser && storedUser.is_authenticated && storedUser.id_token) {
+        // Обновляем только время, не перезаписывая данные
+        updateFirestoreTimestamp(storedUser.uid, storedUser.id_token, now).catch(err => {
+            console.error('Failed to update Firestore timestamp:', err);
+        });
+    }
+
+    return result;
 });
 
-ipcMain.handle('update-data-status', async (event,section, dataName, status) => {
-    return statements.updateDataStatus.run(status, dataName, section);
+ipcMain.handle('update-data-status', (event, section, dataName, status) => {
+    const result = statements.updateDataStatus.run(status, dataName, section);
+    const now = new Date().toISOString();
+    statements.setStatistic.run('last_firestore_update', now, now);
+
+    // 2. Если авторизован — обновляем время в Firestore
+    const storedUser = getStoredUser();
+    if (storedUser && storedUser.is_authenticated && storedUser.id_token) {
+        // Обновляем только время, не перезаписывая данные
+        updateFirestoreTimestamp(storedUser.uid, storedUser.id_token, now).catch(err => {
+            console.error('Failed to update Firestore timestamp:', err);
+        });
+    }
+
+    return result;
 });
 
 ipcMain.handle('check-duplicates', async (event, section, name) => {
@@ -852,7 +1110,7 @@ ipcMain.handle('import-data', async () => {
                 }
             });
         })();
-
+        await syncAfterChange();
         return { success: true, message: 'Данные успешно импортированы' };
     } catch (error) {
         console.error('Import error:', error);
@@ -921,7 +1179,7 @@ ipcMain.handle('replace-data', async () => {
                 }
             });
         })();
-
+        await syncAfterChange();
         return { success: true, message: 'Данные успешно заменены' };
     } catch (error) {
         console.error('Replace error:', error);
@@ -1038,27 +1296,28 @@ ipcMain.handle('open-release-page', (event, url) => {
 
 ipcMain.handle('auth-sign-in', async (event, email, password) => {
     try {
-        console.log('🔐 ПЫТАЕМСЯ ВОЙТИ:', email);
+        console.log('[i] Sign in attempt:', email);
 
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
-        console.log('✅ ВОШЛИ, uid:', user.uid);
-
-        // ПОЛУЧАЕМ ТОКЕН
         const idToken = await user.getIdToken();
-        console.log('🔑 ПОЛУЧИЛИ ТОКЕН:', idToken.substring(0, 50) + '... (ДЛИНА: ' + idToken.length + ')');
 
-        // СОХРАНЯЕМ ВСЁ В БД
+        // Сохраняем сессию
         saveUserSession(user.email, user.uid, idToken);
 
-        // ПИШЕМ HELLO WORLD С ТОКЕНОМ
-        await writeHelloWorldToFirestore(user.uid, user.email, idToken);
+        // 👈 ВМЕСТО writeHelloWorldToFirestore — вызываем синхронизацию
+        const syncResult = await syncUserData(user.uid, idToken, user.email);
 
-        return { success: true, email: user.email, uid: user.uid };
+        // Отправляем результат синхронизации на фронт
+        if (win) {
+            win.webContents.send('sync-required', syncResult);
+        }
+
+        return { success: true, email: user.email, uid: user.uid, syncNeeded: syncResult.needChoice || false };
 
     } catch (error) {
-        console.error('❌ ОШИБКА ВХОДА:', error);
+        console.error('[x] Sign in error:', error);
         let errorMessage = 'Ошибка входа';
         switch (error.code) {
             case 'auth/invalid-email': errorMessage = 'Неверный формат email'; break;
@@ -1073,23 +1332,25 @@ ipcMain.handle('auth-sign-in', async (event, email, password) => {
 
 ipcMain.handle('auth-sign-up', async (event, email, password) => {
     try {
-        console.log('📝 РЕГИСТРАЦИЯ:', email);
+        console.log('[i] Registration:', email);
 
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
-        console.log('✅ ЗАРЕГАЛИСЬ, uid:', user.uid);
+        console.log('[+] Registered, uid:', user.uid);
 
         const idToken = await user.getIdToken();
-        console.log('🔑 ПОЛУЧИЛИ ТОКЕН:', idToken.substring(0, 50) + '...');
+        console.log('[i] Got token:', idToken.substring(0, 50) + '... (LENGTH: ' + idToken.length + ')');
 
         saveUserSession(user.email, user.uid, idToken);
-        await writeHelloWorldToFirestore(user.uid, user.email, idToken);
-
+        const syncResult = await syncUserData(user.uid, idToken, user.email);
+        if (win) {
+            win.webContents.send('sync-required', syncResult);
+        }
         return { success: true, email: user.email, uid: user.uid };
 
     } catch (error) {
-        console.error('❌ ОШИБКА РЕГИСТРАЦИИ:', error);
+        console.error('[x] Registration error:', error);
         let errorMessage = 'Ошибка регистрации';
         switch (error.code) {
             case 'auth/invalid-email': errorMessage = 'Неверный формат email'; break;
@@ -1113,10 +1374,10 @@ ipcMain.handle('auth-sign-out', async () => {
     try {
         await signOut(auth);
         clearUserSession();
-        console.log('👋 ВЫШЛИ ИЗ АККАУНТА');
+        console.log('[i] Signed out');
         return { success: true };
     } catch (error) {
-        console.error('❌ ОШИБКА ВЫХОДА:', error);
+        console.error('[x] Sign out error:', error);
         return { success: false, error: error.message };
     }
 });
@@ -1125,6 +1386,37 @@ ipcMain.handle('firestore-get-user-data', async (event, uid) => {
     return await getUserDataFromFirestore(uid);
 });
 
-ipcMain.handle('firestore-write-hello', async (event, uid, email) => {
-    return await writeHelloWorldToFirestore(uid, email);
+ipcMain.handle('sync-apply-choice', async (event, choice, localData, remoteData) => {
+    const storedUser = getStoredUser();
+    if (!storedUser || !storedUser.id_token) {
+        return { success: false, error: 'Пользователь не авторизован' };
+    }
+    return await applySyncChoice(storedUser.uid, storedUser.id_token, choice, localData, remoteData);
 });
+
+ipcMain.handle('get-all-local-data', async () => {
+    return getAllLocalData();
+});
+
+async function updateFirestoreTimestamp(uid, idToken, timestamp) {
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}?updateMask.fieldPaths=lastSync`;
+
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+            'Authorization': `Bearer ${idToken}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+            fields: {
+                lastSync: { timestampValue: timestamp }
+            }
+        })
+    });
+
+    if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+    }
+
+    console.log('[+] Firestore timestamp updated:', timestamp);
+}
