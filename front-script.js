@@ -76,7 +76,10 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 function showSyncChoiceModal(localData, remoteData, localTime, remoteTime) {
-    return new Promise((resolve) => {
+    let modalResolve;
+    const promise = new Promise((resolve) => {
+        modalResolve = resolve;
+
         const modal = document.createElement('div');
         modal.className = 'modal';
         modal.style.display = 'block';
@@ -98,33 +101,44 @@ function showSyncChoiceModal(localData, remoteData, localTime, remoteTime) {
                     <button id="syncRemoteBtn" class="modal-button" style="flex: 1; background: #00b894;">Облачные данные</button>
                 </div>
                 <button id="syncCancelBtn" class="modal-button-close" style="margin-top: 15px;">Отмена</button>
+                <div id="syncLoadingIndicator" style="display: none; margin-top: 15px; text-align: center;">
+                    <div class="loading-spinner" style="width: 30px; height: 30px; margin: 0 auto;"></div>
+                    <p style="margin-top: 5px;">Синхронизация...</p>
+                </div>
             </div>
         `;
 
         document.body.appendChild(modal);
 
-        modal.querySelector('#syncLocalBtn').onclick = () => {
-            document.body.removeChild(modal);
-            resolve('local');
+        const localBtn = modal.querySelector('#syncLocalBtn');
+        const remoteBtn = modal.querySelector('#syncRemoteBtn');
+        const cancelBtn = modal.querySelector('#syncCancelBtn');
+        const loadingIndicator = modal.querySelector('#syncLoadingIndicator');
+
+        const showLoading = (choice) => {
+            localBtn.style.display = 'none';
+            remoteBtn.style.display = 'none';
+            cancelBtn.style.display = 'none';
+            loadingIndicator.style.display = 'block';
+            // Сохраняем modal в resolve, чтобы закрыть потом
+            modalResolve({ choice, modal });
         };
 
-        modal.querySelector('#syncRemoteBtn').onclick = () => {
+        localBtn.onclick = () => showLoading('local');
+        remoteBtn.onclick = () => showLoading('remote');
+        cancelBtn.onclick = () => {
             document.body.removeChild(modal);
-            resolve('remote');
+            modalResolve({ choice: null, modal: null });
         };
-
-        modal.querySelector('#syncCancelBtn').onclick = () => {
-            document.body.removeChild(modal);
-            resolve(null);
-        };
-
         modal.onclick = (e) => {
             if (e.target === modal) {
                 document.body.removeChild(modal);
-                resolve(null);
+                modalResolve({ choice: null, modal: null });
             }
         };
     });
+
+    return promise;
 }
 
 async function initUpdateSystem() {
@@ -504,7 +518,6 @@ authBtn.addEventListener('click', () => {
                 if (result.success) {
                     currentUser = null;
                     updateAuthButton(null);
-                    await showError('Вы вышли из аккаунта');
                 } else {
                     await showError('Ошибка выхода: ' + result.error);
                 }
@@ -540,14 +553,23 @@ loginBtn.addEventListener('click', async () => {
         return;
     }
 
+    // 👇 ПОКАЗЫВАЕМ ИНДИКАТОР
+    const loginBtnText = loginBtn.innerHTML;
+    loginBtn.innerHTML = '<div class="loading-spinner" style="width: 20px; height: 20px; margin: 0 auto;"></div> Вход...';
+    loginBtn.disabled = true;
+
     const result = await window.electronAPI.authSignIn(email, password);
+
+    // 👇 УБИРАЕМ ИНДИКАТОР
+    loginBtn.innerHTML = loginBtnText;
+    loginBtn.disabled = false;
+
     if (result.success) {
         currentUser = result;
         updateAuthButton(result.email);
         authModal.style.display = 'none';
         document.getElementById('loginEmail').value = '';
         document.getElementById('loginPassword').value = '';
-        await showError('Добро пожаловать, ' + result.email.split('@')[0] + '!');
     } else {
         await showError(result.error);
     }
@@ -601,18 +623,22 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     window.electronAPI.onSyncRequired(async (syncData) => {
         if (syncData.needChoice && syncData.localData && syncData.remoteData) {
-            const choice = await showSyncChoiceModal(
+            const { choice, modal } = await showSyncChoiceModal(
                 syncData.localData,
                 syncData.remoteData,
                 syncData.localSyncTime,
                 syncData.remoteSyncTime
             );
 
-            if (choice) {
+            if (choice && modal) {
                 const result = await window.electronAPI.syncApplyChoice(choice, syncData.localData, syncData.remoteData);
+
+                // Закрываем модалку после синхронизации
+                if (modal && modal.parentNode) {
+                    modal.remove();
+                }
+
                 if (result.success) {
-                    await showError(`Данные синхронизированы (выбрано: ${choice === 'local' ? 'локальные' : 'облачные'})`);
-                    // Перезагружаем текущий раздел
                     const section = document.querySelector('.nav-item.active')?.dataset.section;
                     if (section) {
                         const data = await window.electronAPI.getData(section);

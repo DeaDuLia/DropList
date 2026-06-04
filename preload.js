@@ -13,7 +13,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onSyncRequired: (callback) => {
         ipcRenderer.on('sync-required', (event, data) => callback(data));
     },
-
+    onSyncLoading: (callback) => {
+        ipcRenderer.on('sync-loading', (event, isLoading) => callback(isLoading));
+    },
     minimizeWindow: () => ipcRenderer.send('window-control', 'minimize'),
     maximizeWindow: () => ipcRenderer.send('window-control', 'maximize'),
     closeWindow: () => ipcRenderer.send('window-control', 'close'),

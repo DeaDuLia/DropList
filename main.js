@@ -124,6 +124,27 @@ async function getUserDataFromFirestore(uid, idToken) {
     };
 }
 
+async function getUserLastSyncFromFirestore(uid, idToken) {
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}?mask.fieldPaths=lastSync`;
+
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${idToken}` }
+        });
+
+        if (response.status === 404) return null;
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const data = await response.json();
+        return data.fields?.lastSync?.timestampValue || null;
+
+    } catch (error) {
+        console.error('[x] Failed to get remote sync time:', error);
+        return null;
+    }
+}
+
 // Сохранить ВСЕ данные пользователя в Firestore (ОДИН ЗАПРОС)
 async function saveUserDataToFirestore(uid, idToken, allData, lastSync) {
     const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}?updateMask.fieldPaths=data&updateMask.fieldPaths=lastSync`;
@@ -175,39 +196,32 @@ async function saveUserDataToFirestore(uid, idToken, allData, lastSync) {
 // Синхронизация: сравнить время и показать выбор
 async function syncUserData(uid, idToken, email) {
     try {
-        // 1. СНАЧАЛА получаем ТОЛЬКО время (лёгкий запрос)
+        // 1. Быстро получаем только времена
         const localLastSync = statements.getStatistic.get('last_firestore_update');
         const localSyncTime = localLastSync ? localLastSync.value : null;
 
-        // 2. Получаем удалённые данные (тоже лёгкие, пока только время)
-        const remote = await getUserDataFromFirestore(uid, idToken);
-        const remoteSyncTime = remote?.lastSync || null;
+        // 2. Получаем удалённые данные (один запрос)
 
-        // 3. Если нет удалённых данных — тогда читаем локальные
-        if (!remote || !remote.data || Object.keys(remote.data).length === 0) {
-            console.log('[i] No remote data, saving local');
-            const localData = getAllLocalData(); // 👈 ЧИТАЕМ ТОЛЬКО СЕЙЧАС
-            await saveUserDataToFirestore(uid, idToken, localData, new Date().toISOString());
-            statements.setStatistic.run('last_firestore_update', new Date().toISOString(), new Date().toISOString());
-            return { action: 'local_to_cloud', success: true };
-        }
+        const remoteSyncTime = await getUserLastSyncFromFirestore(uid, idToken);
+
+        console.log('[i] Local Time:', localSyncTime);
+        console.log('[i] Remote Time:', remoteSyncTime);
 
         // 4. Сравниваем времена
         const localTime = localSyncTime ? new Date(localSyncTime) : null;
         const remoteTime = remoteSyncTime ? new Date(remoteSyncTime) : null;
 
-        console.log('[i] Local Time:', localTime);
-        console.log('[i] Remote Time:', remoteTime);
-
-        // 5. Если синхронизированы — ВООБЩЕ НИЧЕГО НЕ ЧИТАЕМ
+        // 5. Если времена совпадают (с погрешностью 5 сек) — выходим
         if (localTime && remoteTime && Math.abs(localTime - remoteTime) < 5000) {
             console.log('[+] Data synced');
             return { action: 'synced', success: true };
         }
 
-        // 6. ТОЛЬКО ЕСЛИ ЕСТЬ РАЗЛИЧИЕ — читаем и локальные, и удалённые данные
-        console.log('[i] Data sync needed, loading full data...');
-        const localData = getAllLocalData(); // 👈 ЧИТАЕМ ТОЛЬКО СЕЙЧАС
+        const remote = await getUserDataFromFirestore(uid, idToken);
+
+        // 6. Если различаются — грузим локальные данные для выбора
+        console.log('[i] Data conflict, loading local data for choice');
+        const localData = getAllLocalData();
 
         return {
             success: true,
@@ -1306,15 +1320,15 @@ ipcMain.handle('auth-sign-in', async (event, email, password) => {
         // Сохраняем сессию
         saveUserSession(user.email, user.uid, idToken);
 
-        // 👈 ВМЕСТО writeHelloWorldToFirestore — вызываем синхронизацию
-        const syncResult = await syncUserData(user.uid, idToken, user.email);
+        // 👇 НЕ ЖДЁМ синхронизацию, запускаем в фоне
+        syncUserData(user.uid, idToken, user.email).then(syncResult => {
+            if (win && syncResult.needChoice) {
+                win.webContents.send('sync-required', syncResult);
+            }
+        }).catch(err => console.error('Sync error:', err));
 
-        // Отправляем результат синхронизации на фронт
-        if (win) {
-            win.webContents.send('sync-required', syncResult);
-        }
-
-        return { success: true, email: user.email, uid: user.uid, syncNeeded: syncResult.needChoice || false };
+        // 👇 ОТВЕЧАЕМ СРАЗУ
+        return { success: true, email: user.email, uid: user.uid, syncNeeded: false };
 
     } catch (error) {
         console.error('[x] Sign in error:', error);
@@ -1337,16 +1351,17 @@ ipcMain.handle('auth-sign-up', async (event, email, password) => {
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
 
-        console.log('[+] Registered, uid:', user.uid);
-
         const idToken = await user.getIdToken();
-        console.log('[i] Got token:', idToken.substring(0, 50) + '... (LENGTH: ' + idToken.length + ')');
 
         saveUserSession(user.email, user.uid, idToken);
-        const syncResult = await syncUserData(user.uid, idToken, user.email);
-        if (win) {
-            win.webContents.send('sync-required', syncResult);
-        }
+
+        // 👇 НЕ ЖДЁМ
+        syncUserData(user.uid, idToken, user.email).then(syncResult => {
+            if (win && syncResult.needChoice) {
+                win.webContents.send('sync-required', syncResult);
+            }
+        }).catch(err => console.error('Sync error:', err));
+
         return { success: true, email: user.email, uid: user.uid };
 
     } catch (error) {
