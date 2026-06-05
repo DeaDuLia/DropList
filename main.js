@@ -16,12 +16,12 @@ autoUpdater.logger = log;
 autoUpdater.logger.transports.file.level = 'info';
 
 const firebaseConfig = {
-    apiKey: "AIzaSyALdaI9VkFIkN_gTTJKohahnAcdZqCxgRQ",
-    authDomain: "droplist-3fa8b.firebaseapp.com",
-    projectId: "droplist-3fa8b",
-    storageBucket: "droplist-3fa8b.firebasestorage.app",
-    messagingSenderId: "920691108684",
-    appId: "1:920691108684:web:c06a303e820e311c8a3de9"
+    apiKey: "your-api-key",
+    authDomain: "your-app.firebaseapp.com",
+    projectId: "your-project-id",
+    storageBucket: "your-app.appspot.com",
+    messagingSenderId: "123456789",
+    appId: "1:123456789:web:abcdef"
 };
 
 const firebaseApp = initializeApp(firebaseConfig);
