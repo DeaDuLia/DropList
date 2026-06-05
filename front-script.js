@@ -160,6 +160,12 @@ async function initUpdateSystem() {
     addUpdateButton();
 }
 
+window.electronAPI.onSessionExpired(() => {
+    showError('Сессия истекла, пожалуйста, войдите снова');
+    currentUser = null;
+    updateAuthButton(null);
+});
+
 function addUpdateButton() {
     const headerButtons = document.querySelector('.header-buttons');
 

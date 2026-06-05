@@ -16,6 +16,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     onSyncLoading: (callback) => {
         ipcRenderer.on('sync-loading', (event, isLoading) => callback(isLoading));
     },
+    onSessionExpired: (callback) => {
+        ipcRenderer.on('session-expired', () => callback());
+    },
     minimizeWindow: () => ipcRenderer.send('window-control', 'minimize'),
     maximizeWindow: () => ipcRenderer.send('window-control', 'maximize'),
     closeWindow: () => ipcRenderer.send('window-control', 'close'),

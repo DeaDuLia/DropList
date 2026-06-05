@@ -133,22 +133,26 @@ async function syncUserData(uid, idToken, email) {
 // Применить выбор пользователя
 async function applySyncChoice(uid, idToken, choice, localData, remoteData) {
     try {
+        const freshToken = await getValidToken();
+        if (!freshToken) {
+            return { success: false, error: 'No valid token' };
+        }
         const now = new Date().toISOString();
 
         if (choice === 'local') {
             // Сохраняем все локальные разделы в Firestore
             const sections = ['games', 'movies', 'cartoons', 'serials', 'anime', 'books'];
             for (const section of sections) {
-                await saveSectionToFirestore(uid, idToken, section, localData[section] || []);
+                await saveSectionToFirestore(uid, freshToken, section, localData[section] || []);
             }
-            await updateSyncTime(uid, idToken, now);
+            await updateSyncTime(uid, freshToken, now);
             statements.setStatistic.run('last_firestore_update', now, now);
             return { success: true, source: 'local' };
 
         } else if (choice === 'remote') {
             // Сохраняем удалённые данные локально
             saveAllLocalData(remoteData);
-            await updateSyncTime(uid, idToken, now);
+            await updateSyncTime(uid, freshToken, now);
             statements.setStatistic.run('last_firestore_update', now, now);
             return { success: true, source: 'remote' };
         }
@@ -307,7 +311,8 @@ function initializeDatabase(db) {
             id INTEGER PRIMARY KEY CHECK (id = 1),
             email TEXT,
             uid TEXT,
-            id_token TEXT,  -- СОХРАНЯЕМ ТОКЕН СУКА
+            id_token TEXT,
+            refresh_token TEXT,  -- 👈 ДОБАВЛЯЕМ
             is_authenticated INTEGER DEFAULT 0,
             last_login DATETIME
         )
@@ -396,13 +401,13 @@ function initializeDatabase(db) {
     `);
 }
 
-function saveUserSession(email, uid, idToken) {
+function saveUserSession(email, uid, idToken, refreshToken) {
     const stmt = db.prepare(`
-        INSERT OR REPLACE INTO user_session (id, email, uid, id_token, is_authenticated, last_login)
-        VALUES (1, ?, ?, ?, 1, datetime('now'))
+        INSERT OR REPLACE INTO user_session (id, email, uid, id_token, refresh_token, is_authenticated, last_login)
+        VALUES (1, ?, ?, ?, ?, 1, datetime('now'))
     `);
-    stmt.run(email, uid, idToken);
-    console.log('[i] Session saved with token:', idToken ? `${idToken.substring(0, 30)}...` : 'NO TOKEN');
+    stmt.run(email, uid, idToken, refreshToken);
+    console.log('[i] Session saved with tokens');
 }
 
 function clearUserSession() {
@@ -416,7 +421,7 @@ function clearUserSession() {
 }
 
 function getStoredUser() {
-    const stmt = db.prepare(`SELECT email, uid, id_token, is_authenticated FROM user_session WHERE id = 1`);
+    const stmt = db.prepare(`SELECT email, uid, id_token, refresh_token, is_authenticated FROM user_session WHERE id = 1`);
     return stmt.get();
 }
 
@@ -503,7 +508,7 @@ const statements = {
 };
 
 let win;
-function createWindow() {
+async function createWindow() {
     win = new BrowserWindow({
         title: 'DropList',
         width: 1280,
@@ -539,20 +544,25 @@ function createWindow() {
     // ⚡⚡⚡ СНАЧАЛА ДОСТАЁМ ПОЛЬЗОВАТЕЛЯ ИЗ БД
     const storedUser = getStoredUser();
 
-    // ⚡⚡⚡ ТУТ ЖЕ ФИГАЧИМ ЗАПИСЬ В FIRESTORE, ПОКА СТРАНИЦА ГРУЗИТСЯ
-    if (storedUser && storedUser.is_authenticated && storedUser.id_token) {
-        console.log('[i] IMMEDIATE DATA RESTORE');
-        syncUserData(storedUser.uid, storedUser.id_token, storedUser.email).then(syncResult => {
-            if (win && syncResult.needChoice) {
-                win.webContents.send('sync-required', syncResult);
-            }
-        }).catch(err => console.error('Data Sync Error:', err));
+    if (storedUser && storedUser.is_authenticated) {
+        const freshToken = await getValidToken();
+        if (freshToken) {
+            console.log('[i] Token valid on startup');
+            syncUserData(storedUser.uid, freshToken, storedUser.email).then(syncResult => {
+                if (win && syncResult.needChoice) {
+                    win.webContents.send('sync-required', syncResult);
+                }
+            });
+        } else {
+            console.log('[!] Session expired on startup');
+            clearUserSession();
+            win.webContents.send('restore-session', null);
+        }
     }
 
     // ТОЛЬКО ПОСЛЕ ЭТОГО ЗАГРУЖАЕМ СТРАНИЦУ
     win.loadFile('index.html');
 
-    // А ЭТО ОТПРАВЛЯЕТ ДАННЫЕ НА ФРОНТ, КОГДА СТРАНИЦА УЖЕ ЗАГРУЗИЛАСЬ
     win.webContents.on('did-finish-load', () => {
         if (storedUser && storedUser.is_authenticated) {
             win.webContents.send('restore-session', {
@@ -1171,11 +1181,12 @@ ipcMain.handle('auth-sign-in', async (event, email, password) => {
         const userCredential = await signInWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
         const idToken = await user.getIdToken();
+        const refreshToken = user.refreshToken; // 👈 ПОЛУЧАЕМ
 
-        saveUserSession(user.email, user.uid, idToken);
+        saveUserSession(user.email, user.uid, idToken, refreshToken);
 
         // Запускаем синхронизацию в фоне
-        syncUserData(user.uid, idToken, user.email).then(syncResult => {
+        syncUserData(user.uid, refreshToken, user.email).then(syncResult => {
             if (win && syncResult.needChoice) {
                 win.webContents.send('sync-required', syncResult);
             }
@@ -1198,24 +1209,20 @@ ipcMain.handle('auth-sign-in', async (event, email, password) => {
 
 ipcMain.handle('auth-sign-up', async (event, email, password) => {
     try {
-        console.log('[i] Registration:', email);
-
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         const user = userCredential.user;
-
         const idToken = await user.getIdToken();
+        const refreshToken = user.refreshToken; // 👈 ПОЛУЧАЕМ
 
-        saveUserSession(user.email, user.uid, idToken);
+        saveUserSession(user.email, user.uid, idToken, refreshToken);
 
-        // 👇 НЕ ЖДЁМ
-        syncUserData(user.uid, idToken, user.email).then(syncResult => {
+        syncUserData(user.uid, refreshToken, user.email).then(syncResult => {
             if (win && syncResult.needChoice) {
                 win.webContents.send('sync-required', syncResult);
             }
-        }).catch(err => console.error('Sync error:', err));
+        });
 
         return { success: true, email: user.email, uid: user.uid };
-
     } catch (error) {
         console.error('[x] Registration error:', error);
         let errorMessage = 'Ошибка регистрации';
@@ -1267,7 +1274,6 @@ ipcMain.handle('get-all-local-data', async () => {
 });
 
 async function saveSectionToFirestore(uid, idToken, section, items) {
-    // Правильный URL для подколлекции
     const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/sections/${section}`;
 
     const body = {
@@ -1346,7 +1352,6 @@ async function getSectionFromFirestore(uid, idToken, section) {
 }
 
 async function updateSyncTime(uid, idToken, timestamp) {
-    // Используем главный документ пользователя
     const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}?updateMask.fieldPaths=lastSync`;
 
     const body = {
@@ -1374,7 +1379,6 @@ async function updateSyncTime(uid, idToken, timestamp) {
 }
 
 async function getSyncTime(uid, idToken) {
-    // Получаем главный документ пользователя
     const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}`;
 
     try {
@@ -1397,20 +1401,27 @@ async function getSyncTime(uid, idToken) {
 
 // Принудительная синхронизация ВСЕХ разделов
 ipcMain.handle('sync-all-sections-to-cloud', async () => {
+
+
     const storedUser = getStoredUser();
     if (!storedUser || !storedUser.is_authenticated || !storedUser.id_token) {
         return { success: false, error: 'Not authenticated' };
+    }
+
+    const freshToken = await getValidToken();
+    if (!freshToken) {
+        return { success: false, error: 'No valid token' };
     }
 
     try {
         const sections = ['games', 'movies', 'cartoons', 'serials', 'anime', 'books'];
         for (const section of sections) {
             const sectionData = statements.getDataBySection.all(section);
-            await saveSectionToFirestore(storedUser.uid, storedUser.id_token, section, sectionData);
+            await saveSectionToFirestore(storedUser.uid, freshToken, section, sectionData);
         }
 
         const now = new Date().toISOString();
-        await updateSyncTime(storedUser.uid, storedUser.id_token, now);
+        await updateSyncTime(storedUser.uid, freshToken, now);
 
         console.log('✅ All sections synced to cloud');
         return { success: true };
@@ -1437,6 +1448,12 @@ function clearSectionDirty(section) {
 }
 
 async function syncDirtySections(uid, idToken) {
+    const freshToken = await getValidToken();
+    if (!freshToken) {
+        console.log('[!] No valid token, skipping sync');
+        return false;
+    }
+
     const sections = ['games', 'movies', 'cartoons', 'serials', 'anime', 'books'];
     const dirtySections = sections.filter(section => isSectionDirty(section));
 
@@ -1449,13 +1466,85 @@ async function syncDirtySections(uid, idToken) {
 
     for (const section of dirtySections) {
         const sectionData = statements.getDataBySection.all(section);
-        await saveSectionToFirestore(uid, idToken, section, sectionData);
+        await saveSectionToFirestore(uid, freshToken, section, sectionData);
         clearSectionDirty(section);
     }
 
     const now = new Date().toISOString();
-    await updateSyncTime(uid, idToken, now);
+    await updateSyncTime(uid, freshToken, now);
     statements.setStatistic.run('last_firestore_update', now, now);
 
     return true;
+}
+
+async function refreshAccessToken(refreshToken) {
+    const url = `https://securetoken.googleapis.com/v1/token?key=${firebaseConfig.apiKey}`;
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            grant_type: 'refresh_token',
+            refresh_token: refreshToken
+        })
+    });
+
+    if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`Token refresh failed: ${error}`);
+    }
+
+    const data = await response.json();
+    return {
+        idToken: data.id_token,
+        refreshToken: data.refresh_token, // может прийти новый refresh token
+        expiresIn: data.expires_in
+    };
+}
+
+async function getValidToken() {
+    const storedUser = getStoredUser();
+    if (!storedUser || !storedUser.is_authenticated) {
+        return null;
+    }
+
+    // Пробуем сначала через Firebase SDK (если он активен)
+    try {
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+            const freshToken = await currentUser.getIdToken(true);
+            // Обновляем в БД
+            const stmt = db.prepare(`UPDATE user_session SET id_token = ? WHERE id = 1`);
+            stmt.run(freshToken);
+            console.log('[i] Token refreshed via Firebase SDK');
+            return freshToken;
+        }
+    } catch (error) {
+        console.log('[i] Firebase SDK not available, using REST API');
+    }
+
+    // Если SDK не помог — используем REST API с refresh token
+    if (storedUser.refresh_token) {
+        try {
+            const { idToken, refreshToken } = await refreshAccessToken(storedUser.refresh_token);
+
+            // Обновляем оба токена в БД
+            const stmt = db.prepare(`UPDATE user_session SET id_token = ?, refresh_token = ? WHERE id = 1`);
+            stmt.run(idToken, refreshToken || storedUser.refresh_token);
+
+            console.log('[i] Token refreshed via REST API');
+            return idToken;
+        } catch (error) {
+            console.error('[x] Failed to refresh token:', error);
+            // Токен не обновился — нужно перелогиниваться
+            clearUserSession();
+            if (win) {
+                win.webContents.send('session-expired', true);
+            }
+            return null;
+        }
+    }
+
+    console.log('[!] No refresh token available');
+    return null;
 }
