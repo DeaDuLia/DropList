@@ -34,9 +34,6 @@ if (process.platform === 'win32') {
     app.setAppUserModelId('com.deshin.droplist');
 }
 
-// ========== НОВЫЕ ФУНКЦИИ ДЛЯ СИНХРОНИЗАЦИИ ==========
-
-// Получить ВСЕ данные из локальной SQLite (один запрос)
 function getAllLocalData() {
     const sections = ['games', 'movies', 'cartoons', 'serials', 'anime', 'books'];
     const allData = {};
@@ -48,17 +45,14 @@ function getAllLocalData() {
     return allData;
 }
 
-// Сохранить ВСЕ данные в локальную SQLite (транзакцией)
 function saveAllLocalData(allData) {
     const sections = ['games', 'movies', 'cartoons', 'serials', 'anime', 'books'];
 
     const transaction = db.transaction(() => {
-        // Очищаем все секции
         for (const section of sections) {
             db.prepare(`DELETE FROM data_cards WHERE section = ?`).run(section);
         }
 
-        // Вставляем новые данные
         for (const [section, items] of Object.entries(allData)) {
             if (items && Array.isArray(items)) {
                 for (const item of items) {
@@ -74,17 +68,13 @@ function saveAllLocalData(allData) {
     transaction();
 }
 
-// Синхронизация: сравнить время и показать выбор
 async function syncUserData(uid, idToken, email) {
     try {
-        // Получаем локальное время
         const localLastSync = statements.getStatistic.get('last_firestore_update');
         const localSyncTime = localLastSync ? localLastSync.value : null;
 
-        // Получаем удалённое время
         const remoteSyncTime = await getSyncTime(uid, idToken);
 
-        // Если нет удалённого времени — сохраняем локальное
         if (!remoteSyncTime) {
             const localData = getAllLocalData();
             const sections = ['games', 'movies', 'cartoons', 'serials', 'anime', 'books'];
@@ -151,7 +141,6 @@ async function applySyncChoice(uid, idToken, choice, localData, remoteData) {
             return { success: true, source: 'local' };
 
         } else if (choice === 'remote') {
-            // Сохраняем удалённые данные локально
             saveAllLocalData(remoteData);
             const remoteSyncTime = await getSyncTime(uid, freshToken);
             statements.setStatistic.run('last_firestore_update', remoteSyncTime, remoteSyncTime);
@@ -164,9 +153,6 @@ async function applySyncChoice(uid, idToken, choice, localData, remoteData) {
         return { success: false, error: error.message };
     }
 }
-
-// Функция для пакетной синхронизации после любого изменения
-
 
 async function checkForUpdates(manualCheck = false) {
     const win = BrowserWindow.getFocusedWindow();
@@ -241,7 +227,6 @@ async function checkForUpdates(manualCheck = false) {
     }
 }
 
-// Функция для получения релизов с GitHub
 async function getGitHubReleases() {
     return new Promise((resolve, reject) => {
         const options = {
@@ -274,7 +259,6 @@ async function getGitHubReleases() {
     });
 }
 
-// Функция сравнения версий
 function isNewerVersion(newVersion, currentVersion) {
     const newParts = newVersion.split('.').map(Number);
     const currentParts = currentVersion.split('.').map(Number);
@@ -290,7 +274,6 @@ function isNewerVersion(newVersion, currentVersion) {
     return false;
 }
 
-// Функция для пропуска версии
 function skipVersion(version) {
     statements.setStatistic.run(
         'skipped_version',
