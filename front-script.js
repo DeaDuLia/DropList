@@ -1960,30 +1960,55 @@ searchInWebBtn.addEventListener('click', async () => {
 
 
 function highlightRandomCard(cardName) {
-    // Снимаем подсветку со всех карточек
-    document.querySelectorAll('.data-card').forEach(card => {
-        card.style.boxShadow = '';
-        card.style.transform = '';
-    });
-
-    // Находим нужную карточку
+    // Находим карточку
     const card = document.querySelector(`.data-card[data-name="${cardName}"]`);
-    if (card) {
-        // Подсвечиваем карточку
-        card.style.boxShadow = '0 0 20px rgba(155, 89, 182, 0.8)';
-        card.style.transform = 'scale(1.05)';
 
-        // Прокручиваем к карточке
-        card.scrollIntoView({
-            behavior: 'smooth',
-            block: 'center'
+    if (!card) return;
+
+    // Убираем подсветку с предыдущей карточки
+    const prevHighlight = document.querySelector('.data-card.random-highlight');
+    if (prevHighlight) {
+        prevHighlight.classList.remove('random-highlight');
+        // Убираем обработчик клика с предыдущей
+        prevHighlight.removeEventListener('click', removeHighlightOnClick);
+    }
+
+    // Добавляем новую подсветку (бесконечную)
+    card.classList.add('random-highlight');
+
+    // Добавляем обработчик клика для снятия подсветки
+    card.addEventListener('click', removeHighlightOnClick);
+
+    // Находим контейнер со скроллом
+    const scrollContainer = document.querySelector('.content-wrapper');
+
+    if (!scrollContainer) {
+        console.error('Content wrapper not found');
+        return;
+    }
+
+    // Плавно скроллим к карточке
+    setTimeout(() => {
+        if (!card || !document.body.contains(card)) return;
+
+        const containerRect = scrollContainer.getBoundingClientRect();
+        const cardRect = card.getBoundingClientRect();
+
+        const scrollTop = scrollContainer.scrollTop;
+        const targetScroll = scrollTop + (cardRect.top - containerRect.top) - (containerRect.height / 2) + (cardRect.height / 2);
+
+        scrollContainer.scrollTo({
+            top: Math.max(0, targetScroll),
+            behavior: 'smooth'
         });
+    }, 100);
 
-        // Снимаем подсветку через 3 секунды
-        setTimeout(() => {
-            card.style.boxShadow = '';
-            card.style.transform = '';
-        }, 3000);
+    // Функция для снятия подсветки по клику
+    function removeHighlightOnClick() {
+        if (card && document.body.contains(card)) {
+            card.classList.remove('random-highlight');
+            card.removeEventListener('click', removeHighlightOnClick);
+        }
     }
 }
 
@@ -1998,10 +2023,6 @@ async function pickRandomVisibleCard() {
         const randomIndex = Math.floor(Math.random() * visibleCards.length);
         const randomCard = visibleCards[randomIndex];
         const cardName = randomCard.dataset.name;
-
-        // Открываем поиск
-        const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(cardName)}`;
-        window.electronAPI.openSearch(searchUrl);
 
         // Подсвечиваем карточку
         highlightRandomCard(cardName);
