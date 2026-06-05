@@ -984,6 +984,16 @@ function setupSearchInput() {
         if (e.target.classList.contains('suggestion-item')) {
             searchInput.value = e.target.textContent;
             searchSuggestions.style.display = 'none';
+            if (currentFilters.statusFilter !== 'Все') {
+                currentFilters.statusFilter = 'Все';
+                // Обновляем активную кнопку фильтра
+                document.querySelectorAll('.filter-button').forEach(btn => {
+                    btn.classList.remove('active');
+                    if (btn.dataset.status === 'Все') {
+                        btn.classList.add('active');
+                    }
+                });
+            }
             filterCards(e.target.textContent);
         }
     });
@@ -1000,6 +1010,16 @@ function setupSearchInput() {
     // Обработчик нажатия Enter
     searchInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
+            if (currentFilters.statusFilter !== 'Все') {
+                currentFilters.statusFilter = 'Все';
+                // Обновляем активную кнопку фильтра
+                document.querySelectorAll('.filter-button').forEach(btn => {
+                    btn.classList.remove('active');
+                    if (btn.dataset.status === 'Все') {
+                        btn.classList.add('active');
+                    }
+                });
+            }
             filterCards(searchInput.value);
         }
     });
