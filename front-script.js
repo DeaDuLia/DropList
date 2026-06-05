@@ -477,7 +477,7 @@ document.querySelectorAll('.nav-item').forEach(item => {
             hideAddForm();
 
             let data = await window.electronAPI.getData(section);
-            await renderSection(section, data, true, false);
+            await renderSection(section, data, true, true);
         } catch (error) {
             console.error(`Ошибка загрузки раздела ${section}:`, error);
             await showError(`Не удалось загрузить раздел ${section}`);
