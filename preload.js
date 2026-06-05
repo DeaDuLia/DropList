@@ -1,6 +1,24 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
+    authSignIn: (email, password) => ipcRenderer.invoke('auth-sign-in', email, password),
+    authSignUp: (email, password) => ipcRenderer.invoke('auth-sign-up', email, password),
+    authSignOut: () => ipcRenderer.invoke('auth-sign-out'),
+    authGetCurrentUser: () => ipcRenderer.invoke('auth-get-current-user'),
+    onRestoreSession: (callback) => {
+        ipcRenderer.on('restore-session', (event, user) => callback(user));
+    },
+    syncApplyChoice: (choice, localData, remoteData) => ipcRenderer.invoke('sync-apply-choice', choice, localData, remoteData),
+    getAllLocalData: () => ipcRenderer.invoke('get-all-local-data'),
+    onSyncRequired: (callback) => {
+        ipcRenderer.on('sync-required', (event, data) => callback(data));
+    },
+    onSyncLoading: (callback) => {
+        ipcRenderer.on('sync-loading', (event, isLoading) => callback(isLoading));
+    },
+    onSessionExpired: (callback) => {
+        ipcRenderer.on('session-expired', () => callback());
+    },
     minimizeWindow: () => ipcRenderer.send('window-control', 'minimize'),
     maximizeWindow: () => ipcRenderer.send('window-control', 'maximize'),
     closeWindow: () => ipcRenderer.send('window-control', 'close'),
