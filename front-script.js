@@ -413,6 +413,12 @@ async function updateItemIcon(section, name, newIconUrl) {
                 icon.onerror = () => {
                     icon.src = 'https://apptor.studio/assets/cache/images/600-856x600-629.png';
                 };
+
+                const allItem = window.allSectionData.find(item => item.name === name);
+                if (allItem) allItem.icoUrl = newIconUrl;
+
+                const filteredItem = window.filteredData.find(item => item.name === name);
+                if (filteredItem) filteredItem.icoUrl = newIconUrl;
             }
         }
     } catch (error) {
@@ -1222,6 +1228,15 @@ function showCategoryChangeModal(oldSection, itemName, icoUrl, status, rating) {
             const card = document.querySelector(`.data-card[data-name="${name}"]`);
             if (card) {
                 card.remove();
+                const oldSectionIndex = window.allSectionData.findIndex(item => item.name === name);
+                if (oldSectionIndex !== -1) {
+                    window.allSectionData.splice(oldSectionIndex, 1);
+                }
+
+                const oldFilteredIndex = window.filteredData.findIndex(item => item.name === name);
+                if (oldFilteredIndex !== -1) {
+                    window.filteredData.splice(oldFilteredIndex, 1);
+                }
             }
             document.body.removeChild(modal);
         } catch (error) {
@@ -1583,14 +1598,25 @@ async function showEditableDropdown(field, valueDisplay) {
 async function updateFieldValue(field, valueDisplay, newValue, itemName, isRating) {
     try {
         const section = document.querySelector('.nav-item.active')?.dataset.section;
+        const updateItemInArrays = (itemName, updates) => {
+            // Обновляем в allSectionData
+            const allItem = window.allSectionData.find(item => item.name === itemName);
+            if (allItem) Object.assign(allItem, updates);
+
+            // Обновляем в filteredData
+            const filteredItem = window.filteredData.find(item => item.name === itemName);
+            if (filteredItem) Object.assign(filteredItem, updates);
+        };
         if (isRating) {
             await window.electronAPI.updateDataRating(section, itemName, newValue);
             field.dataset.rating = newValue;
             valueDisplay.style.backgroundColor = getRatingColor(newValue);
+            updateItemInArrays(itemName, { rating: newValue });
         } else {
             await window.electronAPI.updateDataStatus(section, itemName, newValue);
             field.dataset.status = newValue;
             valueDisplay.style.backgroundColor = getStatusColor(newValue);
+            updateItemInArrays(itemName, { status: newValue });
         }
 
         valueDisplay.textContent = newValue;
@@ -1688,6 +1714,13 @@ function setupDeleteButtons() {
                     const card = btn.closest('.data-card');
                     if (card) card.remove();
                     document.body.removeChild(confirmModal);
+                    const itemIndex = window.allSectionData.findIndex(item => item.name === itemName);
+                    if (itemIndex !== -1) window.allSectionData.splice(itemIndex, 1);
+
+                    const filteredIndex = window.filteredData.findIndex(item => item.name === itemName);
+                    if (filteredIndex !== -1) {
+                        window.filteredData.splice(filteredIndex, 1);
+                    }
                 } catch (error) {
                     console.error('Не удалось удалить:', error);
                     await showError('Не удалось удалить');
@@ -1863,8 +1896,21 @@ function setupTitleClickHandlers() {
                         buttons.forEach(btn => {
                             btn.dataset.name = newName;
                         });
+
+
                     }
 
+                    const updateItemInArrays = (oldName, newName) => {
+                        // Обновляем в allSectionData
+                        const allItem = window.allSectionData.find(item => item.name === oldName);
+                        if (allItem) allItem.name = newName;
+
+                        // Обновляем в filteredData
+                        const filteredItem = window.filteredData.find(item => item.name === oldName);
+                        if (filteredItem) filteredItem.name = newName;
+                    };
+
+                    updateItemInArrays(oldName, newName);
                     document.body.removeChild(modal);
                 } catch (error) {
                     console.error('Ошибка при обновлении:', error);
