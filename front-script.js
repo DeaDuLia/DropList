@@ -1301,25 +1301,35 @@ function getAddFormHTML(addMoreChecked = false, visible = '') {
     `;
 }
 
+function escapeHtml(str) {
+    if (!str) return '';
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function renderCardList(cards) {
     return cards.map(card => `
-            <div class="data-card" data-name="${card.name}" style="display: block;">
-                <button class="change-image-btn" data-name="${card.name}" title="Сменить картинку"><img src="assets/icons/changeImage.svg" alt="🖼️" class="button-icon-no-text"></button>
-                <button class="change-category-btn" data-name="${card.name}" data-status="${card.status}" data-rating="${card.rating}" datatype="${card.icoUrl}" title="Сменить категорию"><img src="assets/icons/changeCategory.svg" alt="⇄" class="button-icon-no-text"></button>
-                <button class="delete-btn" data-name="${card.name}"><img src="assets/icons/delete.svg" alt="🗑️" class="button-icon-no-text"></button>
+            <div class="data-card" data-name="${escapeHtml(card.name)}" style="display: block;">
+                <button class="change-image-btn" data-name="${escapeHtml(card.name)}" title="Сменить картинку"><img src="assets/icons/changeImage.svg" alt="🖼️" class="button-icon-no-text"></button>
+                <button class="change-category-btn" data-name="${escapeHtml(card.name)}" data-status="${card.status}" data-rating="${card.rating}" datatype="${card.icoUrl}" title="Сменить категорию"><img src="assets/icons/changeCategory.svg" alt="⇄" class="button-icon-no-text"></button>
+                <button class="delete-btn" data-name="${escapeHtml(card.name)}"><img src="assets/icons/delete.svg" alt="🗑️" class="button-icon-no-text"></button>
                 ${getCardIconHTML(card)}
                 <div class="data-info">
-                    <h3 class="data-title">${card.name}</h3>
+                    <h3 class="data-title">${escapeHtml(card.name)}</h3>
                     <div class="data-ratings-container">
                         <span class="card-rating rating-value editable-field"
                               data-rating="${card.rating}"
-                              data-name="${card.name}"
+                              data-name="${escapeHtml(card.name)}"
                               title="Редактировать">
                             ${card.rating || '0'}
                         </span>
                         <span class="card-status status-value editable-field"
                               data-status="${card.status}"
-                              data-name="${card.name}"
+                              data-name="${escapeHtml(card.name)}"
                               title="Редактировать">
                             ${card.status || 'Уточнить'}
                         </span>
