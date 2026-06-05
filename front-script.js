@@ -463,6 +463,7 @@ document.querySelectorAll('.nav-item').forEach(item => {
 
         try {
             hideAddForm();
+
             let data = await window.electronAPI.getData(section);
             await renderSection(section, data, true, false);
         } catch (error) {
