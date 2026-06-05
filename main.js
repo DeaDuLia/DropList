@@ -6,15 +6,152 @@ const Database = require('better-sqlite3');
 const https = require('https');
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
+const { initializeApp } = require('firebase/app');
+const { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } = require('firebase/auth');
+const { getFirestore, doc, setDoc, getDoc } = require('firebase/firestore');
+
 const userDataPath = app.getPath('userData');
 const dbPath = path.join(userDataPath, 'database.db');
 autoUpdater.logger = log;
 autoUpdater.logger.transports.file.level = 'info';
 
+const firebaseConfig = {
+    apiKey: "AIzaSyALdaI9VkFIkN_gTTJKohahnAcdZqCxgRQ",
+    authDomain: "droplist-3fa8b.firebaseapp.com",
+    projectId: "droplist-3fa8b",
+    storageBucket: "droplist-3fa8b.firebasestorage.app",
+    messagingSenderId: "920691108684",
+    appId: "1:920691108684:web:c06a303e820e311c8a3de9"
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+const auth = getAuth(firebaseApp);
+const db_firestore = getFirestore(firebaseApp);
+
 app.name = 'DropList';
 app.setName('DropList');
 if (process.platform === 'win32') {
     app.setAppUserModelId('com.deshin.droplist');
+}
+
+function getAllLocalData() {
+    const sections = ['games', 'movies', 'cartoons', 'serials', 'anime', 'books'];
+    const allData = {};
+
+    for (const section of sections) {
+        allData[section] = statements.getDataBySection.all(section);
+    }
+
+    return allData;
+}
+
+function saveAllLocalData(allData) {
+    const sections = ['games', 'movies', 'cartoons', 'serials', 'anime', 'books'];
+
+    const transaction = db.transaction(() => {
+        for (const section of sections) {
+            db.prepare(`DELETE FROM data_cards WHERE section = ?`).run(section);
+        }
+
+        for (const [section, items] of Object.entries(allData)) {
+            if (items && Array.isArray(items)) {
+                for (const item of items) {
+                    statements.importData.run(
+                        item.name, section, item.icoUrl || null,
+                        item.rating || '0', item.status || 'Уточнить', item.description || ''
+                    );
+                }
+            }
+        }
+    });
+
+    transaction();
+}
+
+async function syncUserData(uid, idToken, email) {
+    try {
+        const localLastSync = statements.getStatistic.get('last_firestore_update');
+        const localSyncTime = localLastSync ? localLastSync.value : null;
+
+        const remoteSyncTime = await getSyncTime(uid, idToken);
+
+        if (!remoteSyncTime) {
+            const localData = getAllLocalData();
+            const sections = ['games', 'movies', 'cartoons', 'serials', 'anime', 'books'];
+            for (const section of sections) {
+                await saveSectionToFirestore(uid, idToken, section, localData[section] || []);
+            }
+            const now = new Date().toISOString();
+            await updateSyncTime(uid, idToken, now);
+            statements.setStatistic.run('last_firestore_update', now, now);
+            return { action: 'local_to_cloud', success: true };
+        }
+
+        // Сравниваем времена
+        const localTime = localSyncTime ? new Date(localSyncTime) : null;
+        const remoteTime = new Date(remoteSyncTime);
+
+        if (localTime && Math.abs(localTime - remoteTime) < 5000) {
+            console.log('[+] Data synced');
+            return { action: 'synced', success: true };
+        }
+
+        // Конфликт — загружаем все данные для выбора
+        const localData = getAllLocalData();
+        const sections = ['games', 'movies', 'cartoons', 'serials', 'anime', 'books'];
+        const remoteData = {};
+
+        for (const section of sections) {
+            remoteData[section] = await getSectionFromFirestore(uid, idToken, section);
+        }
+
+        return {
+            success: true,
+            needChoice: true,
+            localData: localData,
+            remoteData: remoteData,
+            localSyncTime: localSyncTime,
+            remoteSyncTime: remoteSyncTime
+        };
+
+    } catch (error) {
+        console.error('Sync error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+// Применить выбор пользователя
+async function applySyncChoice(uid, idToken, choice, localData, remoteData) {
+    try {
+        const freshToken = await getValidToken();
+        if (!freshToken) {
+            return { success: false, error: 'No valid token' };
+        }
+        const now = new Date().toISOString();
+
+        if (choice === 'local') {
+            // Сохраняем все локальные разделы в Firestore
+            const sections = ['games', 'movies', 'cartoons', 'serials', 'anime', 'books'];
+            for (const section of sections) {
+                await saveSectionToFirestore(uid, freshToken, section, localData[section] || []);
+            }
+            const localLastSync = statements.getStatistic.get('last_firestore_update');
+            const localSyncTime = localLastSync ? localLastSync.value : null;
+            await updateSyncTime(uid, freshToken, localSyncTime);
+            return { success: true, source: 'local' };
+
+        } else if (choice === 'remote') {
+            saveAllLocalData(remoteData);
+            const remoteSyncTime = await getSyncTime(uid, freshToken);
+            statements.setStatistic.run('last_firestore_update', remoteSyncTime, remoteSyncTime);
+            return { success: true, source: 'remote' };
+        }
+
+        return { success: false, error: 'Неверный выбор' };
+    } catch (error) {
+        console.error('Apply sync error:', error);
+        return { success: false, error: error.message };
+    }
 }
 
 async function checkForUpdates(manualCheck = false) {
@@ -90,7 +227,6 @@ async function checkForUpdates(manualCheck = false) {
     }
 }
 
-// Функция для получения релизов с GitHub
 async function getGitHubReleases() {
     return new Promise((resolve, reject) => {
         const options = {
@@ -123,7 +259,6 @@ async function getGitHubReleases() {
     });
 }
 
-// Функция сравнения версий
 function isNewerVersion(newVersion, currentVersion) {
     const newParts = newVersion.split('.').map(Number);
     const currentParts = currentVersion.split('.').map(Number);
@@ -139,7 +274,6 @@ function isNewerVersion(newVersion, currentVersion) {
     return false;
 }
 
-// Функция для пропуска версии
 function skipVersion(version) {
     statements.setStatistic.run(
         'skipped_version',
@@ -156,6 +290,18 @@ function getIconPath() {
     }
 }
 function initializeDatabase(db) {
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS user_session (
+            id INTEGER PRIMARY KEY CHECK (id = 1),
+            email TEXT,
+            uid TEXT,
+            id_token TEXT,
+            refresh_token TEXT,  -- 👈 ДОБАВЛЯЕМ
+            is_authenticated INTEGER DEFAULT 0,
+            last_login DATETIME
+        )
+    `);
+
     db.exec(`
         CREATE TABLE IF NOT EXISTS ratings (
             rating TEXT PRIMARY KEY
@@ -237,6 +383,30 @@ function initializeDatabase(db) {
             actual_date DATETIME NOT NULL
         )
     `);
+}
+
+function saveUserSession(email, uid, idToken, refreshToken) {
+    const stmt = db.prepare(`
+        INSERT OR REPLACE INTO user_session (id, email, uid, id_token, refresh_token, is_authenticated, last_login)
+        VALUES (1, ?, ?, ?, ?, 1, datetime('now'))
+    `);
+    stmt.run(email, uid, idToken, refreshToken);
+    console.log('[i] Session saved with tokens');
+}
+
+function clearUserSession() {
+    const stmt = db.prepare(`
+        UPDATE user_session 
+        SET is_authenticated = 0, email = NULL, uid = NULL, id_token = NULL, last_login = NULL 
+        WHERE id = 1
+    `);
+    stmt.run();
+    console.log('[i] Session cleared');
+}
+
+function getStoredUser() {
+    const stmt = db.prepare(`SELECT email, uid, id_token, refresh_token, is_authenticated FROM user_session WHERE id = 1`);
+    return stmt.get();
 }
 
 async function getGitHubDownloads() {
@@ -322,21 +492,23 @@ const statements = {
 };
 
 let win;
-function createWindow() {
+async function createWindow() {
     win = new BrowserWindow({
         title: 'DropList',
         width: 1280,
         height: 800,
         icon: getIconPath(),
-        frame: false, // Убираем стандартную рамку Windows
-        titleBarStyle: 'hidden', // Скрываем стандартную панель заголовка
+        frame: false,
+        titleBarStyle: 'hidden',
         webPreferences: {
             nodeIntegration: false,
             sandbox: true,
             preload: path.join(__dirname, 'preload.js')
         }
     });
+
     win.setTitle('DropList');
+
     if (process.platform === 'win32') {
         win.setAppDetails({
             appId: 'com.deshin.droplist',
@@ -346,12 +518,45 @@ function createWindow() {
             relaunchDisplayName: 'DropList'
         });
     }
+
     if (process.platform === 'darwin') {
         app.setName('DropList');
     }
-    win.setMenu(null)
+
+    win.setMenu(null);
+
+    // ⚡⚡⚡ СНАЧАЛА ДОСТАЁМ ПОЛЬЗОВАТЕЛЯ ИЗ БД
+    const storedUser = getStoredUser();
+
+    if (storedUser && storedUser.is_authenticated) {
+        const freshToken = await getValidToken();
+        if (freshToken) {
+            console.log('[i] Token valid on startup');
+            syncUserData(storedUser.uid, freshToken, storedUser.email).then(syncResult => {
+                if (win && syncResult.needChoice) {
+                    win.webContents.send('sync-required', syncResult);
+                }
+            });
+        } else {
+            console.log('[!] Session expired on startup');
+            clearUserSession();
+            win.webContents.send('restore-session', null);
+        }
+    }
+
+    // ТОЛЬКО ПОСЛЕ ЭТОГО ЗАГРУЖАЕМ СТРАНИЦУ
     win.loadFile('index.html');
 
+    win.webContents.on('did-finish-load', () => {
+        if (storedUser && storedUser.is_authenticated) {
+            win.webContents.send('restore-session', {
+                email: storedUser.email,
+                uid: storedUser.uid
+            });
+        } else {
+            win.webContents.send('restore-session', null);
+        }
+    });
 }
 
 app.whenReady().then(createWindow);
@@ -362,9 +567,17 @@ app.whenReady().then(() => {
     }, 3000);
 });
 
-app.on('before-quit', () => {
+app.on('before-quit', async (event) => {
+    event.preventDefault();
+
+    const storedUser = getStoredUser();
+    if (storedUser && storedUser.is_authenticated && storedUser.id_token) {
+        await syncDirtySections(storedUser.uid, storedUser.id_token);
+    }
+
     db.pragma('wal_checkpoint(FULL)');
     db.close();
+    app.exit();
 });
 
 setInterval(() => {
@@ -528,7 +741,7 @@ async function getCachedGitHubDownloads() {
             }
         }
 
-        console.log('Fetching fresh downloads count');
+        console.log('[i] Fetching fresh downloads count');
         const downloads = await getGitHubDownloads();
 
         statements.setStatistic.run(
@@ -582,28 +795,68 @@ ipcMain.handle('get-data', async (event, section) => {
     return statements.getDataBySection.all(section);
 });
 
-ipcMain.handle('add-data', (event, section, data) => {
-    return statements.addData.run(data.name, section, data.icoUrl || null, data.rating, data.status || 'Уточнить');
+ipcMain.handle('add-data', async (event, section, data) => {
+    const result = statements.addData.run(data.name, section, data.icoUrl || null, data.rating, data.status || 'Уточнить');
+    markSectionDirty(section);
+    // Обновляем локальное время синхронизации (данные изменились)
+    const now = new Date().toISOString();
+    statements.setStatistic.run('last_firestore_update', now, now);
+
+    return result;
 });
 
-ipcMain.handle('delete-data', (event, section, dataName) => {
-    return statements.deleteData.run(dataName, section);
+ipcMain.handle('delete-data', async (event, section, dataName) => {
+    const result = statements.deleteData.run(dataName, section);
+    markSectionDirty(section);
+    // Обновляем локальное время синхронизации
+    const now = new Date().toISOString();
+    statements.setStatistic.run('last_firestore_update', now, now);
+
+    return result;
 });
 
-ipcMain.handle('move-to-category', async (event,data) => {
-    return statements.updateSection.run(data.newCategory, data.name, data.oldCategory);
+ipcMain.handle('move-to-category', async (event, data) => {
+    // Удаляем из старой категории
+    statements.deleteData.run(data.name, data.oldCategory);
+    // Добавляем в новую категорию
+    const result = statements.addData.run(data.name, data.newCategory, data.oldIcoUrl || null, data.oldRating || '0', data.oldStatus || 'Уточнить');
+    markSectionDirty(data.newCategory);
+    markSectionDirty(data.oldCategory);
+    // Обновляем локальное время синхронизации
+    const now = new Date().toISOString();
+    statements.setStatistic.run('last_firestore_update', now, now);
+
+    return result;
 });
 
 ipcMain.handle('update-data', async (event, section, oldName, newName, newIcoUrl) => {
-    return statements.updateData.run(newName, newIcoUrl, oldName, section);
+    const result = statements.updateData.run(newName, newIcoUrl, oldName, section);
+    markSectionDirty(section);
+    // Обновляем локальное время синхронизации
+    const now = new Date().toISOString();
+    statements.setStatistic.run('last_firestore_update', now, now);
+
+    return result;
 });
 
-ipcMain.handle('update-data-rating', async (event,section, dataName, rating) => {
-    return statements.updateDataRating.run(rating, dataName, section);
+ipcMain.handle('update-data-rating', async (event, section, dataName, rating) => {
+    const result = statements.updateDataRating.run(rating, dataName, section);
+    markSectionDirty(section);
+    // Обновляем локальное время синхронизации
+    const now = new Date().toISOString();
+    statements.setStatistic.run('last_firestore_update', now, now);
+
+    return result;
 });
 
-ipcMain.handle('update-data-status', async (event,section, dataName, status) => {
-    return statements.updateDataStatus.run(status, dataName, section);
+ipcMain.handle('update-data-status', async (event, section, dataName, status) => {
+    const result = statements.updateDataStatus.run(status, dataName, section);
+    markSectionDirty(section);
+    // Обновляем локальное время синхронизации
+    const now = new Date().toISOString();
+    statements.setStatistic.run('last_firestore_update', now, now);
+
+    return result;
 });
 
 ipcMain.handle('check-duplicates', async (event, section, name) => {
@@ -652,7 +905,6 @@ ipcMain.handle('import-data', async () => {
     const win = BrowserWindow.getFocusedWindow();
 
     try {
-        // Показываем диалог выбора файла
         const { filePaths } = await dialog.showOpenDialog(win, {
             title: 'Импорт данных',
             filters: [
@@ -669,8 +921,11 @@ ipcMain.handle('import-data', async () => {
         const filePath = filePaths[0];
         const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
 
+        const storedUser = getStoredUser();
+        const isAuthed = storedUser && storedUser.is_authenticated && storedUser.id_token;
+
         // Импортируем данные в транзакции
-        await db.transaction(() => {
+        db.transaction(() => {
             // Импорт рейтингов и статусов
             if (data.ratings) {
                 data.ratings.forEach(rating => {
@@ -687,23 +942,37 @@ ipcMain.handle('import-data', async () => {
                 key !== 'ratings' && key !== 'statuses'
             );
 
-            categories.forEach(category => {
+            for (const category of categories) {
                 if (Array.isArray(data[category])) {
-                    data[category].forEach(item => {
-                        statements.importData.run(
-                            item.name,
-                            category,
-                            item.icoUrl || null,
-                            item.rating || '0',
-                            'Импортировано',
-                            item.description || ''
-                        );
-                    });
+                    for (const item of data[category]) {
+                        const existing = statements.getDataCount.get(item.name, category)?.allCount ?? 0;
+
+                        if (existing > 0) {
+                            statements.addData.run(
+                                item.name, category, item.icoUrl || null,
+                                item.rating || '0', 'Импортировано'
+                            );
+                        } else {
+                            statements.importData.run(
+                                item.name, category, item.icoUrl || null,
+                                item.rating || '0', 'Импортировано', item.description || ''
+                            );
+                        }
+                    }
                 }
-            });
+                markSectionDirty(category);
+            }
         })();
 
+        const now = new Date().toISOString();
+        statements.setStatistic.run('last_firestore_update', now, now);
+
+        if (isAuthed) {
+            await syncDirtySections(storedUser.uid, storedUser.id_token);
+        }
+
         return { success: true, message: 'Данные успешно импортированы' };
+
     } catch (error) {
         console.error('Import error:', error);
         return { success: false, message: 'Ошибка при импорте данных' };
@@ -714,7 +983,6 @@ ipcMain.handle('replace-data', async () => {
     const win = BrowserWindow.getFocusedWindow();
 
     try {
-        // Показываем диалог выбора файла
         const { filePaths } = await dialog.showOpenDialog(win, {
             title: 'Заменить данные',
             filters: [
@@ -731,19 +999,19 @@ ipcMain.handle('replace-data', async () => {
         const filePath = filePaths[0];
         const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
 
+        const storedUser = getStoredUser();
+        const isAuthed = storedUser && storedUser.is_authenticated && storedUser.id_token;
+
         // Очищаем и импортируем данные в транзакции
-        await db.transaction(() => {
-            // Очищаем все таблицы
+        db.transaction(() => {
+            // Очищаем локальные таблицы
             db.exec('DELETE FROM tags_assign');
             db.exec('DELETE FROM data_cards');
-
-            // db.exec('DELETE FROM ratings');
-            // db.exec('DELETE FROM statuses');
 
             // Импортируем рейтинги и статусы
             if (data.ratings) {
                 data.ratings.forEach(rating => {
-                    db.prepare('INSERT OR IGNORE  INTO ratings (rating) VALUES (?)').run(rating);
+                    db.prepare('INSERT OR IGNORE INTO ratings (rating) VALUES (?)').run(rating);
                 });
             }
             if (data.statuses) {
@@ -752,27 +1020,33 @@ ipcMain.handle('replace-data', async () => {
                 });
             }
 
+            // Импортируем новые карточки
             const categories = Object.keys(data).filter(key =>
                 key !== 'ratings' && key !== 'statuses'
             );
 
-            categories.forEach(category => {
+            for (const category of categories) {
                 if (Array.isArray(data[category])) {
-                    data[category].forEach(item => {
+                    for (const item of data[category]) {
                         statements.importData.run(
-                            item.name,
-                            category,
-                            item.icoUrl || null,
-                            item.rating || '0',
-                            item.status || 'Уточнить',
-                            item.description || ''
+                            item.name, category, item.icoUrl || null,
+                            item.rating || '0', item.status || 'Уточнить', item.description || ''
                         );
-                    });
+                    }
                 }
-            });
+                markSectionDirty(category);
+            }
         })();
 
+        const now = new Date().toISOString();
+        statements.setStatistic.run('last_firestore_update', now, now);
+
+        if (isAuthed) {
+            syncDirtySections(storedUser.uid, storedUser.id_token);
+        }
+
         return { success: true, message: 'Данные успешно заменены' };
+
     } catch (error) {
         console.error('Replace error:', error);
         return { success: false, message: 'Ошибка при замене данных' };
@@ -886,4 +1160,375 @@ ipcMain.handle('open-release-page', (event, url) => {
     shell.openExternal(url);
 });
 
+ipcMain.handle('auth-sign-in', async (event, email, password) => {
+    try {
+        const userCredential = await signInWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+        const idToken = await user.getIdToken();
+        const refreshToken = user.refreshToken; // 👈 ПОЛУЧАЕМ
 
+        saveUserSession(user.email, user.uid, idToken, refreshToken);
+
+        // Запускаем синхронизацию в фоне
+        syncUserData(user.uid, idToken, user.email).then(syncResult => {
+            if (win && syncResult.needChoice) {
+                win.webContents.send('sync-required', syncResult);
+            }
+        });
+
+        return { success: true, email: user.email, uid: user.uid };
+    } catch (error) {
+        console.error('[x] Sign in error:', error);
+        let errorMessage = 'Ошибка входа';
+        switch (error.code) {
+            case 'auth/invalid-email': errorMessage = 'Неверный формат email'; break;
+            case 'auth/user-not-found': errorMessage = 'Пользователь не найден'; break;
+            case 'auth/wrong-password': errorMessage = 'Неверный пароль'; break;
+            case 'auth/too-many-requests': errorMessage = 'Слишком много попыток'; break;
+            default: errorMessage = error.message;
+        }
+        return { success: false, error: errorMessage };
+    }
+});
+
+ipcMain.handle('auth-sign-up', async (event, email, password) => {
+    try {
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const user = userCredential.user;
+        const idToken = await user.getIdToken();
+        const refreshToken = user.refreshToken; // 👈 ПОЛУЧАЕМ
+
+        saveUserSession(user.email, user.uid, idToken, refreshToken);
+
+        syncUserData(user.uid, idToken, user.email).then(syncResult => {
+            if (win && syncResult.needChoice) {
+                win.webContents.send('sync-required', syncResult);
+            }
+        });
+
+        return { success: true, email: user.email, uid: user.uid };
+    } catch (error) {
+        console.error('[x] Registration error:', error);
+        let errorMessage = 'Ошибка регистрации';
+        switch (error.code) {
+            case 'auth/invalid-email': errorMessage = 'Неверный формат email'; break;
+            case 'auth/email-already-in-use': errorMessage = 'Email уже используется'; break;
+            case 'auth/weak-password': errorMessage = 'Пароль слишком слабый (мин. 6 символов)'; break;
+            default: errorMessage = error.message;
+        }
+        return { success: false, error: errorMessage };
+    }
+});
+
+ipcMain.handle('auth-get-current-user', async () => {
+    const storedUser = getStoredUser();
+    if (storedUser && storedUser.is_authenticated) {
+        return { isAuthenticated: true, email: storedUser.email, uid: storedUser.uid };
+    }
+    return { isAuthenticated: false };
+});
+
+ipcMain.handle('auth-sign-out', async () => {
+    try {
+        const storedUser = getStoredUser();
+        if (storedUser && storedUser.is_authenticated && storedUser.id_token) {
+            syncDirtySections(storedUser.uid, storedUser.id_token);
+        }
+
+        await signOut(auth);
+        clearUserSession();
+        console.log('[i] Signed out');
+        return { success: true };
+    } catch (error) {
+        console.error('[x] Sign out error:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+ipcMain.handle('sync-apply-choice', async (event, choice, localData, remoteData) => {
+    const storedUser = getStoredUser();
+    if (!storedUser || !storedUser.id_token) {
+        return { success: false, error: 'Пользователь не авторизован' };
+    }
+    return await applySyncChoice(storedUser.uid, storedUser.id_token, choice, localData, remoteData);
+});
+
+ipcMain.handle('get-all-local-data', async () => {
+    return getAllLocalData();
+});
+
+async function saveSectionToFirestore(uid, idToken, section, items) {
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/sections/${section}`;
+
+    const body = {
+        fields: {
+            items: {
+                arrayValue: {
+                    values: items.map(item => ({
+                        mapValue: {
+                            fields: {
+                                name: { stringValue: item.name || '' },
+                                icoUrl: { stringValue: item.icoUrl || '' },
+                                rating: { stringValue: item.rating || '0' },
+                                status: { stringValue: item.status || 'Уточнить' },
+                                description: { stringValue: item.description || '' }
+                            }
+                        }
+                    }))
+                }
+            },
+            updatedAt: { timestampValue: new Date().toISOString() }
+        }
+    };
+
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+            'Authorization': `Bearer ${idToken}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+
+    console.log(`✅ Section ${section} saved (${items.length} items)`);
+    return true;
+}
+
+async function getSectionFromFirestore(uid, idToken, section) {
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/sections/${section}`;
+
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${idToken}` }
+        });
+
+        if (response.status === 404) return [];
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const data = await response.json();
+        const items = [];
+
+        if (data.fields && data.fields.items && data.fields.items.arrayValue) {
+            const values = data.fields.items.arrayValue.values || [];
+            for (const item of values) {
+                const fields = item.mapValue.fields;
+                items.push({
+                    name: fields.name?.stringValue || '',
+                    icoUrl: fields.icoUrl?.stringValue || '',
+                    rating: fields.rating?.stringValue || '0',
+                    status: fields.status?.stringValue || 'Уточнить',
+                    description: fields.description?.stringValue || ''
+                });
+            }
+        }
+
+        return items;
+    } catch (error) {
+        console.error(`Error getting ${section}:`, error);
+        return null;
+    }
+}
+
+async function updateSyncTime(uid, idToken, timestamp) {
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}?updateMask.fieldPaths=lastSync`;
+
+    const body = {
+        fields: {
+            lastSync: { timestampValue: timestamp }
+        }
+    };
+
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+            'Authorization': `Bearer ${idToken}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+
+    console.log('[+] Sync time updated:', timestamp);
+    return true;
+}
+
+async function getSyncTime(uid, idToken) {
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}`;
+
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${idToken}` }
+        });
+
+        if (response.status === 404) return null;
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const data = await response.json();
+        return data.fields?.lastSync?.timestampValue || null;
+    } catch (error) {
+        console.error('Get sync time error:', error);
+        return null;
+    }
+}
+
+
+// Принудительная синхронизация ВСЕХ разделов
+ipcMain.handle('sync-all-sections-to-cloud', async () => {
+
+
+    const storedUser = getStoredUser();
+    if (!storedUser || !storedUser.is_authenticated || !storedUser.id_token) {
+        return { success: false, error: 'Not authenticated' };
+    }
+
+    const freshToken = await getValidToken();
+    if (!freshToken) {
+        return { success: false, error: 'No valid token' };
+    }
+
+    try {
+        const sections = ['games', 'movies', 'cartoons', 'serials', 'anime', 'books'];
+        for (const section of sections) {
+            const sectionData = statements.getDataBySection.all(section);
+            await saveSectionToFirestore(storedUser.uid, freshToken, section, sectionData);
+        }
+
+        const now = new Date().toISOString();
+        await updateSyncTime(storedUser.uid, freshToken, now);
+
+        console.log('✅ All sections synced to cloud');
+        return { success: true };
+    } catch (error) {
+        console.error('[x] Failed to sync all sections:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+function markSectionDirty(section) {
+    const now = new Date().toISOString();
+    statements.setStatistic.run(`dirty_${section}`, 'true', now);
+}
+
+// Проверка, нужно ли синхронизировать раздел
+function isSectionDirty(section) {
+    const dirty = statements.getStatistic.get(`dirty_${section}`);
+    return dirty && dirty.value === 'true';
+}
+
+// Снять флаг "грязный" после синхронизации
+function clearSectionDirty(section) {
+    statements.deleteStatistic.run(`dirty_${section}`);
+}
+
+async function syncDirtySections(uid, idToken) {
+    const freshToken = await getValidToken();
+    if (!freshToken) {
+        console.log('[!] No valid token, skipping sync');
+        return false;
+    }
+
+    const sections = ['games', 'movies', 'cartoons', 'serials', 'anime', 'books'];
+    const dirtySections = sections.filter(section => isSectionDirty(section));
+
+    if (dirtySections.length === 0) {
+        console.log('[i] No dirty sections, skipping sync');
+        return false;
+    }
+
+    console.log(`[i] Syncing dirty sections: ${dirtySections.join(', ')}`);
+
+    for (const section of dirtySections) {
+        const sectionData = statements.getDataBySection.all(section);
+        await saveSectionToFirestore(uid, freshToken, section, sectionData);
+        clearSectionDirty(section);
+    }
+
+    const now = new Date().toISOString();
+    await updateSyncTime(uid, freshToken, now);
+    statements.setStatistic.run('last_firestore_update', now, now);
+
+    return true;
+}
+
+async function refreshAccessToken(refreshToken) {
+    const url = `https://securetoken.googleapis.com/v1/token?key=${firebaseConfig.apiKey}`;
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            grant_type: 'refresh_token',
+            refresh_token: refreshToken
+        })
+    });
+
+    if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`Token refresh failed: ${error}`);
+    }
+
+    const data = await response.json();
+    return {
+        idToken: data.id_token,
+        refreshToken: data.refresh_token, // может прийти новый refresh token
+        expiresIn: data.expires_in
+    };
+}
+
+async function getValidToken() {
+    const storedUser = getStoredUser();
+    if (!storedUser || !storedUser.is_authenticated) {
+        return null;
+    }
+
+    // Пробуем сначала через Firebase SDK (если он активен)
+    try {
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+            const freshToken = await currentUser.getIdToken(true);
+            // Обновляем в БД
+            const stmt = db.prepare(`UPDATE user_session SET id_token = ? WHERE id = 1`);
+            stmt.run(freshToken);
+            console.log('[i] Token refreshed via Firebase SDK');
+            return freshToken;
+        }
+    } catch (error) {
+        console.log('[i] Firebase SDK not available, using REST API');
+    }
+
+    // Если SDK не помог — используем REST API с refresh token
+    if (storedUser.refresh_token) {
+        try {
+            const { idToken, refreshToken } = await refreshAccessToken(storedUser.refresh_token);
+
+            // Обновляем оба токена в БД
+            const stmt = db.prepare(`UPDATE user_session SET id_token = ?, refresh_token = ? WHERE id = 1`);
+            stmt.run(idToken, refreshToken || storedUser.refresh_token);
+
+            console.log('[i] Token refreshed via REST API');
+            return idToken;
+        } catch (error) {
+            console.error('[x] Failed to refresh token:', error);
+            // Токен не обновился — нужно перелогиниваться
+            clearUserSession();
+            if (win) {
+                win.webContents.send('session-expired', true);
+            }
+            return null;
+        }
+    }
+
+    console.log('[!] No refresh token available');
+    return null;
+}

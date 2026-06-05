@@ -1853,3 +1853,37 @@ body {
 .skip-btn:hover {
     background: #d35400;
 }
+
+#authBtn {
+    background-color: #0296aa;
+}
+
+#authBtn:hover {
+    background-color: #01b5cf;
+}
+
+/* Стили для форм авторизации */
+#authLoginForm .form-group,
+#authRegisterForm .form-group {
+    margin-bottom: 15px;
+}
+
+#authLoginForm input,
+#authRegisterForm input {
+    width: 100%;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid var(--dark-input-border);
+    background-color: var(--dark-input-background);
+    color: var(--dark-input-color);
+}
+
+#authLoginForm a,
+#authRegisterForm a {
+    text-decoration: none;
+}
+
+#authLoginForm a:hover,
+#authRegisterForm a:hover {
+    text-decoration: underline;
+}

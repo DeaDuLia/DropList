@@ -1,7 +1,7 @@
 {
   "name": "DropList",
   "productName": "DropList",
-  "version": "1.2.0",
+  "version": "1.2.2",
   "main": "main.js",
   "author": "Nikita <nvdeshin@gmail.com>",
   "description": "Media catalog application",
@@ -79,7 +79,8 @@
   "dependencies": {
     "better-sqlite3": "^12.2.0",
     "electron-log": "^5.4.3",
-    "electron-updater": "^6.7.3"
+    "electron-updater": "^6.7.3",
+    "firebase": "^12.14.0"
   },
   "devDependencies": {
     "electron": "^37.2.0",
