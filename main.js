@@ -145,15 +145,16 @@ async function applySyncChoice(uid, idToken, choice, localData, remoteData) {
             for (const section of sections) {
                 await saveSectionToFirestore(uid, freshToken, section, localData[section] || []);
             }
-            await updateSyncTime(uid, freshToken, now);
-            statements.setStatistic.run('last_firestore_update', now, now);
+            const localLastSync = statements.getStatistic.get('last_firestore_update');
+            const localSyncTime = localLastSync ? localLastSync.value : null;
+            await updateSyncTime(uid, freshToken, localSyncTime);
             return { success: true, source: 'local' };
 
         } else if (choice === 'remote') {
             // Сохраняем удалённые данные локально
             saveAllLocalData(remoteData);
-            await updateSyncTime(uid, freshToken, now);
-            statements.setStatistic.run('last_firestore_update', now, now);
+            const remoteSyncTime = await getSyncTime(uid, freshToken);
+            statements.setStatistic.run('last_firestore_update', remoteSyncTime, remoteSyncTime);
             return { success: true, source: 'remote' };
         }
 
@@ -1186,7 +1187,7 @@ ipcMain.handle('auth-sign-in', async (event, email, password) => {
         saveUserSession(user.email, user.uid, idToken, refreshToken);
 
         // Запускаем синхронизацию в фоне
-        syncUserData(user.uid, refreshToken, user.email).then(syncResult => {
+        syncUserData(user.uid, idToken, user.email).then(syncResult => {
             if (win && syncResult.needChoice) {
                 win.webContents.send('sync-required', syncResult);
             }
@@ -1216,7 +1217,7 @@ ipcMain.handle('auth-sign-up', async (event, email, password) => {
 
         saveUserSession(user.email, user.uid, idToken, refreshToken);
 
-        syncUserData(user.uid, refreshToken, user.email).then(syncResult => {
+        syncUserData(user.uid, idToken, user.email).then(syncResult => {
             if (win && syncResult.needChoice) {
                 win.webContents.send('sync-required', syncResult);
             }
