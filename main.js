@@ -28,6 +28,7 @@ const firebaseApp = initializeApp(firebaseConfig);
 const auth = getAuth(firebaseApp);
 const db_firestore = getFirestore(firebaseApp);
 
+
 app.name = 'DropList';
 app.setName('DropList');
 if (process.platform === 'win32') {
