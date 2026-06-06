@@ -413,6 +413,12 @@ async function updateItemIcon(section, name, newIconUrl) {
                 icon.onerror = () => {
                     icon.src = 'https://apptor.studio/assets/cache/images/600-856x600-629.png';
                 };
+
+                const allItem = window.allSectionData.find(item => item.name === name);
+                if (allItem) allItem.icoUrl = newIconUrl;
+
+                const filteredItem = window.filteredData.find(item => item.name === name);
+                if (filteredItem) filteredItem.icoUrl = newIconUrl;
             }
         }
     } catch (error) {
@@ -471,7 +477,7 @@ document.querySelectorAll('.nav-item').forEach(item => {
             hideAddForm();
 
             let data = await window.electronAPI.getData(section);
-            await renderSection(section, data, true, false);
+            await renderSection(section, data, true, true);
         } catch (error) {
             console.error(`Ошибка загрузки раздела ${section}:`, error);
             await showError(`Не удалось загрузить раздел ${section}`);
@@ -978,6 +984,16 @@ function setupSearchInput() {
         if (e.target.classList.contains('suggestion-item')) {
             searchInput.value = e.target.textContent;
             searchSuggestions.style.display = 'none';
+            if (currentFilters.statusFilter !== 'Все') {
+                currentFilters.statusFilter = 'Все';
+                // Обновляем активную кнопку фильтра
+                document.querySelectorAll('.filter-button').forEach(btn => {
+                    btn.classList.remove('active');
+                    if (btn.dataset.status === 'Все') {
+                        btn.classList.add('active');
+                    }
+                });
+            }
             filterCards(e.target.textContent);
         }
     });
@@ -994,6 +1010,16 @@ function setupSearchInput() {
     // Обработчик нажатия Enter
     searchInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
+            if (currentFilters.statusFilter !== 'Все') {
+                currentFilters.statusFilter = 'Все';
+                // Обновляем активную кнопку фильтра
+                document.querySelectorAll('.filter-button').forEach(btn => {
+                    btn.classList.remove('active');
+                    if (btn.dataset.status === 'Все') {
+                        btn.classList.add('active');
+                    }
+                });
+            }
             filterCards(searchInput.value);
         }
     });
@@ -1222,6 +1248,15 @@ function showCategoryChangeModal(oldSection, itemName, icoUrl, status, rating) {
             const card = document.querySelector(`.data-card[data-name="${name}"]`);
             if (card) {
                 card.remove();
+                const oldSectionIndex = window.allSectionData.findIndex(item => item.name === name);
+                if (oldSectionIndex !== -1) {
+                    window.allSectionData.splice(oldSectionIndex, 1);
+                }
+
+                const oldFilteredIndex = window.filteredData.findIndex(item => item.name === name);
+                if (oldFilteredIndex !== -1) {
+                    window.filteredData.splice(oldFilteredIndex, 1);
+                }
             }
             document.body.removeChild(modal);
         } catch (error) {
@@ -1301,25 +1336,35 @@ function getAddFormHTML(addMoreChecked = false, visible = '') {
     `;
 }
 
+function escapeHtml(str) {
+    if (!str) return '';
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function renderCardList(cards) {
     return cards.map(card => `
-            <div class="data-card" data-name="${card.name}" style="display: block;">
-                <button class="change-image-btn" data-name="${card.name}" title="Сменить картинку"><img src="assets/icons/changeImage.svg" alt="🖼️" class="button-icon-no-text"></button>
-                <button class="change-category-btn" data-name="${card.name}" data-status="${card.status}" data-rating="${card.rating}" datatype="${card.icoUrl}" title="Сменить категорию"><img src="assets/icons/changeCategory.svg" alt="⇄" class="button-icon-no-text"></button>
-                <button class="delete-btn" data-name="${card.name}"><img src="assets/icons/delete.svg" alt="🗑️" class="button-icon-no-text"></button>
+            <div class="data-card" data-name="${escapeHtml(card.name)}" style="display: block;">
+                <button class="change-image-btn" data-name="${escapeHtml(card.name)}" title="Сменить картинку"><img src="assets/icons/changeImage.svg" alt="🖼️" class="button-icon-no-text"></button>
+                <button class="change-category-btn" data-name="${escapeHtml(card.name)}" data-status="${card.status}" data-rating="${card.rating}" datatype="${card.icoUrl}" title="Сменить категорию"><img src="assets/icons/changeCategory.svg" alt="⇄" class="button-icon-no-text"></button>
+                <button class="delete-btn" data-name="${escapeHtml(card.name)}"><img src="assets/icons/delete.svg" alt="🗑️" class="button-icon-no-text"></button>
                 ${getCardIconHTML(card)}
                 <div class="data-info">
-                    <h3 class="data-title">${card.name}</h3>
+                    <h3 class="data-title">${escapeHtml(card.name)}</h3>
                     <div class="data-ratings-container">
                         <span class="card-rating rating-value editable-field"
                               data-rating="${card.rating}"
-                              data-name="${card.name}"
+                              data-name="${escapeHtml(card.name)}"
                               title="Редактировать">
                             ${card.rating || '0'}
                         </span>
                         <span class="card-status status-value editable-field"
                               data-status="${card.status}"
-                              data-name="${card.name}"
+                              data-name="${escapeHtml(card.name)}"
                               title="Редактировать">
                             ${card.status || 'Уточнить'}
                         </span>
@@ -1573,14 +1618,25 @@ async function showEditableDropdown(field, valueDisplay) {
 async function updateFieldValue(field, valueDisplay, newValue, itemName, isRating) {
     try {
         const section = document.querySelector('.nav-item.active')?.dataset.section;
+        const updateItemInArrays = (itemName, updates) => {
+            // Обновляем в allSectionData
+            const allItem = window.allSectionData.find(item => item.name === itemName);
+            if (allItem) Object.assign(allItem, updates);
+
+            // Обновляем в filteredData
+            const filteredItem = window.filteredData.find(item => item.name === itemName);
+            if (filteredItem) Object.assign(filteredItem, updates);
+        };
         if (isRating) {
             await window.electronAPI.updateDataRating(section, itemName, newValue);
             field.dataset.rating = newValue;
             valueDisplay.style.backgroundColor = getRatingColor(newValue);
+            updateItemInArrays(itemName, { rating: newValue });
         } else {
             await window.electronAPI.updateDataStatus(section, itemName, newValue);
             field.dataset.status = newValue;
             valueDisplay.style.backgroundColor = getStatusColor(newValue);
+            updateItemInArrays(itemName, { status: newValue });
         }
 
         valueDisplay.textContent = newValue;
@@ -1678,6 +1734,13 @@ function setupDeleteButtons() {
                     const card = btn.closest('.data-card');
                     if (card) card.remove();
                     document.body.removeChild(confirmModal);
+                    const itemIndex = window.allSectionData.findIndex(item => item.name === itemName);
+                    if (itemIndex !== -1) window.allSectionData.splice(itemIndex, 1);
+
+                    const filteredIndex = window.filteredData.findIndex(item => item.name === itemName);
+                    if (filteredIndex !== -1) {
+                        window.filteredData.splice(filteredIndex, 1);
+                    }
                 } catch (error) {
                     console.error('Не удалось удалить:', error);
                     await showError('Не удалось удалить');
@@ -1853,8 +1916,21 @@ function setupTitleClickHandlers() {
                         buttons.forEach(btn => {
                             btn.dataset.name = newName;
                         });
+
+
                     }
 
+                    const updateItemInArrays = (oldName, newName) => {
+                        // Обновляем в allSectionData
+                        const allItem = window.allSectionData.find(item => item.name === oldName);
+                        if (allItem) allItem.name = newName;
+
+                        // Обновляем в filteredData
+                        const filteredItem = window.filteredData.find(item => item.name === oldName);
+                        if (filteredItem) filteredItem.name = newName;
+                    };
+
+                    updateItemInArrays(oldName, newName);
                     document.body.removeChild(modal);
                 } catch (error) {
                     console.error('Ошибка при обновлении:', error);
@@ -1904,30 +1980,55 @@ searchInWebBtn.addEventListener('click', async () => {
 
 
 function highlightRandomCard(cardName) {
-    // Снимаем подсветку со всех карточек
-    document.querySelectorAll('.data-card').forEach(card => {
-        card.style.boxShadow = '';
-        card.style.transform = '';
-    });
-
-    // Находим нужную карточку
+    // Находим карточку
     const card = document.querySelector(`.data-card[data-name="${cardName}"]`);
-    if (card) {
-        // Подсвечиваем карточку
-        card.style.boxShadow = '0 0 20px rgba(155, 89, 182, 0.8)';
-        card.style.transform = 'scale(1.05)';
 
-        // Прокручиваем к карточке
-        card.scrollIntoView({
-            behavior: 'smooth',
-            block: 'center'
+    if (!card) return;
+
+    // Убираем подсветку с предыдущей карточки
+    const prevHighlight = document.querySelector('.data-card.random-highlight');
+    if (prevHighlight) {
+        prevHighlight.classList.remove('random-highlight');
+        // Убираем обработчик клика с предыдущей
+        prevHighlight.removeEventListener('click', removeHighlightOnClick);
+    }
+
+    // Добавляем новую подсветку (бесконечную)
+    card.classList.add('random-highlight');
+
+    // Добавляем обработчик клика для снятия подсветки
+    card.addEventListener('click', removeHighlightOnClick);
+
+    // Находим контейнер со скроллом
+    const scrollContainer = document.querySelector('.content-wrapper');
+
+    if (!scrollContainer) {
+        console.error('Content wrapper not found');
+        return;
+    }
+
+    // Плавно скроллим к карточке
+    setTimeout(() => {
+        if (!card || !document.body.contains(card)) return;
+
+        const containerRect = scrollContainer.getBoundingClientRect();
+        const cardRect = card.getBoundingClientRect();
+
+        const scrollTop = scrollContainer.scrollTop;
+        const targetScroll = scrollTop + (cardRect.top - containerRect.top) - (containerRect.height / 2) + (cardRect.height / 2);
+
+        scrollContainer.scrollTo({
+            top: Math.max(0, targetScroll),
+            behavior: 'smooth'
         });
+    }, 100);
 
-        // Снимаем подсветку через 3 секунды
-        setTimeout(() => {
-            card.style.boxShadow = '';
-            card.style.transform = '';
-        }, 3000);
+    // Функция для снятия подсветки по клику
+    function removeHighlightOnClick() {
+        if (card && document.body.contains(card)) {
+            card.classList.remove('random-highlight');
+            card.removeEventListener('click', removeHighlightOnClick);
+        }
     }
 }
 
@@ -1942,10 +2043,6 @@ async function pickRandomVisibleCard() {
         const randomIndex = Math.floor(Math.random() * visibleCards.length);
         const randomCard = visibleCards[randomIndex];
         const cardName = randomCard.dataset.name;
-
-        // Открываем поиск
-        const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(cardName)}`;
-        window.electronAPI.openSearch(searchUrl);
 
         // Подсвечиваем карточку
         highlightRandomCard(cardName);
