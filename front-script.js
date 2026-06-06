@@ -8,7 +8,7 @@ const donateModal = document.getElementById('donateModal');
 const closeDonateModal = document.getElementById('closeDonateModal');
 const randomBtn = document.getElementById('randomBtn');
 const searchInWebBtn = document.getElementById('searchInWeb');
-
+let addFormOverlay = null;
 
 
 // Кнопки шапки
@@ -74,6 +74,15 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 });
+
+function initAddFormOverlay() {
+    if (!addFormOverlay) {
+        addFormOverlay = document.createElement('div');
+        addFormOverlay.className = 'add-form-overlay';
+        document.body.appendChild(addFormOverlay);
+    }
+    return addFormOverlay;
+}
 
 function showSyncChoiceModal(localData, remoteData, localTime, remoteTime) {
     let modalResolve;
@@ -754,9 +763,10 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
 
     if (preserveFilters) {
         window.filteredData = filterData(data, currentFilters.searchQuery, currentFilters.statusFilter);
+        window.filteredData = sortData(window.filteredData, currentFilters.sortBy);
     } else {
         window.filteredData = data;
-        currentFilters = { searchQuery: '', statusFilter: 'Все' };
+        currentFilters = { searchQuery: '', statusFilter: 'Все', sortBy: 'date' };
     }
     filterButtonsSection.innerHTML = `
         <div class="filter-buttons-container">
@@ -1262,11 +1272,14 @@ function showCategoryChangeModal(oldSection, itemName, icoUrl, status, rating) {
 function hideAddForm() {
     const addForm = document.getElementById('addForm');
     const toggleBtn = document.getElementById('toggleAddFormBtn');
+    const overlay = document.querySelector('.add-form-overlay');
 
     if (addForm) {
         addForm.classList.remove('visible');
     }
-
+    if (overlay) {
+        overlay.classList.remove('visible');
+    }
     if (toggleBtn) {
         toggleBtn.textContent = '+ Добавить';
     }
@@ -2179,35 +2192,30 @@ function setupAddButton() {
     const toggleBtn = document.getElementById('toggleAddFormBtn');
     const addForm = document.getElementById('addForm');
 
-    // Создаём затемнение один раз
-    let overlay = document.querySelector('.add-form-overlay');
-    if (!overlay) {
-        overlay = document.createElement('div');
-        overlay.className = 'add-form-overlay';
-        document.body.appendChild(overlay);
+    const overlay = initAddFormOverlay();
 
-        // Закрытие по клику на затемнение
-        overlay.onclick = () => {
-            addForm.classList.remove('visible');
-            overlay.classList.remove('visible');
-            toggleBtn.textContent = '+ Добавить';
-        };
+    function closeAddForm() {
+        addForm.classList.remove('visible');
+        overlay.classList.remove('visible');
+        toggleBtn.textContent = '+ Добавить';
     }
 
+    // Закрытие по клику на overlay
+    overlay.onclick = closeAddForm;
+
     if (toggleBtn && addForm) {
-        toggleBtn.onclick = async () => {  // 👈 добавить async
+        toggleBtn.onclick = async (e) => {
+            e.stopPropagation();
+
             const isVisible = addForm.classList.contains('visible');
 
             if (isVisible) {
-                addForm.classList.remove('visible');
-                overlay.classList.remove('visible');
-                toggleBtn.textContent = '+ Добавить';
+                closeAddForm();
             } else {
                 addForm.classList.add('visible');
                 overlay.classList.add('visible');
                 toggleBtn.textContent = '− Скрыть';
 
-                // 👇 ВСТАВКА ИЗ БУФЕРА И АВТОПОИСК
                 try {
                     const text = await navigator.clipboard.readText();
                     const nameInput = document.getElementById('nameInput');
@@ -2216,7 +2224,7 @@ function setupAddButton() {
                         nameInput.value = text;
                         lastTextFromClipboard = text;
                         updatePreview(text, null, null, null);
-                        await autoSearchCover(text);  // 👈 ВЫЗОВ АВТОПОИСКА
+                        await autoSearchCover(text);
                     }
                     document.getElementById('nameInput')?.focus();
                 } catch (error) {

@@ -1,5 +1,7 @@
 /* Констаты цветов */
 :root {
+    --card-btns: #0A7AB5FF;
+
     --dark-main-text-color: #FFFFFFFF;
     /* Шапка */
     --dark-header-background: #40444b;
@@ -567,7 +569,7 @@ body {
     align-items: center;
     justify-content: center;
     transition: all 0.2s;
-    background: var(--rating-planed);
+    background: var(--card-btns);
 }
 
 .card-btn:hover {
@@ -592,10 +594,15 @@ body {
 .data-title {
     font-size: 1.2rem;
     font-weight: 600;
-    transition: color 0.2s;
+    transition: all 0.2s;
     margin: 0;
     padding: 5px 0;
     word-break: break-word;
+    opacity: 0.6;
+}
+
+.data-card:hover .data-title {
+    opacity: 1;
 }
 /* При наведении подсказка о редактировании*/
 .data-title::after {
