@@ -16,18 +16,17 @@ autoUpdater.logger = log;
 autoUpdater.logger.transports.file.level = 'info';
 
 const firebaseConfig = {
-    apiKey: "your-api-key",
-    authDomain: "your-app.firebaseapp.com",
-    projectId: "your-project-id",
-    storageBucket: "your-app.appspot.com",
-    messagingSenderId: "123456789",
-    appId: "1:123456789:web:abcdef"
+    apiKey: "AIzaSyALdaI9VkFIkN_gTTJKohahnAcdZqCxgRQ",
+    authDomain: "droplist-3fa8b.firebaseapp.com",
+    projectId: "droplist-3fa8b",
+    storageBucket: "droplist-3fa8b.firebasestorage.app",
+    messagingSenderId: "920691108684",
+    appId: "1:920691108684:web:c06a303e820e311c8a3de9"
 };
 
 const firebaseApp = initializeApp(firebaseConfig);
 const auth = getAuth(firebaseApp);
 const db_firestore = getFirestore(firebaseApp);
-
 
 app.name = 'DropList';
 app.setName('DropList');

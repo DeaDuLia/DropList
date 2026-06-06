@@ -10,6 +10,12 @@
     <div class="title-bar-drag-area">
         <div class="window-title">
             <span>DropList</span>
+            <div class="title-stats" id="titleStats">
+                <span class="title-stat-completed" id="titleCompleted">0</span>
+                <span class="title-stat-sep">/</span>
+                <span class="title-stat-total" id="titleTotal">0</span>
+                <span class="title-stat-text" id="titleTotalText">завершено</span>
+            </div>
         </div>
     </div>
     <div class="window-controls">
@@ -46,10 +52,13 @@
         <button id="importBtn" class="header-button" title="Импорт данных"><img src="assets/icons/import.svg" alt="" class="button-icon"></button>
         <button id="exportBtn" class="header-button" title="Экспорт данных"><img src="assets/icons/export.svg" alt="" class="button-icon"></button>
         <button id="donateBtn" class="header-button" title="Поддержать разработчика"><img src="assets/icons/donate.svg" alt="❤️" class="button-icon"> Поддержать</button>
+        <button id="downloadsCount" class="header-button" title="Всего загрузок приложения">
+            <img src="assets/icons/download.svg" alt="📥" class="button-icon">
+            <span id="downloadsNumber">0</span>
+        </button>
         <button id="authBtn" class="header-button" title="Войти">
             <img src="assets/icons/user.svg" alt="👤" class="button-icon"> Войти
         </button>
-        <span id="downloadsCount" class="downloads-count" title="Всего загрузок приложения">📥 0</span>
     </div>
 </header>
 <div id="contentSection" class="content-section">
@@ -72,13 +81,16 @@
         <p>Если вам нравится приложение, вы можете поддержать его развитие:</p>
         <div class="donate-methods">
             <div class="donate-method">
-                <h2>📧Почта для связи</h2>
+                <h2>
+                    <img src="assets/icons/mail.svg" alt="📧" class="button-icon" style="width:20px;height:20px">
+                    Почта для связи
+                </h2>
                 <p>nvdeshin@gmail.com</p>
                 <button class="copy-btn" data-text="nvdeshin@gmail.com">Копировать</button>
             </div>
             <div class="donate-method">
                 <h2>Ссылка для доната</h2>
-                <p>www.tbank.ru/rm/r_LoCtXRkiVO.vLkPckLzyM/cNGSO52096</p>
+                <a href="https://www.tinkoff.ru/rm/r_LoCtXRkiVO.vLkPckLzyM/cNGSO52096" class="donate-link" target="_blank">https://www.tinkoff.ru/donate</a>
                 <button class="copy-btn" data-text="https://www.tinkoff.ru/rm/r_LoCtXRkiVO.vLkPckLzyM/cNGSO52096">Копировать</button>
             </div>
             <div class="qr-code-container">

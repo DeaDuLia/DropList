@@ -8,7 +8,7 @@ const donateModal = document.getElementById('donateModal');
 const closeDonateModal = document.getElementById('closeDonateModal');
 const randomBtn = document.getElementById('randomBtn');
 const searchInWebBtn = document.getElementById('searchInWeb');
-
+let addFormOverlay = null;
 
 
 // Кнопки шапки
@@ -75,6 +75,33 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+function updateStats() {
+    const data = window.filteredData || window.allSectionData || [];
+    const total = data.length;
+    const completed = data.filter(item => item.status === 'Завершено' || item.status === 'Избранное').length;
+
+    // Для статистики в заголовке
+    const titleCompleted = document.getElementById('titleCompleted');
+    const titleTotal = document.getElementById('titleTotal');
+    if (titleCompleted) titleCompleted.textContent = completed;
+    if (titleTotal) titleTotal.textContent = total;
+
+    // Для статистики в контенте (если оставишь)
+    const completedSpan = document.getElementById('completedCount');
+    const totalSpan = document.getElementById('totalCount');
+    if (completedSpan) completedSpan.textContent = completed;
+    if (totalSpan) totalSpan.textContent = total;
+}
+
+function initAddFormOverlay() {
+    if (!addFormOverlay) {
+        addFormOverlay = document.createElement('div');
+        addFormOverlay.className = 'add-form-overlay';
+        document.body.appendChild(addFormOverlay);
+    }
+    return addFormOverlay;
+}
+
 function showSyncChoiceModal(localData, remoteData, localTime, remoteTime) {
     let modalResolve;
     const promise = new Promise((resolve) => {
@@ -92,8 +119,8 @@ function showSyncChoiceModal(localData, remoteData, localTime, remoteTime) {
                 <h3>⚠️ Конфликт синхронизации</h3>
                 <p>Локальные и облачные данные различаются.</p>
                 <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; margin: 15px 0;">
-                    <p>📁 Локальные: ${localDate}</p>
-                    <p>☁️ Облачные: ${remoteDate}</p>
+                    <p><img src="assets/icons/folder.svg" alt="📁" class="button-icon" style="width:14px;height:14px"> Локальные: ${localDate}</p>
+                    <p><img src="assets/icons/cloud.svg" alt="☁️" class="button-icon" style="width:14px;height:14px"> Облачные: ${remoteDate}</p>
                 </div>
                 <p>Что вы хотите сохранить?</p>
                 <div style="display: flex; gap: 10px; margin-top: 20px;">
@@ -255,9 +282,9 @@ function formatReleaseNotes(notes) {
 async function updateDownloadsCount() {
     try {
         const result = await window.electronAPI.getGitHubDownloads();
-        const downloadsElement = document.getElementById('downloadsCount');
-        if (downloadsElement && result.success) {
-            downloadsElement.textContent = `📥 ${result.downloads.toLocaleString()}`;
+        const downloadsNumber = document.getElementById('downloadsNumber');
+        if (downloadsNumber && result.success) {
+            downloadsNumber.textContent = result.downloads.toLocaleString();
         }
     } catch (error) {
         console.error('Failed to get downloads count:', error);
@@ -380,6 +407,14 @@ donateModal.addEventListener('click', function(e) {
     }
 });
 
+document.addEventListener('click', (e) => {
+    const link = e.target.closest('.donate-link');
+    if (link && link.href) {
+        e.preventDefault();
+        window.electronAPI.openSearch(link.href);
+    }
+});
+
 window.addEventListener('DOMContentLoaded', () => {
     window.electronAPI.onMessageFromMain(({ imgUrl, name }) => {
         const editIcoInput = document.getElementById('editIcoInput');
@@ -411,8 +446,14 @@ async function updateItemIcon(section, name, newIconUrl) {
                 icon.src = newIconUrl;
                 // Добавляем обработчик на случай ошибки загрузки изображения
                 icon.onerror = () => {
-                    icon.src = 'https://apptor.studio/assets/cache/images/600-856x600-629.png';
+                    icon.src = 'https://sun9-10.userapi.com/s/v1/ig2/ZokTL_h2fMLt6rBm9VpAljngHJORp51HrK0aE-EQxbcG8iNFrcujtVnp_xD3B3qDhN2rJRlaJgRk7bixs1XUq_z-.jpg?quality=95&as=32x21,48x32,72x48,108x72,160x107,240x160,360x240,480x320,540x360,640x426,720x480,740x493&from=bu&u=Ac2XlEuasBKNjIEznqey8baHpZpSfGg8nRMAdRH9Mjw&cs=740x0';
                 };
+
+                const allItem = window.allSectionData.find(item => item.name === name);
+                if (allItem) allItem.icoUrl = newIconUrl;
+
+                const filteredItem = window.filteredData.find(item => item.name === name);
+                if (filteredItem) filteredItem.icoUrl = newIconUrl;
             }
         }
     } catch (error) {
@@ -471,7 +512,7 @@ document.querySelectorAll('.nav-item').forEach(item => {
             hideAddForm();
 
             let data = await window.electronAPI.getData(section);
-            await renderSection(section, data, true, false);
+            await renderSection(section, data, true, true);
         } catch (error) {
             console.error(`Ошибка загрузки раздела ${section}:`, error);
             await showError(`Не удалось загрузить раздел ${section}`);
@@ -519,7 +560,7 @@ function updateAuthButton(email) {
 authBtn.addEventListener('click', () => {
     if (currentUser) {
         // Если уже авторизован - спрашиваем о выходе
-        showConfirmModal('Выход', 'Вы уверены, что хотите выйти?', 'Выйти', 'Отмена').then(async (confirmed) => {
+        showConfirmModal('', 'Вы уверены, что хотите выйти?', 'Выйти', 'Отмена').then(async (confirmed) => {
             if (confirmed) {
                 const result = await window.electronAPI.authSignOut();
                 if (result.success) {
@@ -748,9 +789,10 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
 
     if (preserveFilters) {
         window.filteredData = filterData(data, currentFilters.searchQuery, currentFilters.statusFilter);
+        window.filteredData = sortData(window.filteredData, currentFilters.sortBy);
     } else {
         window.filteredData = data;
-        currentFilters = { searchQuery: '', statusFilter: 'Все' };
+        currentFilters = { searchQuery: '', statusFilter: 'Все', sortBy: 'date' };
     }
     filterButtonsSection.innerHTML = `
         <div class="filter-buttons-container">
@@ -779,9 +821,9 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
                 <input type="text" id="searchInput" placeholder="Поиск по названию" value="${currentFilters.searchQuery}">
                 <div id="searchSuggestions" class="search-suggestions"></div>
                 <button id="searchBtn"><img src="assets/icons/find.svg" alt="🔍" class="button-icon-no-text"></button>
-                <button id="clearSearchBtn" class="clear-search-btn" ${currentFilters.searchQuery ? '' : 'style="display: none;"'}>✕</button>
+                <button id="clearSearchBtn" class="clear-search-btn">✕</button>
+                <button id="searchInWeb" title="Поиск в интернете"><img src="assets/icons/find.svg" alt="🔍" class="button-icon">интернет</button>
                 <button id="randomBtnSection" title="Случайная карточка"><img src="assets/icons/random.svg" alt="🎲" class="button-icon">Случайное</button>
-                <button id="searchInWeb" title="Поиск в интернете"><img src="assets/icons/find.svg" alt="🔍" class="button-icon">Популярное</button>
             </div>
             
             <!-- Кнопка добавления должна быть ВНЕ search-container -->
@@ -810,6 +852,7 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
     }
 
     loadMoreItems();
+    updateStats();
 
     // Добавляем обработчик прокрутки для бесконечной загрузки
     contentWrapper.addEventListener('scroll', handleScroll);
@@ -948,9 +991,13 @@ function setupSearchInput() {
 
         if (matches.length > 0) {
             searchSuggestions.innerHTML = matches.map(item => `
-                <div class="suggestion-item">${item.name}</div>
-            `).join('');
+            <div class="suggestion-item">${item.name}</div>
+        `).join('');
             searchSuggestions.style.display = 'block';
+
+            // 👇 Устанавливаем ширину подсказок равной ширине searchInput
+            const searchInputRect = searchInput.getBoundingClientRect();
+            searchSuggestions.style.width = searchInputRect.width + 'px';
         } else {
             searchSuggestions.style.display = 'none';
         }
@@ -968,9 +1015,6 @@ function setupSearchInput() {
     // Обработчик ввода текста
     searchInput.addEventListener('input', (e) => {
         updateSuggestions(e.target.value);
-        if (clearSearchBtn) {
-            clearSearchBtn.style.display = e.target.value ? 'block' : 'none';
-        }
     });
 
     // Обработчик клика по подсказке
@@ -978,6 +1022,16 @@ function setupSearchInput() {
         if (e.target.classList.contains('suggestion-item')) {
             searchInput.value = e.target.textContent;
             searchSuggestions.style.display = 'none';
+            if (currentFilters.statusFilter !== 'Все') {
+                currentFilters.statusFilter = 'Все';
+                // Обновляем активную кнопку фильтра
+                document.querySelectorAll('.filter-button').forEach(btn => {
+                    btn.classList.remove('active');
+                    if (btn.dataset.status === 'Все') {
+                        btn.classList.add('active');
+                    }
+                });
+            }
             filterCards(e.target.textContent);
         }
     });
@@ -994,6 +1048,16 @@ function setupSearchInput() {
     // Обработчик нажатия Enter
     searchInput.addEventListener('keypress', (e) => {
         if (e.key === 'Enter') {
+            if (currentFilters.statusFilter !== 'Все') {
+                currentFilters.statusFilter = 'Все';
+                // Обновляем активную кнопку фильтра
+                document.querySelectorAll('.filter-button').forEach(btn => {
+                    btn.classList.remove('active');
+                    if (btn.dataset.status === 'Все') {
+                        btn.classList.add('active');
+                    }
+                });
+            }
             filterCards(searchInput.value);
         }
     });
@@ -1068,19 +1132,6 @@ function filterCards(query = '') {
     loadMoreItems();
 }
 
-// Вспомогательные функции
-function getSectionTitle(section) {
-    const titles = {
-        games: '🎮 Игры',
-        movies: '🎬 Кино',
-        cartoons: '🎥 Мульты',
-        serials: '📺 Сериалы',
-        anime: '🌸 Аниме',
-        books: '📚 Книги'
-    };
-    return titles[section] || section;
-}
-
 async function initCardSection() {
     await Promise.all([
         loadRatings(),
@@ -1122,6 +1173,7 @@ async function initCardSection() {
     setupChangeCategoryButtons();
     setupCardClickHandlers();
     setupPreviewUpdate();
+    updateStats();
 
 
 }
@@ -1161,12 +1213,12 @@ function showCategoryChangeModal(oldSection, itemName, icoUrl, status, rating) {
             <h3 data-section="${oldSection}" data-rating="${rating}" data-status="${status}" datatype="${icoUrl}">${itemName}</h3>
             <p>Выберите новую категорию</p>
             <select id="categorySelect" class="edit-select">
-                <option value="games">🎮 Игры</option>
-                <option value="serials">📺 Сериалы</option>
-                <option value="movies">🎬 Кино</option>
-                <option value="cartoons">🎥 Мульты</option>
-                <option value="anime">🌸 Аниме</option>
-                <option value="books">📚 Книги</option>
+                <option value="games">Игры</option>
+                <option value="serials">Сериалы</option>
+                <option value="movies">Кино</option>
+                <option value="cartoons">Мульты</option>
+                <option value="anime">Аниме</option>
+                <option value="books">Книги</option>
             </select>
             <div style="margin-top: 20px; display: flex; justify-content: space-between;">
                 <button class="modal-button cancel-btn">Отмена</button>
@@ -1222,6 +1274,15 @@ function showCategoryChangeModal(oldSection, itemName, icoUrl, status, rating) {
             const card = document.querySelector(`.data-card[data-name="${name}"]`);
             if (card) {
                 card.remove();
+                const oldSectionIndex = window.allSectionData.findIndex(item => item.name === name);
+                if (oldSectionIndex !== -1) {
+                    window.allSectionData.splice(oldSectionIndex, 1);
+                }
+
+                const oldFilteredIndex = window.filteredData.findIndex(item => item.name === name);
+                if (oldFilteredIndex !== -1) {
+                    window.filteredData.splice(oldFilteredIndex, 1);
+                }
             }
             document.body.removeChild(modal);
         } catch (error) {
@@ -1239,11 +1300,14 @@ function showCategoryChangeModal(oldSection, itemName, icoUrl, status, rating) {
 function hideAddForm() {
     const addForm = document.getElementById('addForm');
     const toggleBtn = document.getElementById('toggleAddFormBtn');
+    const overlay = document.querySelector('.add-form-overlay');
 
     if (addForm) {
         addForm.classList.remove('visible');
     }
-
+    if (overlay) {
+        overlay.classList.remove('visible');
+    }
     if (toggleBtn) {
         toggleBtn.textContent = '+ Добавить';
     }
@@ -1254,22 +1318,22 @@ function getAddFormHTML(addMoreChecked = false, visible = '') {
         <div id="addForm" class="add-form ${visible}">
             <div class="form-content">
                 <div id="previewCard" class="preview-card">
-                    <div class="preview-data-card" style="display: block;">
+                    <div class="preview-data-card" style="display: block; position: relative;">
                         ${getCardIconHTML({ name: 'Название', icoUrl: '' })}
+                        <div class="preview-overlay">
+                            <button id="previewSearchBtn" class="preview-search-btn" title="Найти обложку">
+                                <img src="assets/icons/findImage.svg" alt="🔍" style="width: 32px; height: 32px;">
+                            </button>
+                        </div>
                         <div class="preview-data-info">
                             <h3 class="preview-data-title">Название</h3>
                             <div class="preview-data-ratings-container">
-                                <span class="preview-card-rating rating-value">
-                                    0
-                                </span>
-                                <span class="preview-card-status status-value">
-                                    Уточнить
-                                </span>
+                                <span class="preview-card-rating rating-value">0</span>
+                                <span class="preview-card-status status-value">Уточнить</span>
                             </div>
                         </div>
                     </div>
                 </div>
-                
                 <div class="form-fields">
                     <div class="form-group">
                         <div class="icon-input-container">
@@ -1277,9 +1341,8 @@ function getAddFormHTML(addMoreChecked = false, visible = '') {
                         </div>
                     </div>
                     <div class="form-group">
-                        <div class="icon-input-container">
-                            <input id="icoInput" placeholder="Ссылка на обложку" autocomplete="off">
-                            <button id="searchIconBtn" class="search-icon-btn" title="Найти обложку"><img src="assets/icons/find.svg" alt="🔍" class="button-icon-no-text"></button>
+                        <div class="icon-input-container" style="display: flex; gap: 8px;">
+                            <input id="icoInput" placeholder="Ссылка на обложку" autocomplete="off" style="display: none;">
                         </div>
                     </div>
                     <div class="form-group">
@@ -1301,25 +1364,43 @@ function getAddFormHTML(addMoreChecked = false, visible = '') {
     `;
 }
 
+function escapeHtml(str) {
+    if (!str) return '';
+    return str
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 function renderCardList(cards) {
     return cards.map(card => `
-            <div class="data-card" data-name="${card.name}" style="display: block;">
-                <button class="change-image-btn" data-name="${card.name}" title="Сменить картинку"><img src="assets/icons/changeImage.svg" alt="🖼️" class="button-icon-no-text"></button>
-                <button class="change-category-btn" data-name="${card.name}" data-status="${card.status}" data-rating="${card.rating}" datatype="${card.icoUrl}" title="Сменить категорию"><img src="assets/icons/changeCategory.svg" alt="⇄" class="button-icon-no-text"></button>
-                <button class="delete-btn" data-name="${card.name}"><img src="assets/icons/delete.svg" alt="🗑️" class="button-icon-no-text"></button>
+            <div class="data-card" data-name="${escapeHtml(card.name)}" style="display: block;">
+                <div class="card-buttons">
+                    <button class="card-btn delete-btn" data-name="${escapeHtml(card.name)}" title="Удалить">
+                        <img src="assets/icons/delete.svg" alt="🗑️" class="button-icon-no-text">
+                    </button>
+                    <button class="card-btn change-category-btn" data-name="${escapeHtml(card.name)}" data-status="${card.status}" data-rating="${card.rating}" datatype="${card.icoUrl}" title="Сменить категорию">
+                        <img src="assets/icons/changeCategory.svg" alt="⇄" class="button-icon-no-text">
+                    </button>
+                    <button class="card-btn change-image-btn" data-name="${escapeHtml(card.name)}" title="Сменить картинку">
+                        <img src="assets/icons/changeImage.svg" alt="🖼️" class="button-icon-no-text">
+                    </button>
+                </div>
                 ${getCardIconHTML(card)}
                 <div class="data-info">
-                    <h3 class="data-title">${card.name}</h3>
+                    <h3 class="data-title">${escapeHtml(card.name)}</h3>
                     <div class="data-ratings-container">
                         <span class="card-rating rating-value editable-field"
                               data-rating="${card.rating}"
-                              data-name="${card.name}"
+                              data-name="${escapeHtml(card.name)}"
                               title="Редактировать">
                             ${card.rating || '0'}
                         </span>
                         <span class="card-status status-value editable-field"
                               data-status="${card.status}"
-                              data-name="${card.name}"
+                              data-name="${escapeHtml(card.name)}"
                               title="Редактировать">
                             ${card.status || 'Уточнить'}
                         </span>
@@ -1374,6 +1455,8 @@ async function addNewData(section) {
             searchInput.value = cardData.name;
             filterCards(cardData.name);
         }
+        let overlay = document.querySelector('.add-form-overlay');
+        overlay.classList.remove('visible');
     } catch (error) {
         console.error('Ошибка при добавлении:', error);
         await showError(`Ошибка при добавлении: ${error.message}`);
@@ -1389,7 +1472,7 @@ function showConfirmModal(title, message, confirmText, cancelText) {
         modal.style.display = 'block';
         modal.innerHTML = `
             <div class="modal-content" style="max-width: 400px;">
-                <h3>${title}</h3>
+                ${title ? `<h3>${title}</h3>` : ''}
                 <p>${message}</p>
                 <div style="margin-top: 20px; display: flex; justify-content: space-between;">
                     <button class="modal-button cancel-btn">${cancelText}</button>
@@ -1483,6 +1566,7 @@ function setupEditableFields() {
             await showEditableDropdown(field, valueDisplay);
         });
     });
+    updateStats();
 }
 
 async function showEditableDropdown(field, valueDisplay) {
@@ -1573,16 +1657,27 @@ async function showEditableDropdown(field, valueDisplay) {
 async function updateFieldValue(field, valueDisplay, newValue, itemName, isRating) {
     try {
         const section = document.querySelector('.nav-item.active')?.dataset.section;
+        const updateItemInArrays = (itemName, updates) => {
+            // Обновляем в allSectionData
+            const allItem = window.allSectionData.find(item => item.name === itemName);
+            if (allItem) Object.assign(allItem, updates);
+
+            // Обновляем в filteredData
+            const filteredItem = window.filteredData.find(item => item.name === itemName);
+            if (filteredItem) Object.assign(filteredItem, updates);
+        };
         if (isRating) {
             await window.electronAPI.updateDataRating(section, itemName, newValue);
             field.dataset.rating = newValue;
             valueDisplay.style.backgroundColor = getRatingColor(newValue);
+            updateItemInArrays(itemName, { rating: newValue });
         } else {
             await window.electronAPI.updateDataStatus(section, itemName, newValue);
             field.dataset.status = newValue;
             valueDisplay.style.backgroundColor = getStatusColor(newValue);
+            updateItemInArrays(itemName, { status: newValue });
         }
-
+        updateStats();
         valueDisplay.textContent = newValue;
     } catch (error) {
         console.error('Ошибка при обновлении:', error);
@@ -1654,7 +1749,6 @@ function setupDeleteButtons() {
             confirmModal.style.display = 'block';
             confirmModal.innerHTML = `
                 <div class="modal-content" style="max-width: 300px;">
-                    <h3>Подтверждение удаления</h3>
                     <p>Вы уверены, что хотите удалить "${itemName}"?</p>
                     <div style="margin-top: 20px; display: flex; justify-content: space-between;">
                         <button class="modal-button cancel-btn delete-bt">Отмена</button>
@@ -1678,6 +1772,13 @@ function setupDeleteButtons() {
                     const card = btn.closest('.data-card');
                     if (card) card.remove();
                     document.body.removeChild(confirmModal);
+                    const itemIndex = window.allSectionData.findIndex(item => item.name === itemName);
+                    if (itemIndex !== -1) window.allSectionData.splice(itemIndex, 1);
+
+                    const filteredIndex = window.filteredData.findIndex(item => item.name === itemName);
+                    if (filteredIndex !== -1) {
+                        window.filteredData.splice(filteredIndex, 1);
+                    }
                 } catch (error) {
                     console.error('Не удалось удалить:', error);
                     await showError('Не удалось удалить');
@@ -1739,6 +1840,21 @@ function setupIconSearchButton() {
             }
         });
     });
+    const previewSearchBtn = document.getElementById('previewSearchBtn');
+    if (previewSearchBtn) {
+        previewSearchBtn.addEventListener('click', () => {
+            const nameInput = document.getElementById('nameInput');
+            if (nameInput && nameInput.value.trim()) {
+                const searchQuery = encodeURIComponent(nameInput.value.trim() + ' обложка');
+                const searchUrl = `https://yandex.ru/images/search?text=${searchQuery}`;
+                window.electronAPI.openExternal(searchUrl);
+            } else {
+                showError('Сначала введите название');
+                nameInput?.focus();
+            }
+        });
+    }
+
 }
 
 async function uploadImage(blob) {
@@ -1841,7 +1957,7 @@ function setupTitleClickHandlers() {
                         if (icon) {
                             icon.src = newIcoUrl;
                             icon.onerror = () => {
-                                icon.src = 'https://apptor.studio/assets/cache/images/600-856x600-629.png';
+                                icon.src = 'https://sun9-10.userapi.com/s/v1/ig2/ZokTL_h2fMLt6rBm9VpAljngHJORp51HrK0aE-EQxbcG8iNFrcujtVnp_xD3B3qDhN2rJRlaJgRk7bixs1XUq_z-.jpg?quality=95&as=32x21,48x32,72x48,108x72,160x107,240x160,360x240,480x320,540x360,640x426,720x480,740x493&from=bu&u=Ac2XlEuasBKNjIEznqey8baHpZpSfGg8nRMAdRH9Mjw&cs=740x0';
                             };
                         }
 
@@ -1853,8 +1969,21 @@ function setupTitleClickHandlers() {
                         buttons.forEach(btn => {
                             btn.dataset.name = newName;
                         });
+
+
                     }
 
+                    const updateItemInArrays = (oldName, newName) => {
+                        // Обновляем в allSectionData
+                        const allItem = window.allSectionData.find(item => item.name === oldName);
+                        if (allItem) allItem.name = newName;
+
+                        // Обновляем в filteredData
+                        const filteredItem = window.filteredData.find(item => item.name === oldName);
+                        if (filteredItem) filteredItem.name = newName;
+                    };
+
+                    updateItemInArrays(oldName, newName);
                     document.body.removeChild(modal);
                 } catch (error) {
                     console.error('Ошибка при обновлении:', error);
@@ -1904,30 +2033,55 @@ searchInWebBtn.addEventListener('click', async () => {
 
 
 function highlightRandomCard(cardName) {
-    // Снимаем подсветку со всех карточек
-    document.querySelectorAll('.data-card').forEach(card => {
-        card.style.boxShadow = '';
-        card.style.transform = '';
-    });
-
-    // Находим нужную карточку
+    // Находим карточку
     const card = document.querySelector(`.data-card[data-name="${cardName}"]`);
-    if (card) {
-        // Подсвечиваем карточку
-        card.style.boxShadow = '0 0 20px rgba(155, 89, 182, 0.8)';
-        card.style.transform = 'scale(1.05)';
 
-        // Прокручиваем к карточке
-        card.scrollIntoView({
-            behavior: 'smooth',
-            block: 'center'
+    if (!card) return;
+
+    // Убираем подсветку с предыдущей карточки
+    const prevHighlight = document.querySelector('.data-card.random-highlight');
+    if (prevHighlight) {
+        prevHighlight.classList.remove('random-highlight');
+        // Убираем обработчик клика с предыдущей
+        prevHighlight.removeEventListener('click', removeHighlightOnClick);
+    }
+
+    // Добавляем новую подсветку (бесконечную)
+    card.classList.add('random-highlight');
+
+    // Добавляем обработчик клика для снятия подсветки
+    card.addEventListener('click', removeHighlightOnClick);
+
+    // Находим контейнер со скроллом
+    const scrollContainer = document.querySelector('.content-wrapper');
+
+    if (!scrollContainer) {
+        console.error('Content wrapper not found');
+        return;
+    }
+
+    // Плавно скроллим к карточке
+    setTimeout(() => {
+        if (!card || !document.body.contains(card)) return;
+
+        const containerRect = scrollContainer.getBoundingClientRect();
+        const cardRect = card.getBoundingClientRect();
+
+        const scrollTop = scrollContainer.scrollTop;
+        const targetScroll = scrollTop + (cardRect.top - containerRect.top) - (containerRect.height / 2) + (cardRect.height / 2);
+
+        scrollContainer.scrollTo({
+            top: Math.max(0, targetScroll),
+            behavior: 'smooth'
         });
+    }, 100);
 
-        // Снимаем подсветку через 3 секунды
-        setTimeout(() => {
-            card.style.boxShadow = '';
-            card.style.transform = '';
-        }, 3000);
+    // Функция для снятия подсветки по клику
+    function removeHighlightOnClick() {
+        if (card && document.body.contains(card)) {
+            card.classList.remove('random-highlight');
+            card.removeEventListener('click', removeHighlightOnClick);
+        }
     }
 }
 
@@ -1943,10 +2097,6 @@ async function pickRandomVisibleCard() {
         const randomCard = visibleCards[randomIndex];
         const cardName = randomCard.dataset.name;
 
-        // Открываем поиск
-        const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(cardName)}`;
-        window.electronAPI.openSearch(searchUrl);
-
         // Подсвечиваем карточку
         highlightRandomCard(cardName);
 
@@ -1958,15 +2108,11 @@ async function pickRandomVisibleCard() {
 async function searchCardInWeb() {
     try {
         const section = document.querySelector('.nav-item.active')?.dataset.section;
+        const textFromInput = document.getElementById('searchInput')?.value;
 
-
-        // Открываем поиск
-        const searchUrl = `https://www.google.com/search?q=${encodeURIComponent('популярное в разделе ' + section)}`;
+        const searchText = textFromInput? textFromInput : 'популярное в разделе ' + section;
+        const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(searchText)}`;
         window.electronAPI.openSearch(searchUrl);
-
-        // Подсвечиваем карточку
-        highlightRandomCard(cardName);
-
     } catch (error) {
         console.error('Ошибка:', error);
     }
@@ -1993,10 +2139,10 @@ function setupPreviewUpdate() {
             if (icoUrl) {
                 icon.src = icoUrl;
                 icon.onerror = () => {
-                    icon.src = 'https://apptor.studio/assets/cache/images/600-856x600-629.png';
+                    icon.src = 'https://sun9-10.userapi.com/s/v1/ig2/ZokTL_h2fMLt6rBm9VpAljngHJORp51HrK0aE-EQxbcG8iNFrcujtVnp_xD3B3qDhN2rJRlaJgRk7bixs1XUq_z-.jpg?quality=95&as=32x21,48x32,72x48,108x72,160x107,240x160,360x240,480x320,540x360,640x426,720x480,740x493&from=bu&u=Ac2XlEuasBKNjIEznqey8baHpZpSfGg8nRMAdRH9Mjw&cs=740x0';
                 };
             } else {
-                icon.src = 'https://apptor.studio/assets/cache/images/600-856x600-629.png';
+                icon.src = 'https://sun9-10.userapi.com/s/v1/ig2/ZokTL_h2fMLt6rBm9VpAljngHJORp51HrK0aE-EQxbcG8iNFrcujtVnp_xD3B3qDhN2rJRlaJgRk7bixs1XUq_z-.jpg?quality=95&as=32x21,48x32,72x48,108x72,160x107,240x160,360x240,480x320,540x360,640x426,720x480,740x493&from=bu&u=Ac2XlEuasBKNjIEznqey8baHpZpSfGg8nRMAdRH9Mjw&cs=740x0';
             }
         }
 
@@ -2041,10 +2187,10 @@ function updatePreview(name, icoUrl, rating, status) {
         if (icoUrl) {
             icon.src = icoUrl;
             icon.onerror = () => {
-                icon.src = 'https://apptor.studio/assets/cache/images/600-856x600-629.png';
+                icon.src = 'https://sun9-10.userapi.com/s/v1/ig2/ZokTL_h2fMLt6rBm9VpAljngHJORp51HrK0aE-EQxbcG8iNFrcujtVnp_xD3B3qDhN2rJRlaJgRk7bixs1XUq_z-.jpg?quality=95&as=32x21,48x32,72x48,108x72,160x107,240x160,360x240,480x320,540x360,640x426,720x480,740x493&from=bu&u=Ac2XlEuasBKNjIEznqey8baHpZpSfGg8nRMAdRH9Mjw&cs=740x0';
             };
         } else {
-            icon.src = 'https://apptor.studio/assets/cache/images/600-856x600-629.png';
+            icon.src = 'https://sun9-10.userapi.com/s/v1/ig2/ZokTL_h2fMLt6rBm9VpAljngHJORp51HrK0aE-EQxbcG8iNFrcujtVnp_xD3B3qDhN2rJRlaJgRk7bixs1XUq_z-.jpg?quality=95&as=32x21,48x32,72x48,108x72,160x107,240x160,360x240,480x320,540x360,640x426,720x480,740x493&from=bu&u=Ac2XlEuasBKNjIEznqey8baHpZpSfGg8nRMAdRH9Mjw&cs=740x0';
         }
     }
 
@@ -2070,12 +2216,30 @@ function setupAddButton() {
     const toggleBtn = document.getElementById('toggleAddFormBtn');
     const addForm = document.getElementById('addForm');
 
-    if (toggleBtn && addForm) {
-        toggleBtn.addEventListener('click', async (e) => {
-            addForm.classList.toggle('visible');
-            toggleBtn.textContent = addForm.classList.contains('visible') ? '− Скрыть' : '+ Добавить';
+    const overlay = initAddFormOverlay();
 
-            if (addForm.classList.contains('visible')) {
+    function closeAddForm() {
+        addForm.classList.remove('visible');
+        overlay.classList.remove('visible');
+        toggleBtn.textContent = '+ Добавить';
+    }
+
+    // Закрытие по клику на overlay
+    overlay.onclick = closeAddForm;
+
+    if (toggleBtn && addForm) {
+        toggleBtn.onclick = async (e) => {
+            e.stopPropagation();
+
+            const isVisible = addForm.classList.contains('visible');
+
+            if (isVisible) {
+                closeAddForm();
+            } else {
+                addForm.classList.add('visible');
+                overlay.classList.add('visible');
+                toggleBtn.textContent = '− Скрыть';
+
                 try {
                     const text = await navigator.clipboard.readText();
                     const nameInput = document.getElementById('nameInput');
@@ -2091,7 +2255,7 @@ function setupAddButton() {
                     console.error('Ошибка чтения буфера обмена:', error);
                 }
             }
-        });
+        };
     }
 }
 
