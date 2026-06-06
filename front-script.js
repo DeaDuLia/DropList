@@ -796,8 +796,8 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
                 <div id="searchSuggestions" class="search-suggestions"></div>
                 <button id="searchBtn"><img src="assets/icons/find.svg" alt="🔍" class="button-icon-no-text"></button>
                 <button id="clearSearchBtn" class="clear-search-btn">✕</button>
+                <button id="searchInWeb" title="Поиск в интернете"><img src="assets/icons/find.svg" alt="🔍" class="button-icon">интернет</button>
                 <button id="randomBtnSection" title="Случайная карточка"><img src="assets/icons/random.svg" alt="🎲" class="button-icon">Случайное</button>
-                <button id="searchInWeb" title="Поиск в интернете"><img src="assets/icons/find.svg" alt="🔍" class="button-icon">Популярное</button>
             </div>
             
             <!-- Кнопка добавления должна быть ВНЕ search-container -->
@@ -1306,7 +1306,6 @@ function getAddFormHTML(addMoreChecked = false, visible = '') {
                         </div>
                     </div>
                 </div>
-                
                 <div class="form-fields">
                     <div class="form-group">
                         <div class="icon-input-container">
@@ -2080,15 +2079,11 @@ async function pickRandomVisibleCard() {
 async function searchCardInWeb() {
     try {
         const section = document.querySelector('.nav-item.active')?.dataset.section;
+        const textFromInput = document.getElementById('searchInput')?.value;
 
-
-        // Открываем поиск
-        const searchUrl = `https://www.google.com/search?q=${encodeURIComponent('популярное в разделе ' + section)}`;
+        const searchText = textFromInput? textFromInput : 'популярное в разделе ' + section;
+        const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(searchText)}`;
         window.electronAPI.openSearch(searchUrl);
-
-        // Подсвечиваем карточку
-        highlightRandomCard(cardName);
-
     } catch (error) {
         console.error('Ошибка:', error);
     }

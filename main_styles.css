@@ -605,22 +605,34 @@ body {
     padding: 5px 0;
     word-break: break-word;
     opacity: 0.6;
+    position: relative;
+    display: inline-block;
 }
 
 .data-card:hover .data-title {
     opacity: 1;
 }
-/* При наведении подсказка о редактировании*/
+
 .data-title::after {
-    content: "✏️";
-    opacity: 0;
-}
-.data-title:hover::after {
-    right: -25px;
+    content: "";
+    position: absolute;
+    right: -28px;
     top: 50%;
     transform: translateY(-50%);
+    width: 20px;
+    height: 20px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cdefs%3E%3ClinearGradient id='wood' x1='0%25' y1='0%25' x2='100%25' y2='0%25'%3E%3Cstop offset='0%25' style='stop-color:%23e6a017'/%3E%3Cstop offset='100%25' style='stop-color:%23f39c12'/%3E%3C/linearGradient%3E%3C/defs%3E%3Cpath d='M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z' fill='url(%23wood)' stroke='%23d68910' stroke-width='1'/%3E%3Cpath d='M16 5L19 8' stroke='%238b6914' stroke-width='1.5'/%3E%3Crect x='4.5' y='16.5' width='3' height='1.5' fill='%23c0392b' transform='rotate(-45 6 17.5)'/%3E%3C/svg%3E");
+    background-size: contain;
+    background-repeat: no-repeat;
+    opacity: 0;
+    transition: opacity 0.2s;
+    pointer-events: none;
+}
+
+.data-title:hover::after {
     opacity: 1;
 }
+
 .card-rating, .card-status {
     display: inline-block;
     text-align: center;
@@ -1812,4 +1824,8 @@ body {
 
 #registerBtn {
     background-color: #3498db;
+}
+
+.editable-field:hover {
+    transform: scale(1.15);
 }
