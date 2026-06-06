@@ -41,25 +41,25 @@
     --shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
 
     /* Цвета рейтингов */
-    --rating-5: #007734; /* Ярко-зелёный */
-    --rating-4: #417700;
-    --rating-3: #7dac01; /* Голубой */
-    --rating-2: #c69007; /* Жёлтый */
-    --rating-1: #c65707; /* Оранжевый */
-    --rating-0: #95a5a6; /* Серый */
-    --rating--1: #e74c3c; /* Красный */
-    --rating--2: #c0392b;
-    --rating--3: #992d22;
-    --rating--4: #73241a;
-    --rating--5: #4d1a12; /* Тёмно-красный */
-    --rating-not-played: #95a5a6;
-    --rating-played: #a29bfe;
-    --rating-playing: #0c8a6f; /* Фиолетовый */
-    --rating-completed: #007734; /* Бирюзовый */
-    --rating-pined: #8f6d00; /* Бирюзовый */
-    --rating-imported: #89009e; /* Бирюзовый */
-    --rating-waiting: #059801;
-    --rating-planed: #0296aa; /* Бирюзовый */
+    --rating-5: #4a6b3a;
+    --rating-4: #5d7a4a;
+    --rating-3: #9a8c4a;
+    --rating-2: #b88b3a;
+    --rating-1: #b56a3a;
+    --rating-0: #6e6e6e;
+    --rating--1: #a55a4a;
+    --rating--2: #8f4d40;
+    --rating--3: #794036;
+    --rating--4: #63332c;
+    --rating--5: #4d2622;
+    --rating-not-played: #3a3a3a;
+    --rating-played: #4a3a5a;
+    --rating-playing: #1a4a3a;
+    --rating-completed: #2a4a1a;
+    --rating-pined: #5a4a1a;
+    --rating-imported: #5a1a5a;
+    --rating-waiting: #2a5a1a;
+    --rating-planed: #1a5a5a; /* Бирюзовый */
 }
 /* Шапка */
 .main-header {
@@ -726,23 +726,39 @@ body {
 }
 /* Контейнер модального окна*/
 .modal-content {
-    padding: 15px 20px;
+    padding: 16px 20px;
     background-color: var(--dark-modal-background);
     margin: 15% auto;
-    border-radius: 8px;
-    max-width: 300px;
+    border-radius: 12px;
+    max-width: 320px;
+    min-width: 250px;
     text-align: center;
 }
+
+
 /* Внутри контейнера */
 .modal-button {
-    margin-left: 5px;
-    margin-right: 5px;
-    background-color: #4CAF50;
-    color: white;
-    border: none;
-    border-radius: 4px;
+    background: #2d2d2d;
+    border: 1px solid #4a4a4a;
+    border-radius: 6px !important;
+    padding: 6px 12px !important;
+    color: #e0e0e0;
+    font-size: 12px;
     cursor: pointer;
-    padding: 5px;
+    transition: all 0.2s ease;
+}
+
+.modal-button-close {
+    background: #2d2d2d;
+    border: 1px solid #4a4a4a;
+    border-radius: 6px !important;
+    padding: 6px 12px;
+    color: #e0e0e0;
+    font-size: 12px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    width: 100%;
+    margin-top: 12px;
 }
 .modal-button:hover {
     opacity: 0.8;
@@ -820,13 +836,6 @@ label {
     height: 100%;
     background-color: rgba(0,0,0,0.5);
     z-index: 1000;
-}
-.modal-button-close {
-    background-color: #4CAF50;
-    color: white;
-    border: none;
-    border-radius: 4px;
-    cursor: pointer;
 }
 /* Контейнер доната */
 .donate-modal .modal-content {
@@ -1771,4 +1780,12 @@ body {
     width: 28px;
     height: 28px;
     filter: brightness(0) invert(1);
+}
+
+#loginBtn {
+    background-color: #3498db;
+}
+
+#registerBtn {
+    background-color: #3498db;
 }
