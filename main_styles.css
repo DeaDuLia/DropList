@@ -567,60 +567,11 @@ body {
     transform: translateY(-5px);
     box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
 }
+
+
 /* Обложка карточки */
 
-.change-image-btn {
-    top: 10px;
-    background-color: #9B59B6  ;
-}
-.change-category-btn {
-    margin-top: 45px;
-    background-color: #2ECC71  ;
-}
 
-.delete-btn {
-    margin-top: 80px;
-    background-color: #E74C3C;
-}
-
-.delete-btn:hover {
-    background-color: #EC7063;
-    transform: scale(1.1);
-}
-
-.change-category-btn:hover {
-    background-color: #48C988;
-    transform: scale(1.1);
-
-}
-.change-image-btn:hover {
-    background-color: #AF7AC5;
-    transform: scale(1.1);
-}
-.delete-btn,
-.change-image-btn,
-.change-category-btn {
-    border-radius: 8px;
-    position: absolute;
-    right: 10px;
-    color: white;
-    border: none;
-    width: 30px;
-    height: 30px;
-    font-size: 14px;
-    cursor: pointer;
-    opacity: 0;
-    transition: opacity 0.3s ease;
-    z-index: 4;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-.data-card:hover .delete-btn,
-.data-card:hover .change-image-btn,
-.data-card:hover .change-category-btn {
-    opacity: 1;
-}
 .game-icon {
     width: 100%;
     height: 100%;
@@ -632,13 +583,53 @@ body {
 .data-card:hover .game-icon {
     transform: scale(1.03);
 }
+
+/* Кнопки на карточке */
+.card-buttons {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    z-index: 5;
+    opacity: 0;
+    transition: opacity 0.2s;
+}
+
+.data-card:hover .card-buttons {
+    opacity: 1;
+}
+
+.card-btn {
+    width: 28px;
+    height: 28px;
+    background: rgba(0, 0, 0, 0.7);
+    border: 1px solid #3a3a3a;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    background: var(--rating-planed);
+}
+
+.card-btn:hover {
+    transform: scale(1.05);
+}
+
+.delete-btn {
+    background: #e81123;
+}
+
 /* Информация карточки */
 .data-info {
     position: absolute;
     bottom: 0;
     left: 0;
     right: 0;
-    background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+    background: linear-gradient(to top, rgba(0,0,0,0.95) 0%, rgba(0,0,0,0.7) 60%, transparent 100%);
     padding: 20px;
     z-index: 3;
     color: white;
@@ -673,19 +664,20 @@ body {
     background-color: var(--dark-primary-color);
 }
 /* Подсветка рейтинга и статуса*/
-.card-rating:hover,
-.card-status:hover {
-    color: white !important; /* Белый текст */
-    transform: scale(1.05); /* Легкое увеличение */
-    box-shadow: 0 0 0 2px rgba(255, 255, 255, 0.3); /* Белое свечение */
-    filter: brightness(1.2) saturate(1.2); /* Увеличиваем яркость и насыщенность */
+.data-card:hover {
+    transform: scale(1.02);
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
 }
 
-/* Для жёлтого рейтинга делаем тёмный текст при наведении */
-.card-rating[data-rating="2"]:hover {
-    color: var(--dark-text-color) !important;
-    filter: brightness(1.1) saturate(1.1);
+.data-card:hover .game-icon {
+    transform: scale(1.03);
 }
+
+/* Убираем translateY который может вызывать смещение */
+.data-card:hover {
+    transform: scale(1.02); /* Вместо translateY(-5px) */
+}
+
 .data-title:hover {
     transform: scale(1.05); /* Легкое увеличение */
 }
@@ -702,46 +694,16 @@ body {
 .card-rating[data-rating="-4"] { background-color: var(--rating--4); }
 .card-rating[data-rating="-5"] { background-color: var(--rating--5); }
 /* Специальные статусы */
-.card-status[data-status="Импортировано"] {
-    background-color: var(--rating-imported);
-}
-.card-status[data-status="Ожидается"] {
-    background-color: var(--rating-waiting);
-}
-.card-status[data-status="Уточнить"] {
-    background-color: var(--rating-not-played);
-}
-.card-status[data-status="Смотрел"] {
-    background-color: var(--rating-played);
-}
-.card-status[data-status="В процессе"] {
-    background-color: var(--rating-playing);
-}
-.card-status[data-status="В планах"] {
-    background-color: var(--rating-planed);
-}
-.card-status[data-status="Завершено"] {
-    background-color: var(--rating-completed);
-    animation: pulse 2s infinite;
-}
-.card-status[data-status="Избранное"] {
-    background-color: var(--rating-pined);
-    position: relative;
-}
-.card-status[data-status="Избранное"] {
-    background-color: var(--rating-pined);
-    animation: pulse 2s infinite;
-}
-.card-status[data-status="Завершено"] {
-    background-color: var(--rating-completed);
-    position: relative;
-}
+.card-status[data-status="Импортировано"] { background-color: var(--rating-imported);}
+.card-status[data-status="Ожидается"] { background-color: var(--rating-waiting); }
+.card-status[data-status="Уточнить"] { background-color: var(--rating-not-played); }
+.card-status[data-status="Смотрел"] { background-color: var(--rating-played); }
+.card-status[data-status="В процессе"] { background-color: var(--rating-playing); }
+.card-status[data-status="В планах"] { background-color: var(--rating-planed); }
+.card-status[data-status="Завершено"] { background-color: var(--rating-completed); }
+.card-status[data-status="Избранное"] { background-color: var(--rating-pined); }
+.card-status[data-status="Завершено"] { background-color: var(--rating-completed); }
 
-@keyframes pulse {
-    0% { opacity: 0.8; }
-    50% { opacity: 1; }
-    100% { opacity: 0.8; }
-}
 /* Пагинация*/
 .loading-indicator {
     text-align: center;

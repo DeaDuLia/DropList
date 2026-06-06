@@ -1349,9 +1349,17 @@ function escapeHtml(str) {
 function renderCardList(cards) {
     return cards.map(card => `
             <div class="data-card" data-name="${escapeHtml(card.name)}" style="display: block;">
-                <button class="change-image-btn" data-name="${escapeHtml(card.name)}" title="Сменить картинку"><img src="assets/icons/changeImage.svg" alt="🖼️" class="button-icon-no-text"></button>
-                <button class="change-category-btn" data-name="${escapeHtml(card.name)}" data-status="${card.status}" data-rating="${card.rating}" datatype="${card.icoUrl}" title="Сменить категорию"><img src="assets/icons/changeCategory.svg" alt="⇄" class="button-icon-no-text"></button>
-                <button class="delete-btn" data-name="${escapeHtml(card.name)}"><img src="assets/icons/delete.svg" alt="🗑️" class="button-icon-no-text"></button>
+                <div class="card-buttons">
+                    <button class="card-btn delete-btn" data-name="${escapeHtml(card.name)}" title="Удалить">
+                        <img src="assets/icons/delete.svg" alt="🗑️" class="button-icon-no-text">
+                    </button>
+                    <button class="card-btn change-category-btn" data-name="${escapeHtml(card.name)}" data-status="${card.status}" data-rating="${card.rating}" datatype="${card.icoUrl}" title="Сменить категорию">
+                        <img src="assets/icons/changeCategory.svg" alt="⇄" class="button-icon-no-text">
+                    </button>
+                    <button class="card-btn change-image-btn" data-name="${escapeHtml(card.name)}" title="Сменить картинку">
+                        <img src="assets/icons/changeImage.svg" alt="🖼️" class="button-icon-no-text">
+                    </button>
+                </div>
                 ${getCardIconHTML(card)}
                 <div class="data-info">
                     <h3 class="data-title">${escapeHtml(card.name)}</h3>
