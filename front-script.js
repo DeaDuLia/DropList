@@ -525,7 +525,7 @@ function updateAuthButton(email) {
 authBtn.addEventListener('click', () => {
     if (currentUser) {
         // Если уже авторизован - спрашиваем о выходе
-        showConfirmModal('Выход', 'Вы уверены, что хотите выйти?', 'Выйти', 'Отмена').then(async (confirmed) => {
+        showConfirmModal('', 'Вы уверены, что хотите выйти?', 'Выйти', 'Отмена').then(async (confirmed) => {
             if (confirmed) {
                 const result = await window.electronAPI.authSignOut();
                 if (result.success) {
@@ -785,7 +785,7 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
                 <input type="text" id="searchInput" placeholder="Поиск по названию" value="${currentFilters.searchQuery}">
                 <div id="searchSuggestions" class="search-suggestions"></div>
                 <button id="searchBtn"><img src="assets/icons/find.svg" alt="🔍" class="button-icon-no-text"></button>
-                <button id="clearSearchBtn" class="clear-search-btn" ${currentFilters.searchQuery ? '' : 'style="display: none;"'}>✕</button>
+                <button id="clearSearchBtn" class="clear-search-btn">✕</button>
                 <button id="randomBtnSection" title="Случайная карточка"><img src="assets/icons/random.svg" alt="🎲" class="button-icon">Случайное</button>
                 <button id="searchInWeb" title="Поиск в интернете"><img src="assets/icons/find.svg" alt="🔍" class="button-icon">Популярное</button>
             </div>
@@ -954,9 +954,13 @@ function setupSearchInput() {
 
         if (matches.length > 0) {
             searchSuggestions.innerHTML = matches.map(item => `
-                <div class="suggestion-item">${item.name}</div>
-            `).join('');
+            <div class="suggestion-item">${item.name}</div>
+        `).join('');
             searchSuggestions.style.display = 'block';
+
+            // 👇 Устанавливаем ширину подсказок равной ширине searchInput
+            const searchInputRect = searchInput.getBoundingClientRect();
+            searchSuggestions.style.width = searchInputRect.width + 'px';
         } else {
             searchSuggestions.style.display = 'none';
         }
@@ -974,9 +978,6 @@ function setupSearchInput() {
     // Обработчик ввода текста
     searchInput.addEventListener('input', (e) => {
         updateSuggestions(e.target.value);
-        if (clearSearchBtn) {
-            clearSearchBtn.style.display = e.target.value ? 'block' : 'none';
-        }
     });
 
     // Обработчик клика по подсказке
@@ -1431,7 +1432,7 @@ function showConfirmModal(title, message, confirmText, cancelText) {
         modal.style.display = 'block';
         modal.innerHTML = `
             <div class="modal-content" style="max-width: 400px;">
-                <h3>${title}</h3>
+                ${title ? `<h3>${title}</h3>` : ''}
                 <p>${message}</p>
                 <div style="margin-top: 20px; display: flex; justify-content: space-between;">
                     <button class="modal-button cancel-btn">${cancelText}</button>
@@ -1707,7 +1708,6 @@ function setupDeleteButtons() {
             confirmModal.style.display = 'block';
             confirmModal.innerHTML = `
                 <div class="modal-content" style="max-width: 300px;">
-                    <h3>Подтверждение удаления</h3>
                     <p>Вы уверены, что хотите удалить "${itemName}"?</p>
                     <div style="margin-top: 20px; display: flex; justify-content: space-between;">
                         <button class="modal-button cancel-btn delete-bt">Отмена</button>
