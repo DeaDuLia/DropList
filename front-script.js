@@ -75,6 +75,24 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 });
 
+function updateStats() {
+    const data = window.filteredData || window.allSectionData || [];
+    const total = data.length;
+    const completed = data.filter(item => item.status === 'Завершено' || item.status === 'Избранное').length;
+
+    // Для статистики в заголовке
+    const titleCompleted = document.getElementById('titleCompleted');
+    const titleTotal = document.getElementById('titleTotal');
+    if (titleCompleted) titleCompleted.textContent = completed;
+    if (titleTotal) titleTotal.textContent = total;
+
+    // Для статистики в контенте (если оставишь)
+    const completedSpan = document.getElementById('completedCount');
+    const totalSpan = document.getElementById('totalCount');
+    if (completedSpan) completedSpan.textContent = completed;
+    if (totalSpan) totalSpan.textContent = total;
+}
+
 function initAddFormOverlay() {
     if (!addFormOverlay) {
         addFormOverlay = document.createElement('div');
@@ -834,6 +852,7 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
     }
 
     loadMoreItems();
+    updateStats();
 
     // Добавляем обработчик прокрутки для бесконечной загрузки
     contentWrapper.addEventListener('scroll', handleScroll);
@@ -1154,6 +1173,7 @@ async function initCardSection() {
     setupChangeCategoryButtons();
     setupCardClickHandlers();
     setupPreviewUpdate();
+    updateStats();
 
 
 }
@@ -1546,6 +1566,7 @@ function setupEditableFields() {
             await showEditableDropdown(field, valueDisplay);
         });
     });
+    updateStats();
 }
 
 async function showEditableDropdown(field, valueDisplay) {
@@ -1656,7 +1677,7 @@ async function updateFieldValue(field, valueDisplay, newValue, itemName, isRatin
             valueDisplay.style.backgroundColor = getStatusColor(newValue);
             updateItemInArrays(itemName, { status: newValue });
         }
-
+        updateStats();
         valueDisplay.textContent = newValue;
     } catch (error) {
         console.error('Ошибка при обновлении:', error);

@@ -1847,3 +1847,27 @@ body {
     text-decoration: underline;
     cursor: pointer;
 }
+
+.title-stats {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 3px;
+    margin-left: 12px;
+    padding-left: 12px;
+    border-left: 1px solid rgba(255, 255, 255, 0.2);
+    font-size: 11px;
+    font-weight: normal;
+}
+
+.title-stat-completed {
+    color: #4a9eff;
+    font-weight: 600;
+}
+
+.title-stat-sep {
+    opacity: 0.5;
+}
+
+.title-stat-total {
+    opacity: 0.7;
+}
