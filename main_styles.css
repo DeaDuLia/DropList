@@ -112,16 +112,10 @@
     background-color: var(--dark-nav-background);
 }
 .nav-item.active {
-    background: linear-gradient(135deg, rgba(2, 150, 170, 0.4) 0%, rgba(2, 150, 170, 0.4) 100%);
-    box-shadow: 0 2px 2px rgba(108, 92, 231, 0.4);
-    backdrop-filter: blur(10px);
+    background: #0078d4;
+    backdrop-filter: none;
 }
 
-.nav-item.active:first-child {
-    background: linear-gradient(135deg, rgba(108, 92, 231, 0.1) 0%, rgba(2, 150, 170, 0.4) 100%);
-    box-shadow: 0 2px 2px rgba(108, 92, 231, 0.4);
-    backdrop-filter: blur(10px);
-}
 .nav-item.active::after {
     content: '';
     position: absolute;
@@ -172,24 +166,8 @@ button {
     transform: scale(1.1);
 }
 
-.header-button:hover {
-    background-color: #8e44ad;
-}
-
 .add-button:hover {
     background-color: var(--dark-nav-active-background);
-}
-/* Анимация кнопок */
-@media (max-width: 800px) {
-    .header-buttons {
-        flex-direction: column;
-        width: 100%;
-        margin-top: 15px;
-    }
-    .header-button, .add-button {
-        width: 100%;
-        margin: 5px 0;
-    }
 }
 /* Анимация шапки */
 @media (max-width: 1150px) {
@@ -964,12 +942,14 @@ input:focus, select:focus {
 
 /* Счётчик загрузок - премиум вариант */
 #downloadsCount {
+    background: #3d3d3d;
+    border: 1px solid #4a4a4a;
+    border-radius: 6px;
+    padding: 6px 12px;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
     cursor: default;
-}
-
-#downloadsCount:hover {
-    background: #006977;  /* такой же как у других кнопок */
-    transform: none;
 }
 
 .editable-select-container {
@@ -1160,19 +1140,15 @@ input:focus, select:focus {
     min-width: 0;
 }
 .header-button {
-    border-radius: 0;
-    background: #006977;
-    color: var(--dark-main-text-color);
-    font-size: 1rem;
+    background: #3d3d3d;
+    border: 1px solid #4a4a4a;
+    border-radius: 6px;
+    padding: 6px 12px;
+    color: white;
+}
+.header-button:hover {
+    background: #4d4d4d;
     cursor: pointer;
-    transition: all 0.3s ease;
-    white-space: nowrap;
-    max-width: 100%;
-    flex-shrink: 1;
-    border: none;
-    display: block;
-    width: 100%;
-
 }
 
 .preview-card {
@@ -1694,11 +1670,10 @@ body {
 }
 
 #authBtn {
-    background-color: #0296aa;
+    background-color: #0078d4;
 }
-
 #authBtn:hover {
-    background-color: #01b5cf;
+    background-color: #106ebe;
 }
 
 /* Стили для форм авторизации */
