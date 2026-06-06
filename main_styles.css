@@ -190,6 +190,8 @@ body {
     background-color: var(--dark-body-background);
     color: var(--dark-text-color);
     overflow: hidden;
+    height: 100vh;
+    padding-top: 32px;
 }
 /* Секция контента */
 .content-section {
