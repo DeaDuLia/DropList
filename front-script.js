@@ -389,6 +389,14 @@ donateModal.addEventListener('click', function(e) {
     }
 });
 
+document.addEventListener('click', (e) => {
+    const link = e.target.closest('.donate-link');
+    if (link && link.href) {
+        e.preventDefault();
+        window.electronAPI.openSearch(link.href);
+    }
+});
+
 window.addEventListener('DOMContentLoaded', () => {
     window.electronAPI.onMessageFromMain(({ imgUrl, name }) => {
         const editIcoInput = document.getElementById('editIcoInput');
