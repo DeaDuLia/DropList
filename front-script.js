@@ -92,8 +92,8 @@ function showSyncChoiceModal(localData, remoteData, localTime, remoteTime) {
                 <h3>⚠️ Конфликт синхронизации</h3>
                 <p>Локальные и облачные данные различаются.</p>
                 <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; margin: 15px 0;">
-                    <p>📁 Локальные: ${localDate}</p>
-                    <p>☁️ Облачные: ${remoteDate}</p>
+                    <p><img src="assets/icons/folder.svg" alt="📁" class="button-icon" style="width:14px;height:14px"> Локальные: ${localDate}</p>
+                    <p><img src="assets/icons/cloud.svg" alt="☁️" class="button-icon" style="width:14px;height:14px"> Облачные: ${remoteDate}</p>
                 </div>
                 <p>Что вы хотите сохранить?</p>
                 <div style="display: flex; gap: 10px; margin-top: 20px;">
@@ -255,9 +255,9 @@ function formatReleaseNotes(notes) {
 async function updateDownloadsCount() {
     try {
         const result = await window.electronAPI.getGitHubDownloads();
-        const downloadsElement = document.getElementById('downloadsCount');
-        if (downloadsElement && result.success) {
-            downloadsElement.textContent = `📥 ${result.downloads.toLocaleString()}`;
+        const downloadsNumber = document.getElementById('downloadsNumber');
+        if (downloadsNumber && result.success) {
+            downloadsNumber.textContent = result.downloads.toLocaleString();
         }
     } catch (error) {
         console.error('Failed to get downloads count:', error);
@@ -411,7 +411,7 @@ async function updateItemIcon(section, name, newIconUrl) {
                 icon.src = newIconUrl;
                 // Добавляем обработчик на случай ошибки загрузки изображения
                 icon.onerror = () => {
-                    icon.src = 'https://apptor.studio/assets/cache/images/600-856x600-629.png';
+                    icon.src = 'https://sun9-10.userapi.com/s/v1/ig2/ZokTL_h2fMLt6rBm9VpAljngHJORp51HrK0aE-EQxbcG8iNFrcujtVnp_xD3B3qDhN2rJRlaJgRk7bixs1XUq_z-.jpg?quality=95&as=32x21,48x32,72x48,108x72,160x107,240x160,360x240,480x320,540x360,640x426,720x480,740x493&from=bu&u=Ac2XlEuasBKNjIEznqey8baHpZpSfGg8nRMAdRH9Mjw&cs=740x0';
                 };
 
                 const allItem = window.allSectionData.find(item => item.name === name);
@@ -1094,19 +1094,6 @@ function filterCards(query = '') {
     loadMoreItems();
 }
 
-// Вспомогательные функции
-function getSectionTitle(section) {
-    const titles = {
-        games: '🎮 Игры',
-        movies: '🎬 Кино',
-        cartoons: '🎥 Мульты',
-        serials: '📺 Сериалы',
-        anime: '🌸 Аниме',
-        books: '📚 Книги'
-    };
-    return titles[section] || section;
-}
-
 async function initCardSection() {
     await Promise.all([
         loadRatings(),
@@ -1187,12 +1174,12 @@ function showCategoryChangeModal(oldSection, itemName, icoUrl, status, rating) {
             <h3 data-section="${oldSection}" data-rating="${rating}" data-status="${status}" datatype="${icoUrl}">${itemName}</h3>
             <p>Выберите новую категорию</p>
             <select id="categorySelect" class="edit-select">
-                <option value="games">🎮 Игры</option>
-                <option value="serials">📺 Сериалы</option>
-                <option value="movies">🎬 Кино</option>
-                <option value="cartoons">🎥 Мульты</option>
-                <option value="anime">🌸 Аниме</option>
-                <option value="books">📚 Книги</option>
+                <option value="games">Игры</option>
+                <option value="serials">Сериалы</option>
+                <option value="movies">Кино</option>
+                <option value="cartoons">Мульты</option>
+                <option value="anime">Аниме</option>
+                <option value="books">Книги</option>
             </select>
             <div style="margin-top: 20px; display: flex; justify-content: space-between;">
                 <button class="modal-button cancel-btn">Отмена</button>
@@ -1289,17 +1276,18 @@ function getAddFormHTML(addMoreChecked = false, visible = '') {
         <div id="addForm" class="add-form ${visible}">
             <div class="form-content">
                 <div id="previewCard" class="preview-card">
-                    <div class="preview-data-card" style="display: block;">
+                    <div class="preview-data-card" style="display: block; position: relative;">
                         ${getCardIconHTML({ name: 'Название', icoUrl: '' })}
+                        <div class="preview-overlay">
+                            <button id="previewSearchBtn" class="preview-search-btn" title="Найти обложку">
+                                <img src="assets/icons/findImage.svg" alt="🔍" style="width: 32px; height: 32px;">
+                            </button>
+                        </div>
                         <div class="preview-data-info">
                             <h3 class="preview-data-title">Название</h3>
                             <div class="preview-data-ratings-container">
-                                <span class="preview-card-rating rating-value">
-                                    0
-                                </span>
-                                <span class="preview-card-status status-value">
-                                    Уточнить
-                                </span>
+                                <span class="preview-card-rating rating-value">0</span>
+                                <span class="preview-card-status status-value">Уточнить</span>
                             </div>
                         </div>
                     </div>
@@ -1312,9 +1300,8 @@ function getAddFormHTML(addMoreChecked = false, visible = '') {
                         </div>
                     </div>
                     <div class="form-group">
-                        <div class="icon-input-container">
-                            <input id="icoInput" placeholder="Ссылка на обложку" autocomplete="off">
-                            <button id="searchIconBtn" class="search-icon-btn" title="Найти обложку"><img src="assets/icons/find.svg" alt="🔍" class="button-icon-no-text"></button>
+                        <div class="icon-input-container" style="display: flex; gap: 8px;">
+                            <input id="icoInput" placeholder="Ссылка на обложку" autocomplete="off" style="display: none;">
                         </div>
                     </div>
                     <div class="form-group">
@@ -1427,6 +1414,8 @@ async function addNewData(section) {
             searchInput.value = cardData.name;
             filterCards(cardData.name);
         }
+        let overlay = document.querySelector('.add-form-overlay');
+        overlay.classList.remove('visible');
     } catch (error) {
         console.error('Ошибка при добавлении:', error);
         await showError(`Ошибка при добавлении: ${error.message}`);
@@ -1810,6 +1799,21 @@ function setupIconSearchButton() {
             }
         });
     });
+    const previewSearchBtn = document.getElementById('previewSearchBtn');
+    if (previewSearchBtn) {
+        previewSearchBtn.addEventListener('click', () => {
+            const nameInput = document.getElementById('nameInput');
+            if (nameInput && nameInput.value.trim()) {
+                const searchQuery = encodeURIComponent(nameInput.value.trim() + ' обложка');
+                const searchUrl = `https://yandex.ru/images/search?text=${searchQuery}`;
+                window.electronAPI.openExternal(searchUrl);
+            } else {
+                showError('Сначала введите название');
+                nameInput?.focus();
+            }
+        });
+    }
+
 }
 
 async function uploadImage(blob) {
@@ -1912,7 +1916,7 @@ function setupTitleClickHandlers() {
                         if (icon) {
                             icon.src = newIcoUrl;
                             icon.onerror = () => {
-                                icon.src = 'https://apptor.studio/assets/cache/images/600-856x600-629.png';
+                                icon.src = 'https://sun9-10.userapi.com/s/v1/ig2/ZokTL_h2fMLt6rBm9VpAljngHJORp51HrK0aE-EQxbcG8iNFrcujtVnp_xD3B3qDhN2rJRlaJgRk7bixs1XUq_z-.jpg?quality=95&as=32x21,48x32,72x48,108x72,160x107,240x160,360x240,480x320,540x360,640x426,720x480,740x493&from=bu&u=Ac2XlEuasBKNjIEznqey8baHpZpSfGg8nRMAdRH9Mjw&cs=740x0';
                             };
                         }
 
@@ -2098,10 +2102,10 @@ function setupPreviewUpdate() {
             if (icoUrl) {
                 icon.src = icoUrl;
                 icon.onerror = () => {
-                    icon.src = 'https://apptor.studio/assets/cache/images/600-856x600-629.png';
+                    icon.src = 'https://sun9-10.userapi.com/s/v1/ig2/ZokTL_h2fMLt6rBm9VpAljngHJORp51HrK0aE-EQxbcG8iNFrcujtVnp_xD3B3qDhN2rJRlaJgRk7bixs1XUq_z-.jpg?quality=95&as=32x21,48x32,72x48,108x72,160x107,240x160,360x240,480x320,540x360,640x426,720x480,740x493&from=bu&u=Ac2XlEuasBKNjIEznqey8baHpZpSfGg8nRMAdRH9Mjw&cs=740x0';
                 };
             } else {
-                icon.src = 'https://apptor.studio/assets/cache/images/600-856x600-629.png';
+                icon.src = 'https://sun9-10.userapi.com/s/v1/ig2/ZokTL_h2fMLt6rBm9VpAljngHJORp51HrK0aE-EQxbcG8iNFrcujtVnp_xD3B3qDhN2rJRlaJgRk7bixs1XUq_z-.jpg?quality=95&as=32x21,48x32,72x48,108x72,160x107,240x160,360x240,480x320,540x360,640x426,720x480,740x493&from=bu&u=Ac2XlEuasBKNjIEznqey8baHpZpSfGg8nRMAdRH9Mjw&cs=740x0';
             }
         }
 
@@ -2146,10 +2150,10 @@ function updatePreview(name, icoUrl, rating, status) {
         if (icoUrl) {
             icon.src = icoUrl;
             icon.onerror = () => {
-                icon.src = 'https://apptor.studio/assets/cache/images/600-856x600-629.png';
+                icon.src = 'https://sun9-10.userapi.com/s/v1/ig2/ZokTL_h2fMLt6rBm9VpAljngHJORp51HrK0aE-EQxbcG8iNFrcujtVnp_xD3B3qDhN2rJRlaJgRk7bixs1XUq_z-.jpg?quality=95&as=32x21,48x32,72x48,108x72,160x107,240x160,360x240,480x320,540x360,640x426,720x480,740x493&from=bu&u=Ac2XlEuasBKNjIEznqey8baHpZpSfGg8nRMAdRH9Mjw&cs=740x0';
             };
         } else {
-            icon.src = 'https://apptor.studio/assets/cache/images/600-856x600-629.png';
+            icon.src = 'https://sun9-10.userapi.com/s/v1/ig2/ZokTL_h2fMLt6rBm9VpAljngHJORp51HrK0aE-EQxbcG8iNFrcujtVnp_xD3B3qDhN2rJRlaJgRk7bixs1XUq_z-.jpg?quality=95&as=32x21,48x32,72x48,108x72,160x107,240x160,360x240,480x320,540x360,640x426,720x480,740x493&from=bu&u=Ac2XlEuasBKNjIEznqey8baHpZpSfGg8nRMAdRH9Mjw&cs=740x0';
         }
     }
 
@@ -2175,12 +2179,35 @@ function setupAddButton() {
     const toggleBtn = document.getElementById('toggleAddFormBtn');
     const addForm = document.getElementById('addForm');
 
-    if (toggleBtn && addForm) {
-        toggleBtn.addEventListener('click', async (e) => {
-            addForm.classList.toggle('visible');
-            toggleBtn.textContent = addForm.classList.contains('visible') ? '− Скрыть' : '+ Добавить';
+    // Создаём затемнение один раз
+    let overlay = document.querySelector('.add-form-overlay');
+    if (!overlay) {
+        overlay = document.createElement('div');
+        overlay.className = 'add-form-overlay';
+        document.body.appendChild(overlay);
 
-            if (addForm.classList.contains('visible')) {
+        // Закрытие по клику на затемнение
+        overlay.onclick = () => {
+            addForm.classList.remove('visible');
+            overlay.classList.remove('visible');
+            toggleBtn.textContent = '+ Добавить';
+        };
+    }
+
+    if (toggleBtn && addForm) {
+        toggleBtn.onclick = async () => {  // 👈 добавить async
+            const isVisible = addForm.classList.contains('visible');
+
+            if (isVisible) {
+                addForm.classList.remove('visible');
+                overlay.classList.remove('visible');
+                toggleBtn.textContent = '+ Добавить';
+            } else {
+                addForm.classList.add('visible');
+                overlay.classList.add('visible');
+                toggleBtn.textContent = '− Скрыть';
+
+                // 👇 ВСТАВКА ИЗ БУФЕРА И АВТОПОИСК
                 try {
                     const text = await navigator.clipboard.readText();
                     const nameInput = document.getElementById('nameInput');
@@ -2189,14 +2216,14 @@ function setupAddButton() {
                         nameInput.value = text;
                         lastTextFromClipboard = text;
                         updatePreview(text, null, null, null);
-                        await autoSearchCover(text);
+                        await autoSearchCover(text);  // 👈 ВЫЗОВ АВТОПОИСКА
                     }
                     document.getElementById('nameInput')?.focus();
                 } catch (error) {
                     console.error('Ошибка чтения буфера обмена:', error);
                 }
             }
-        });
+        };
     }
 }
 
