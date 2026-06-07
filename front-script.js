@@ -25,7 +25,7 @@ let lastTextFromClipboard = '';
 
 let isAddingGame = false;
 let currentPage = 1;
-const itemsPerPage = 20; // Количество элементов на странице
+let itemsPerPage = 20; // Количество элементов на странице
 let isLoading = false;
 let allItemsLoaded = false;
 
@@ -61,11 +61,6 @@ document.addEventListener('DOMContentLoaded', () => {
         maximizeBtn.addEventListener('click', () => {
             window.electronAPI.maximizeWindow();
         });
-
-        // Обновляем иконку при изменении состояния окна
-        window.electronAPI.isWindowMaximized().then(isMaximized => {
-            updateMaximizeButtonIcon(isMaximized);
-        });
     }
 
     if (closeBtn) {
@@ -73,6 +68,12 @@ document.addEventListener('DOMContentLoaded', () => {
             window.electronAPI.closeWindow();
         });
     }
+});
+
+window.addEventListener('resize', () => {
+    let itemsPerPagePred = itemsPerPage;
+    itemsPerPage = calculateItemsPerPage();
+    if (itemsPerPage > itemsPerPagePred) { loadMoreItems(); }
 });
 
 function updateStats() {
@@ -92,6 +93,7 @@ function updateStats() {
     if (completedSpan) completedSpan.textContent = completed;
     if (totalSpan) totalSpan.textContent = total;
 }
+
 
 function initAddFormOverlay() {
     if (!addFormOverlay) {
@@ -909,13 +911,35 @@ function cleanupSection() {
     });
 }
 
+function calculateItemsPerPage() {
+    const wrapper = document.querySelector('.data-grid');
+    if (!wrapper) return 20;
+
+    // Получаем ширину карточки (с гридом)
+    const cardElement = document.querySelector('.data-card');
+    if (!cardElement) return 20;
+
+    const cardWidth = cardElement.offsetWidth;
+    const wrapperWidth = wrapper.clientWidth;
+    const cardsPerRow = Math.max(1, Math.floor(wrapperWidth / cardWidth));
+
+    // Высота окна минус шапки и панели
+    const availableHeight = window.innerHeight - 200;
+    const cardHeight = 200; // Примерная высота карточки с отступами
+    const rowsVisible = Math.max(1, Math.floor(availableHeight / cardHeight));
+
+    // Грузим в 2 раза больше, чем видно (для плавного скролла)
+    const itemsPerPage = cardsPerRow * rowsVisible * 2;
+
+    return Math.max(12, itemsPerPage);
+}
+
 async function loadMoreItems() {
     if (isLoading || allItemsLoaded) return;
 
     isLoading = true;
     const loadingIndicator = document.getElementById('loadingIndicator');
     if (loadingIndicator) loadingIndicator.style.display = 'block';
-
     // Получаем данные для текущей страницы
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
