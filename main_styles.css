@@ -932,7 +932,6 @@ select option {
     border-color: var(--dark-main-text-color);
 }
 
-
 input:focus, select:focus {
     box-shadow: 0 0 0 2px var(--dark-input-shadow);
     border-color: var(--dark-input-border-focus);
@@ -1885,3 +1884,25 @@ body {
 .custom-dropdown-option[data-status="Избранное"] { background-color: var(--rating-pined); }
 .custom-dropdown-option[data-status="Импортировано"] { background-color: var(--rating-imported); }
 .custom-dropdown-option[data-status="Ожидается"] { background-color: var(--rating-waiting); }
+
+select option[value="5"] { background-color: var(--rating-5); color: white; }
+select option[value="4"] { background-color: var(--rating-4); color: white; }
+select option[value="3"] { background-color: var(--rating-3); color: white; }
+select option[value="2"] { background-color: var(--rating-2); color: white; }
+select option[value="1"] { background-color: var(--rating-1); color: white; }
+select option[value="0"] { background-color: var(--rating-0); color: white; }
+select option[value="-1"] { background-color: var(--rating--1); color: white; }
+select option[value="-2"] { background-color: var(--rating--2); color: white; }
+select option[value="-3"] { background-color: var(--rating--3); color: white; }
+select option[value="-4"] { background-color: var(--rating--4); color: white; }
+select option[value="-5"] { background-color: var(--rating--5); color: white; }
+
+/* Цвета для option в статусах */
+select option[value="Уточнить"] { background-color: var(--rating-not-played); color: white; }
+select option[value="Смотрел"] { background-color: var(--rating-played); color: white; }
+select option[value="В процессе"] { background-color: var(--rating-playing); color: white; }
+select option[value="В планах"] { background-color: var(--rating-planed); color: white; }
+select option[value="Завершено"] { background-color: var(--rating-completed); color: white; }
+select option[value="Избранное"] { background-color: var(--rating-pined); color: white; }
+select option[value="Импортировано"] { background-color: var(--rating-imported); color: white; }
+select option[value="Ожидается"] { background-color: var(--rating-waiting); color: white; }
