@@ -1007,79 +1007,6 @@ input:focus, select:focus {
     z-index: 5;
 }
 
-/* Стили для отображения списка */
-.editable-select-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background-color: transparent;
-    z-index: 999;
-    display: none;
-}
-
-.editable-select-list {
-    position: absolute;
-    background-color: var(--dark-modal-background);
-    border: 1px solid var(--dark-main-text-color);
-    border-radius: 8px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
-    max-height: 250px;
-    overflow-y: auto;
-    z-index: 1000;
-    min-width: 150px;
-    animation: fadeIn 0.2s ease;
-}
-
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(-10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.editable-select-option {
-    padding: 8px 12px;
-    cursor: pointer;
-    color: var(--dark-main-text-color);
-    transition: background-color 0.2s;
-    white-space: nowrap;
-    font-size: 0.9rem;
-}
-
-.editable-select-option:hover {
-    background-color: var(--dark-input-hover-background);
-}
-
-.editable-select-option.selected {
-    background-color: var(--dark-primary-color);
-    color: white;
-}
-
-/* Стили для скроллбара в списке */
-.editable-select-list::-webkit-scrollbar {
-    width: 6px;
-}
-
-.editable-select-list::-webkit-scrollbar-track {
-    background: var(--dark-scroll-backgroud);
-    border-radius: 3px;
-}
-
-.editable-select-list::-webkit-scrollbar-thumb {
-    background: var(--dark-scroll-tracker);
-    border-radius: 3px;
-}
-
-.editable-select-list::-webkit-scrollbar-thumb:hover {
-    background: var(--dark-primary-color);
-}
-
 .add-button-container {
     margin-left: auto;
     margin-right: 0;
@@ -1871,3 +1798,86 @@ body {
 .title-stat-total {
     opacity: 0.7;
 }
+
+.custom-dropdown-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.2);
+    z-index: 998;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.custom-dropdown-overlay.visible {
+    opacity: 1;
+}
+
+.custom-dropdown {
+    position: fixed;
+    background: #1e1e1e;
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 999;
+    overflow: hidden;
+    opacity: 0;
+    transform: scale(0.98);
+    transition: all 0.1s ease;
+}
+
+.custom-dropdown.visible {
+    opacity: 1;
+    transform: scale(1);
+}
+
+/* Компактные опции */
+.custom-dropdown-option {
+    padding: 4px 12px;
+    cursor: pointer;
+    color: white;
+    font-size: 11px;
+    font-weight: 500;
+    text-align: center;
+    transition: background 0.1s ease;
+    border-bottom: 1px solid #2a2a2a;
+}
+
+.custom-dropdown-option:last-child {
+    border-bottom: none;
+}
+
+.custom-dropdown-option:hover {
+    filter: brightness(1.15);
+}
+
+/* Выбранный пункт - просто чуть ярче */
+.custom-dropdown-option.selected {
+    filter: brightness(1.1);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2);
+}
+
+/* Цвета для рейтингов */
+.custom-dropdown-option[data-rating="5"] { background-color: var(--rating-5); }
+.custom-dropdown-option[data-rating="4"] { background-color: var(--rating-4); }
+.custom-dropdown-option[data-rating="3"] { background-color: var(--rating-3); }
+.custom-dropdown-option[data-rating="2"] { background-color: var(--rating-2); }
+.custom-dropdown-option[data-rating="1"] { background-color: var(--rating-1); }
+.custom-dropdown-option[data-rating="0"] { background-color: var(--rating-0); }
+.custom-dropdown-option[data-rating="-1"] { background-color: var(--rating--1); }
+.custom-dropdown-option[data-rating="-2"] { background-color: var(--rating--2); }
+.custom-dropdown-option[data-rating="-3"] { background-color: var(--rating--3); }
+.custom-dropdown-option[data-rating="-4"] { background-color: var(--rating--4); }
+.custom-dropdown-option[data-rating="-5"] { background-color: var(--rating--5); }
+
+/* Цвета для статусов */
+.custom-dropdown-option[data-status="Уточнить"] { background-color: var(--rating-not-played); }
+.custom-dropdown-option[data-status="Смотрел"] { background-color: var(--rating-played); }
+.custom-dropdown-option[data-status="В процессе"] { background-color: var(--rating-playing); }
+.custom-dropdown-option[data-status="В планах"] { background-color: var(--rating-planed); }
+.custom-dropdown-option[data-status="Завершено"] { background-color: var(--rating-completed); }
+.custom-dropdown-option[data-status="Избранное"] { background-color: var(--rating-pined); }
+.custom-dropdown-option[data-status="Импортировано"] { background-color: var(--rating-imported); }
+.custom-dropdown-option[data-status="Ожидается"] { background-color: var(--rating-waiting); }

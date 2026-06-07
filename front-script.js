@@ -1601,7 +1601,6 @@ async function showEditableDropdown(field, valueDisplay) {
     const currentValue = isRating ? field.dataset.rating : field.dataset.status;
     const itemName = field.dataset.name;
 
-    // Получаем доступные значения
     let values;
     if (isRating) {
         values = await window.electronAPI.getRatings();
@@ -1609,48 +1608,58 @@ async function showEditableDropdown(field, valueDisplay) {
         values = await window.electronAPI.getStatusesNoImport();
     }
 
-    // Создаем список
-    const list = document.createElement('div');
-    list.className = 'editable-select-list';
+    // Создаём кастомный список
+    const dropdown = document.createElement('div');
+    dropdown.className = 'custom-dropdown';
 
-    // Получаем позицию элемента
+    // Позиционируем относительно поля
     const rect = valueDisplay.getBoundingClientRect();
     const viewportHeight = window.innerHeight;
-    const listHeight = Math.min(values.length * 32 + 20, 250); // Предполагаемая высота списка
-
-    // Определяем, где показывать список: снизу или сверху
-    const spaceBelow = viewportHeight - rect.bottom - 10;
-    const spaceAbove = rect.top - 10;
-
-    let listTop;
-    let openDirection = 'below';
-
-    // Если внизу достаточно места или места сверху меньше
-    if (spaceBelow >= listHeight || spaceBelow >= spaceAbove) {
-        // Показываем снизу
-        listTop = rect.bottom + 5;
-        openDirection = 'below';
+    let dropdownHeight;
+    if (isRating) {
+        dropdownHeight = Math.min(values.length * 32 + 8, 265);
     } else {
-        // Показываем сверху
-        listTop = rect.top - listHeight - 5;
-        openDirection = 'above';
+        dropdownHeight = Math.min(values.length * 28 + 8, 170); // статусов меньше, но строки ниже
     }
 
-    // Позиционируем список
-    list.style.position = 'fixed';
-    list.style.top = listTop + 'px';
-    list.style.left = rect.left + 'px';
-    list.style.minWidth = rect.width + 'px';
+// Отступ от кнопки (5px)
+    const gap = 5;
 
-    // Добавляем класс направления для стилей CSS
-    list.dataset.direction = openDirection;
+// Пытаемся показать снизу
+    let top = rect.bottom + gap;
+    let openDirection = 'down';
+
+// Если не влезает снизу - показываем сверху
+    if (top + dropdownHeight > viewportHeight - gap) {
+        top = rect.top - dropdownHeight - gap;
+        openDirection = 'up';
+    }
+
+// Если и сверху не влезает - прижимаем к верху/низу экрана
+    if (top < gap) {
+        top = gap;
+        openDirection = 'down';
+    }
+
+    dropdown.style.position = 'fixed';
+    dropdown.style.top = top + 'px';
+    dropdown.style.left = rect.left + 'px';
+    dropdown.style.minWidth = (rect.width - 10) + 'px';
+    dropdown.style.maxWidth = (rect.width + 20) + 'px';
+    dropdown.dataset.direction = openDirection;
 
     // Добавляем опции
     values.forEach(value => {
         const option = document.createElement('div');
-        option.className = `editable-select-option ${value === currentValue ? 'selected' : ''}`;
+        option.className = `custom-dropdown-option ${value === currentValue ? 'selected' : ''}`;
         option.textContent = value;
-        option.dataset.value = value;
+
+        // Добавляем атрибут для цвета
+        if (isRating) {
+            option.setAttribute('data-rating', value);
+        } else {
+            option.setAttribute('data-status', value);
+        }
 
         option.addEventListener('click', async (e) => {
             e.stopPropagation();
@@ -1658,26 +1667,32 @@ async function showEditableDropdown(field, valueDisplay) {
             closeDropdown();
         });
 
-        list.appendChild(option);
+        dropdown.appendChild(option);
     });
 
-    document.body.appendChild(list);
+    document.body.appendChild(dropdown);
 
-    // Показываем overlay
-    const overlay = document.getElementById('editable-select-overlay');
-    overlay.style.display = 'block';
+    // Анимация появления
+    requestAnimationFrame(() => {
+        dropdown.classList.add('visible');
+    });
 
-    // Закрытие при клике на overlay
+    // Затемнение фона
+    const overlay = document.createElement('div');
+    overlay.className = 'custom-dropdown-overlay';
     overlay.onclick = closeDropdown;
+    document.body.appendChild(overlay);
 
     function closeDropdown() {
-        if (list.parentNode) {
-            document.body.removeChild(list);
-        }
-        overlay.style.display = 'none';
-        overlay.onclick = null;
+        dropdown.classList.remove('visible');
+        overlay.classList.remove('visible');
+        setTimeout(() => {
+            if (dropdown.parentNode) dropdown.remove();
+            if (overlay.parentNode) overlay.remove();
+        }, 150);
     }
 }
+
 async function updateFieldValue(field, valueDisplay, newValue, itemName, isRating) {
     try {
         const section = document.querySelector('.nav-item.active')?.dataset.section;
