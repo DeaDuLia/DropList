@@ -1492,16 +1492,19 @@ function renderCardList(cards) {
                     <img src="assets/icons/search-web.svg" alt="🔍">
                 </div>
                 <div class="card-buttons">
-                    <button class="card-btn edit-desc-btn" data-name="${escapeHtml(card.name)}" title="Редактировать заметку">
+                    <button class="card-btn edit-desc-btn" data-name="${escapeHtml(card.name)}">
                         <img src="assets/icons/note.svg" alt="📝" class="button-icon-no-text">
+                        <span class="btn-text">Заметки</span>
                     </button>
-                    <button class="card-btn change-image-btn" data-name="${escapeHtml(card.name)}" title="Сменить картинку">
+                    <button class="card-btn change-image-btn" data-name="${escapeHtml(card.name)}">
                         <img src="assets/icons/changeImage.svg" alt="🖼️" class="button-icon-no-text">
+                        <span class="btn-text">Обложка</span>
                     </button>
-                    <button class="card-btn change-category-btn" data-name="${escapeHtml(card.name)}" data-status="${card.status}" data-rating="${card.rating}" datatype="${card.icoUrl}" title="Сменить категорию">
+                    <button class="card-btn change-category-btn" data-name="${escapeHtml(card.name)}" data-status="${card.status}" data-rating="${card.rating}" datatype="${card.icoUrl}">
                         <img src="assets/icons/changeCategory.svg" alt="⇄" class="button-icon-no-text">
+                        <span class="btn-text">Переместить</span>
                     </button>
-                    <button class="card-btn delete-btn" data-name="${escapeHtml(card.name)}" title="Удалить">
+                    <button class="card-btn delete-btn" data-name="${escapeHtml(card.name)}">
                         <img src="assets/icons/delete.svg" alt="🗑️" class="button-icon-no-text">
                     </button>
                 </div>

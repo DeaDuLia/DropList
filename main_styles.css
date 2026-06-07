@@ -560,6 +560,7 @@ body {
     right: 8px;
     display: flex;
     flex-direction: column;
+    align-items: flex-end;
     gap: 6px;
     z-index: 5;
     opacity: 0;
@@ -571,25 +572,70 @@ body {
 }
 
 .card-btn {
-    width: 28px;
-    height: 28px;
-    background: rgba(0, 0, 0, 0.7);
-    border: 1px solid #3a3a3a;
+    background: var(--card-btns);
+    border: 1px solid #4a4a4a;
     border-radius: 6px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s;
-    background: var(--card-btns);
+    height: 28px;
+    width: 28px;
+    position: relative;
+    transition: width 0.3s ease-out;
+    overflow: hidden;
+
+}
+
+.card-btn img {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    position: absolute;
+}
+
+.card-btn .btn-text {
+    white-space: nowrap;
+    font-size: 16px;
+    color: white;
+    width: 0;
+    overflow: hidden;
 }
 
 .card-btn:hover {
-    transform: scale(1.05);
+    width: 150px;
+    min-width: 28px;
+    justify-content: flex-start;
+}
+
+.card-btn:hover img {
+    position: static;
+    margin-right: 6px;
+}
+
+.card-btn:hover .btn-text {
+    width: auto;
+    transition: width 0.3s ease-out;
 }
 
 .delete-btn {
-    background: #e81123;
+    background: red;
+}
+/* Удаление - не расширяется */
+.delete-btn:hover {
+    width: 28px;
+    justify-content: center;
+
+}
+
+.delete-btn:hover img {
+    position: absolute;
+    margin-right: 0;
+}
+
+.delete-btn:hover .btn-text {
+    width: 0;
+    opacity: 0;
 }
 
 /* Информация карточки */
