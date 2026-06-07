@@ -291,7 +291,7 @@ body {
     max-width: 100%;
 }
 #searchInput {
-    padding: 10px 40px 10px 15px; /* Правое padding для кнопки */
+    padding: 10px 40px 10px 15px;
     border: 1px solid var(--dark-main-text-color);
     background-color: var(--dark-input-background);
     color: var(--dark-main-text-color);
@@ -352,7 +352,11 @@ body {
     justify-content: center;
     margin: 0;
     padding: 0;
-    transition: background-color 0.3s ease;
+    background-color: var(--dark-input-background);
+    color: var(--dark-main-text-color);
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    box-sizing: border-box;
 }
 
 #searchBtn:hover {

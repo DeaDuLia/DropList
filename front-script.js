@@ -1036,6 +1036,15 @@ function setupSearchInput() {
         });
     }
 
+    searchInput.addEventListener('focus', () => {
+        searchBtn.style.borderColor = '#91c9d6';
+    });
+
+    // При потере фокуса - убираем подсветку
+    searchInput.addEventListener('blur', () => {
+        searchBtn.style.borderColor = 'white';
+    });
+
     // Обработчик ввода текста
     searchInput.addEventListener('input', (e) => {
         updateSuggestions(e.target.value);
