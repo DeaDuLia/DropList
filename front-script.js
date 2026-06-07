@@ -9,7 +9,8 @@ const closeDonateModal = document.getElementById('closeDonateModal');
 const randomBtn = document.getElementById('randomBtn');
 const searchInWebBtn = document.getElementById('searchInWeb');
 let addFormOverlay = null;
-
+let tooltipElement = null;
+let tooltipTimeout = null;
 
 // Кнопки шапки
 const exportBtn = document.getElementById('exportBtn');
@@ -95,6 +96,36 @@ function updateStats() {
 }
 
 
+function createTooltip() {
+    if (!tooltipElement) {
+        tooltipElement = document.createElement('div');
+        tooltipElement.className = 'card-tooltip';
+        document.body.appendChild(tooltipElement);
+    }
+    return tooltipElement;
+}
+
+function showTooltip(text, x, y) {
+    const tooltip = createTooltip();
+    tooltip.textContent = text || 'Нет заметок';
+    tooltip.style.display = 'block';
+    tooltip.style.left = (x + 15) + 'px';
+    tooltip.style.top = (y + 15) + 'px';
+}
+
+function hideTooltip() {
+    if (tooltipElement) {
+        tooltipElement.style.display = 'none';
+    }
+}
+
+function updateTooltipPosition(x, y) {
+    if (tooltipElement && tooltipElement.style.display === 'block') {
+        tooltipElement.style.left = (x + 15) + 'px';
+        tooltipElement.style.top = (y + 15) + 'px';
+    }
+}
+
 function initAddFormOverlay() {
     if (!addFormOverlay) {
         addFormOverlay = document.createElement('div');
@@ -102,6 +133,51 @@ function initAddFormOverlay() {
         document.body.appendChild(addFormOverlay);
     }
     return addFormOverlay;
+}
+
+function setupEditDescriptionButtons() {
+    document.querySelectorAll('.edit-desc-btn').forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            const itemName = btn.dataset.name;
+            const card = document.querySelector(`.data-card[data-name="${itemName}"]`);
+            const currentDesc = card?.dataset.description || '';
+
+            // Твоя стилизованная модалка
+            const modal = document.createElement('div');
+            modal.className = 'modal';
+            modal.style.display = 'block';
+            modal.innerHTML = `
+                <div class="modal-content" style="max-width: 400px;">
+                    <h3>Редактировать заметку</h3>
+                    <textarea id="editDescTextarea" rows="4" style="width: 100%; background: #1e1e1e; border: 1px solid #4a4a4a; border-radius: 8px; color: white; padding: 8px; margin: 10px 0; font-size: 13px;">${escapeHtml(currentDesc)}</textarea>
+                    <div style="display: flex; gap: 10px; margin-top: 10px;">
+                        <button class="modal-button cancel-btn" style="flex: 1;">Отмена</button>
+                        <button class="modal-button confirm-btn" style="flex: 1;">Сохранить</button>
+                    </div>
+                </div>
+            `;
+
+            document.body.appendChild(modal);
+            const textarea = modal.querySelector('#editDescTextarea');
+            textarea.focus();
+
+            modal.querySelector('.cancel-btn').onclick = () => {
+                document.body.removeChild(modal);
+            };
+
+            modal.querySelector('.confirm-btn').onclick = async () => {
+                const newDescription = textarea.value.trim();
+                const section = document.querySelector('.nav-item.active')?.dataset.section;
+
+                await window.electronAPI.updateDataDescription(section, itemName, newDescription);
+                if (card) {
+                    card.dataset.description = newDescription;
+                }
+                document.body.removeChild(modal);
+            };
+        });
+    });
 }
 
 function showSyncChoiceModal(localData, remoteData, localTime, remoteTime) {
@@ -970,6 +1046,7 @@ async function loadMoreItems() {
     setupChangeImageButtons(); // Новая функция
     setupChangeCategoryButtons(); // Новая функция
     setupCardClickHandlers();
+    setupEditDescriptionButtons();
 }
 
 async function loadStatusFilter() {
@@ -1207,6 +1284,7 @@ async function initCardSection() {
     setupCardClickHandlers();
     setupPreviewUpdate();
     updateStats();
+    setupEditDescriptionButtons();
 
 
 }
@@ -1409,16 +1487,22 @@ function escapeHtml(str) {
 
 function renderCardList(cards) {
     return cards.map(card => `
-            <div class="data-card" data-name="${escapeHtml(card.name)}" style="display: block;">
+            <div class="data-card" data-name="${escapeHtml(card.name)}" data-description="${escapeHtml(card.description || '')}" style="display: block;">
+                <div class="card-hover-icon">
+                    <img src="assets/icons/search-web.svg" alt="🔍">
+                </div>
                 <div class="card-buttons">
-                    <button class="card-btn delete-btn" data-name="${escapeHtml(card.name)}" title="Удалить">
-                        <img src="assets/icons/delete.svg" alt="🗑️" class="button-icon-no-text">
+                    <button class="card-btn edit-desc-btn" data-name="${escapeHtml(card.name)}" title="Редактировать заметку">
+                        <img src="assets/icons/note.svg" alt="📝" class="button-icon-no-text">
+                    </button>
+                    <button class="card-btn change-image-btn" data-name="${escapeHtml(card.name)}" title="Сменить картинку">
+                        <img src="assets/icons/changeImage.svg" alt="🖼️" class="button-icon-no-text">
                     </button>
                     <button class="card-btn change-category-btn" data-name="${escapeHtml(card.name)}" data-status="${card.status}" data-rating="${card.rating}" datatype="${card.icoUrl}" title="Сменить категорию">
                         <img src="assets/icons/changeCategory.svg" alt="⇄" class="button-icon-no-text">
                     </button>
-                    <button class="card-btn change-image-btn" data-name="${escapeHtml(card.name)}" title="Сменить картинку">
-                        <img src="assets/icons/changeImage.svg" alt="🖼️" class="button-icon-no-text">
+                    <button class="card-btn delete-btn" data-name="${escapeHtml(card.name)}" title="Удалить">
+                        <img src="assets/icons/delete.svg" alt="🗑️" class="button-icon-no-text">
                     </button>
                 </div>
                 ${getCardIconHTML(card)}
@@ -1455,7 +1539,8 @@ async function addNewData(section) {
         name: nameInput.value.trim(),
         icoUrl: icoInput.value.trim(),
         rating: ratingSelect.value,
-        status: statusSelect.value
+        status: statusSelect.value,
+        description: ''
     };
 
     if (!cardData.name) {
@@ -2052,9 +2137,26 @@ function setupCardClickHandlers() {
 
     document.querySelectorAll('.data-card').forEach(card => {
         card.style.cursor = 'pointer';
+
+        card.addEventListener('mouseenter', (e) => {
+            const description = card.dataset.description || '';
+            if (description) { showTooltip(description, e.clientX, e.clientY); }
+
+        });
+
+        card.addEventListener('mousemove', (e) => {
+            if (tooltipElement && tooltipElement.style.display === 'block') {
+                updateTooltipPosition(e.clientX, e.clientY);
+            }
+        });
+
+        card.addEventListener('mouseleave', () => {
+            hideTooltip();
+        });
+
         card.addEventListener('click', async function(e) {
-            // Проверяем, не кликнули ли на внутренние кнопки
-            if (e.target.closest('.change-image-btn') ||
+            if (e.target.closest('.edit-desc-btn') ||
+                e.target.closest('.change-image-btn') ||
                 e.target.closest('.change-category-btn') ||
                 e.target.closest('.delete-btn') ||
                 e.target.closest('.data-title') ||
