@@ -291,7 +291,7 @@ body {
     max-width: 100%;
 }
 #searchInput {
-    padding: 10px 40px 10px 15px; /* Правое padding для кнопки */
+    padding: 10px 40px 10px 15px;
     border: 1px solid var(--dark-main-text-color);
     background-color: var(--dark-input-background);
     color: var(--dark-main-text-color);
@@ -352,7 +352,11 @@ body {
     justify-content: center;
     margin: 0;
     padding: 0;
-    transition: background-color 0.3s ease;
+    background-color: var(--dark-input-background);
+    color: var(--dark-main-text-color);
+    font-size: 1rem;
+    transition: all 0.3s ease;
+    box-sizing: border-box;
 }
 
 #searchBtn:hover {
@@ -556,6 +560,7 @@ body {
     right: 8px;
     display: flex;
     flex-direction: column;
+    align-items: flex-end;
     gap: 6px;
     z-index: 5;
     opacity: 0;
@@ -567,25 +572,70 @@ body {
 }
 
 .card-btn {
-    width: 28px;
-    height: 28px;
-    background: rgba(0, 0, 0, 0.7);
-    border: 1px solid #3a3a3a;
+    background: var(--card-btns);
+    border: 1px solid #4a4a4a;
     border-radius: 6px;
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    transition: all 0.2s;
-    background: var(--card-btns);
+    height: 28px;
+    width: 28px;
+    position: relative;
+    transition: width 0.3s ease-out;
+    overflow: hidden;
+
+}
+
+.card-btn img {
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    position: absolute;
+}
+
+.card-btn .btn-text {
+    white-space: nowrap;
+    font-size: 16px;
+    color: white;
+    width: 0;
+    overflow: hidden;
 }
 
 .card-btn:hover {
-    transform: scale(1.05);
+    width: 150px;
+    min-width: 28px;
+    justify-content: flex-start;
+}
+
+.card-btn:hover img {
+    position: static;
+    margin-right: 6px;
+}
+
+.card-btn:hover .btn-text {
+    width: auto;
+    transition: width 0.3s ease-out;
 }
 
 .delete-btn {
-    background: #e81123;
+    background: red;
+}
+/* Удаление - не расширяется */
+.delete-btn:hover {
+    width: 28px;
+    justify-content: center;
+
+}
+
+.delete-btn:hover img {
+    position: absolute;
+    margin-right: 0;
+}
+
+.delete-btn:hover .btn-text {
+    width: 0;
+    opacity: 0;
 }
 
 /* Информация карточки */
@@ -609,6 +659,11 @@ body {
     opacity: 0.6;
     position: relative;
     display: inline-block;
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .data-card:hover .data-title {
@@ -928,7 +983,6 @@ select option {
     border-color: var(--dark-main-text-color);
 }
 
-
 input:focus, select:focus {
     box-shadow: 0 0 0 2px var(--dark-input-shadow);
     border-color: var(--dark-input-border-focus);
@@ -1005,79 +1059,6 @@ input:focus, select:focus {
     opacity: 0;
     cursor: pointer;
     z-index: 5;
-}
-
-/* Стили для отображения списка */
-.editable-select-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background-color: transparent;
-    z-index: 999;
-    display: none;
-}
-
-.editable-select-list {
-    position: absolute;
-    background-color: var(--dark-modal-background);
-    border: 1px solid var(--dark-main-text-color);
-    border-radius: 8px;
-    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
-    max-height: 250px;
-    overflow-y: auto;
-    z-index: 1000;
-    min-width: 150px;
-    animation: fadeIn 0.2s ease;
-}
-
-@keyframes fadeIn {
-    from {
-        opacity: 0;
-        transform: translateY(-10px);
-    }
-    to {
-        opacity: 1;
-        transform: translateY(0);
-    }
-}
-
-.editable-select-option {
-    padding: 8px 12px;
-    cursor: pointer;
-    color: var(--dark-main-text-color);
-    transition: background-color 0.2s;
-    white-space: nowrap;
-    font-size: 0.9rem;
-}
-
-.editable-select-option:hover {
-    background-color: var(--dark-input-hover-background);
-}
-
-.editable-select-option.selected {
-    background-color: var(--dark-primary-color);
-    color: white;
-}
-
-/* Стили для скроллбара в списке */
-.editable-select-list::-webkit-scrollbar {
-    width: 6px;
-}
-
-.editable-select-list::-webkit-scrollbar-track {
-    background: var(--dark-scroll-backgroud);
-    border-radius: 3px;
-}
-
-.editable-select-list::-webkit-scrollbar-thumb {
-    background: var(--dark-scroll-tracker);
-    border-radius: 3px;
-}
-
-.editable-select-list::-webkit-scrollbar-thumb:hover {
-    background: var(--dark-primary-color);
 }
 
 .add-button-container {
@@ -1870,4 +1851,156 @@ body {
 
 .title-stat-total {
     opacity: 0.7;
+}
+
+.custom-dropdown-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.2);
+    z-index: 998;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.custom-dropdown-overlay.visible {
+    opacity: 1;
+}
+
+.custom-dropdown {
+    position: fixed;
+    background: #1e1e1e;
+    border: 1px solid #3a3a3a;
+    border-radius: 8px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    z-index: 999;
+    overflow: hidden;
+    opacity: 0;
+    transform: scale(0.98);
+    transition: all 0.1s ease;
+}
+
+.custom-dropdown.visible {
+    opacity: 1;
+    transform: scale(1);
+}
+
+/* Компактные опции */
+.custom-dropdown-option {
+    padding: 4px 12px;
+    cursor: pointer;
+    color: white;
+    font-size: 11px;
+    font-weight: 500;
+    text-align: center;
+    transition: background 0.1s ease;
+    border-bottom: 1px solid #2a2a2a;
+}
+
+.custom-dropdown-option:last-child {
+    border-bottom: none;
+}
+
+.custom-dropdown-option:hover {
+    filter: brightness(1.15);
+}
+
+/* Выбранный пункт - просто чуть ярче */
+.custom-dropdown-option.selected {
+    filter: brightness(1.1);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.2);
+}
+
+/* Цвета для рейтингов */
+.custom-dropdown-option[data-rating="5"] { background-color: var(--rating-5); }
+.custom-dropdown-option[data-rating="4"] { background-color: var(--rating-4); }
+.custom-dropdown-option[data-rating="3"] { background-color: var(--rating-3); }
+.custom-dropdown-option[data-rating="2"] { background-color: var(--rating-2); }
+.custom-dropdown-option[data-rating="1"] { background-color: var(--rating-1); }
+.custom-dropdown-option[data-rating="0"] { background-color: var(--rating-0); }
+.custom-dropdown-option[data-rating="-1"] { background-color: var(--rating--1); }
+.custom-dropdown-option[data-rating="-2"] { background-color: var(--rating--2); }
+.custom-dropdown-option[data-rating="-3"] { background-color: var(--rating--3); }
+.custom-dropdown-option[data-rating="-4"] { background-color: var(--rating--4); }
+.custom-dropdown-option[data-rating="-5"] { background-color: var(--rating--5); }
+
+/* Цвета для статусов */
+.custom-dropdown-option[data-status="Уточнить"] { background-color: var(--rating-not-played); }
+.custom-dropdown-option[data-status="Смотрел"] { background-color: var(--rating-played); }
+.custom-dropdown-option[data-status="В процессе"] { background-color: var(--rating-playing); }
+.custom-dropdown-option[data-status="В планах"] { background-color: var(--rating-planed); }
+.custom-dropdown-option[data-status="Завершено"] { background-color: var(--rating-completed); }
+.custom-dropdown-option[data-status="Избранное"] { background-color: var(--rating-pined); }
+.custom-dropdown-option[data-status="Импортировано"] { background-color: var(--rating-imported); }
+.custom-dropdown-option[data-status="Ожидается"] { background-color: var(--rating-waiting); }
+
+select option[value="5"] { background-color: var(--rating-5); color: white; }
+select option[value="4"] { background-color: var(--rating-4); color: white; }
+select option[value="3"] { background-color: var(--rating-3); color: white; }
+select option[value="2"] { background-color: var(--rating-2); color: white; }
+select option[value="1"] { background-color: var(--rating-1); color: white; }
+select option[value="0"] { background-color: var(--rating-0); color: white; }
+select option[value="-1"] { background-color: var(--rating--1); color: white; }
+select option[value="-2"] { background-color: var(--rating--2); color: white; }
+select option[value="-3"] { background-color: var(--rating--3); color: white; }
+select option[value="-4"] { background-color: var(--rating--4); color: white; }
+select option[value="-5"] { background-color: var(--rating--5); color: white; }
+
+/* Цвета для option в статусах */
+select option[value="Уточнить"] { background-color: var(--rating-not-played); color: white; }
+select option[value="Смотрел"] { background-color: var(--rating-played); color: white; }
+select option[value="В процессе"] { background-color: var(--rating-playing); color: white; }
+select option[value="В планах"] { background-color: var(--rating-planed); color: white; }
+select option[value="Завершено"] { background-color: var(--rating-completed); color: white; }
+select option[value="Избранное"] { background-color: var(--rating-pined); color: white; }
+select option[value="Импортировано"] { background-color: var(--rating-imported); color: white; }
+select option[value="Ожидается"] { background-color: var(--rating-waiting); color: white; }
+
+.card-tooltip {
+    position: fixed;
+    max-width: 260px;
+    background: rgba(5, 5, 5, 0.75);
+    border: 2px solid #4a9eff;
+    border-radius: 10px;
+    padding: 10px 12px;
+    color: #e0e0e0;
+    font-size: 12px;
+    line-height: 1.4;
+    z-index: 1000;
+    pointer-events: none;
+    backdrop-filter: blur(2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+}
+
+.card-hover-icon {
+    position: absolute;
+    top: 35%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 60px;
+    height: 60px;
+    background: rgba(0, 0, 0, 0.4);
+    border: 2px solid rgba(0, 0, 0, 0.3);
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 5;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+}
+
+.data-card:hover .card-hover-icon {
+    opacity: 1;
+    transform: translate(-50%, -50%) scale(1);
+}
+
+.card-hover-icon img {
+    width: 56px;
+    height: 56px;
+    filter: brightness(0) invert(1);
+    opacity: 0.9;
 }
