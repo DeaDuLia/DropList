@@ -94,6 +94,7 @@ function updateStats() {
     if (totalSpan) totalSpan.textContent = total;
 }
 
+
 function initAddFormOverlay() {
     if (!addFormOverlay) {
         addFormOverlay = document.createElement('div');
