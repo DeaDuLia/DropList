@@ -470,12 +470,12 @@ const statements = {
         VALUES (?, ?, ?, ?, ?, ?)`),
     getDataBySection: db.prepare(`
         SELECT name as name, ico_url as icoUrl, 
-               rating as rating, status as status 
+               rating as rating, status as status, description as description
         FROM data_cards WHERE section = ?`),
     addData: db.prepare(`
         INSERT OR REPLACE INTO data_cards 
-        (name, section, ico_url, rating, status) 
-        VALUES (?, ?, ?, ?, ?)`),
+        (name, section, ico_url, rating, status, description) 
+        VALUES (?, ?, ?, ?, ?, ?)`),
     deleteData: db.prepare('DELETE FROM data_cards WHERE name = ? and section = ?'),
     updateSection: db.prepare('UPDATE data_cards SET section = ? WHERE name = ? and section = ?'),
     updateData: db.prepare('UPDATE data_cards SET name = ?, ico_url = ? WHERE name = ? and section = ?'),
@@ -796,7 +796,7 @@ ipcMain.handle('get-data', async (event, section) => {
 });
 
 ipcMain.handle('add-data', async (event, section, data) => {
-    const result = statements.addData.run(data.name, section, data.icoUrl || null, data.rating, data.status || 'Уточнить');
+    const result = statements.addData.run(data.name, section, data.icoUrl || null, data.rating, data.status || 'Уточнить', data.description);
     markSectionDirty(section);
     // Обновляем локальное время синхронизации (данные изменились)
     const now = new Date().toISOString();
@@ -1532,3 +1532,12 @@ async function getValidToken() {
     console.log('[!] No refresh token available');
     return null;
 }
+
+ipcMain.handle('update-data-description', async (event, section, name, description) => {
+    const stmt = db.prepare('UPDATE data_cards SET description = ? WHERE name = ? AND section = ?');
+    const result = stmt.run(description, name, section);
+    markSectionDirty(section);
+    const now = new Date().toISOString();
+    statements.setStatistic.run('last_firestore_update', now, now);
+    return result;
+});
