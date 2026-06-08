@@ -1128,9 +1128,19 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
 function filterData(data, searchQuery, statusFilter) {
     const queryLower = (searchQuery || '').toLowerCase();
     return data.filter(item => {
+        // Поиск по названию
         const nameMatches = !queryLower || item.name.toLowerCase().includes(queryLower);
+
+        // Поиск по тегам
+        let tagMatches = false;
+        if (queryLower && item.tags && item.tags.length) {
+            tagMatches = item.tags.some(tag => tag.toLowerCase().includes(queryLower));
+        }
+
+        const matchesSearch = !queryLower || nameMatches || tagMatches;
         const statusMatches = statusFilter === 'Все' || item.status === statusFilter;
-        return nameMatches && statusMatches;
+
+        return matchesSearch && statusMatches;
     });
 }
 
@@ -1274,22 +1284,46 @@ function setupSearchInput() {
             return;
         }
 
-        const matches = window.allSectionData.filter(item =>
+        // Собираем совпадения по названиям
+        const nameMatches = window.allSectionData.filter(item =>
             item.name.toLowerCase().includes(queryLower)
-        ).slice(0, 5);
+        ).slice(0, 3);
 
-        if (matches.length > 0) {
-            searchSuggestions.innerHTML = matches.map(item => `
-            <div class="suggestion-item">${item.name}</div>
-        `).join('');
-            searchSuggestions.style.display = 'block';
+        // Собираем совпадения по тегам
+        const tagMatches = [];
+        const uniqueTags = new Set();
 
-            // 👇 Устанавливаем ширину подсказок равной ширине searchInput
-            const searchInputRect = searchInput.getBoundingClientRect();
-            searchSuggestions.style.width = searchInputRect.width + 'px';
-        } else {
+        window.allSectionData.forEach(item => {
+            if (item.tags && item.tags.length) {
+                item.tags.forEach(tag => {
+                    if (tag.toLowerCase().includes(queryLower) && !uniqueTags.has(tag)) {
+                        uniqueTags.add(tag);
+                        tagMatches.push({ type: 'tag', value: tag });
+                    }
+                });
+            }
+        });
+
+        // Объединяем и показываем
+        const suggestions = [
+            ...nameMatches.map(item => ({ type: 'name', value: item.name })),
+            ...tagMatches.slice(0, 3)
+        ].slice(0, 6);
+
+        if (suggestions.length === 0) {
             searchSuggestions.style.display = 'none';
+            return;
         }
+
+        searchSuggestions.innerHTML = suggestions.map(s => `
+        <div class="suggestion-item ${s.type === 'tag' ? 'suggestion-tag' : ''}" data-value="${escapeHtml(s.value)}" data-type="${s.type}">
+            ${escapeHtml(s.value)}
+        </div>
+    `).join('');
+
+        searchSuggestions.style.display = 'block';
+        const searchInputRect = searchInput.getBoundingClientRect();
+        searchSuggestions.style.width = searchInputRect.width + 'px';
     }
 
     const clearSearchBtn = document.getElementById('clearSearchBtn');
@@ -1315,14 +1349,15 @@ function setupSearchInput() {
         updateSuggestions(e.target.value);
     });
 
-    // Обработчик клика по подсказке
     searchSuggestions.addEventListener('click', (e) => {
-        if (e.target.classList.contains('suggestion-item')) {
-            searchInput.value = e.target.textContent;
+        const suggestion = e.target.closest('.suggestion-item');
+        if (suggestion) {
+            searchInput.value = suggestion.dataset.value;
             searchSuggestions.style.display = 'none';
+
+            // Сбрасываем фильтр статуса на "Все"
             if (currentFilters.statusFilter !== 'Все') {
                 currentFilters.statusFilter = 'Все';
-                // Обновляем активную кнопку фильтра
                 document.querySelectorAll('.filter-button').forEach(btn => {
                     btn.classList.remove('active');
                     if (btn.dataset.status === 'Все') {
@@ -1330,7 +1365,7 @@ function setupSearchInput() {
                     }
                 });
             }
-            filterCards(e.target.textContent);
+            filterCards(suggestion.dataset.value);
         }
     });
 

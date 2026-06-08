@@ -2153,3 +2153,12 @@ select option[value="Ожидается"] { background-color: var(--rating-waiti
     outline: none;
     box-shadow: 0 0 0 2px #4a9eff;
 }
+
+.suggestion-tag {
+    color: #4a9eff;
+}
+
+.suggestion-tag::before {
+    content: '#';
+    margin-right: 2px;
+}
