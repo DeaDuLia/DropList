@@ -858,9 +858,17 @@ ipcMain.handle('get-data', async (event, section) => {
 });
 
 ipcMain.handle('add-data', async (event, section, data) => {
-    const result = statements.addData.run(data.name, section, data.icoUrl || null, data.rating, data.status || 'Уточнить', data.description);
+    const result = statements.addData.run(
+        data.name,
+        section,
+        data.icoUrl || null,
+        data.rating,
+        data.status || 'Уточнить',
+        data.description || ''
+    );
 
-    if (data.tags && Array.isArray(data.tags)) {
+    // ← ДОБАВЛЯЕМ ТЭГИ
+    if (data.tags && Array.isArray(data.tags) && data.tags.length > 0) {
         for (const tag of data.tags) {
             statements.addTagToCard.run(data.name, tag);
             statements.addOrUpdateTag.run(tag);

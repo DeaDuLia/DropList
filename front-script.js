@@ -193,8 +193,8 @@ function setupEditDescriptionButtons() {
                     
                     <!-- Поле для тегов -->
                     <label style="font-size: 12px; opacity: 0.7; margin-bottom: 4px;">Теги (через запятую или Enter)</label>
-                    <div class="tags-input-wrapper" style="background: #1e1e1e; border: 1px solid #4a4a4a; border-radius: 8px; padding: 6px; margin-bottom: 16px;">
-                        <div class="tags-list" id="modalTagsList" style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px;">
+                    <div class="tags-input-wrapper" >
+                        <div class="tags-list" id="modalTagsList">
                             ${currentTags.map(tag => `
                                 <span class="tag" data-tag="${escapeHtml(tag)}">
                                     ${escapeHtml(tag)}
@@ -202,7 +202,7 @@ function setupEditDescriptionButtons() {
                                 </span>
                             `).join('')}
                         </div>
-                        <input type="text" id="tagInput" placeholder="Например: хоррор, комедия, шедевр" autocomplete="off" style="width: 100%; background: transparent; border: none; color: white; font-size: 13px; outline: none; padding: 4px;">
+                        <input type="text" id="tagInput" placeholder="Например: хоррор, комедия, шедевр" autocomplete="off">
                     </div>
                     <div id="tagSuggestions" class="tag-suggestions" style="display: none;"></div>
                     
@@ -1497,6 +1497,7 @@ async function initCardSection() {
 
     // Настраиваем кнопку добавления
     setupAddButton();
+    setupAddFormTags();
 
     setupDeleteButtons();
     setupEditableFields();
@@ -1679,25 +1680,33 @@ function getAddFormHTML(addMoreChecked = false, visible = '') {
                 </div>
                 <div class="form-fields">
                     <div class="form-group">
-                        <div class="icon-input-container">
-                            <input id="nameInput" placeholder="Название" autocomplete="off">
-                        </div>
+                        <input id="nameInput" placeholder="Название" autocomplete="off" style="width: 100%;">
                     </div>
-                    <div class="form-group">
-                        <div class="icon-input-container" style="display: flex; gap: 8px;">
-                            <input id="icoInput" placeholder="Ссылка на обложку" autocomplete="off" style="display: none;">
+                    
+                    <!-- Поле для тегов - теперь на всю ширину -->
+                    <div class="form-group" style="display: block; width: 100%;">
+                        <div class="tags-input-wrapper">
+                            <div class="tags-list" id="addFormTagsList">
+                                <!-- Теги будут добавляться сюда -->
+                            </div>
+                            <input type="text" id="addFormTagInput" placeholder="Добавить теги (нажмите Enter или запятую)" autocomplete="off">
                         </div>
+                        <div id="addFormTagSuggestions" class="tag-suggestions"></div>
                     </div>
+                    
                     <div class="form-group">
-                        <select id="ratingSelect">
+                        <input id="icoInput" placeholder="Ссылка на обложку" autocomplete="off" style="display: none; width: 100%;">
+                    </div>
+                    <div class="form-group" style="display: flex; gap: 10px;">
+                        <select id="ratingSelect" style="flex: 1;">
                             <option value="0">Выберите рейтинг</option>
                         </select>
-                        <select id="statusSelect">
+                        <select id="statusSelect" style="flex: 1;">
                             <option value="Уточнить">Выберите статус</option>
                         </select>
                     </div>
-                    <div class="form-group add-more-container">
-                        <button id="addBtn" class="add-button-compact">
+                    <div class="form-group">
+                        <button id="addBtn" class="add-button-compact" style="width: 100%; background: #0078d4; border: none; border-radius: 8px; padding: 10px; color: white; font-weight: 500; cursor: pointer; transition: all 0.2s;">
                             Добавить
                         </button>
                     </div>
@@ -1705,6 +1714,168 @@ function getAddFormHTML(addMoreChecked = false, visible = '') {
             </div>
         </div>
     `;
+}
+
+function setupAddFormTags() {
+    let tagInput = document.getElementById('addFormTagInput');
+    const tagsList = document.getElementById('addFormTagsList');
+    const suggestionsDiv = document.getElementById('addFormTagSuggestions');
+    let tags = [];
+
+    if (!tagInput) return;
+
+    if (suggestionsDiv) {
+        suggestionsDiv.style.display = 'none';
+    }
+
+    function positionSuggestions() {
+        const rect = tagInput.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return;
+
+        suggestionsDiv.style.position = 'fixed';
+        suggestionsDiv.style.top = (rect.bottom + 5) + 'px';
+        suggestionsDiv.style.left = rect.left + 'px';
+        suggestionsDiv.style.width = rect.width + 'px';
+        suggestionsDiv.style.minWidth = rect.width + 'px';
+        suggestionsDiv.style.maxWidth = rect.width + 'px';
+        suggestionsDiv.style.zIndex = '10001';
+    }
+
+    function renderTags() {
+        tagsList.innerHTML = tags.map(tag => `
+            <span class="tag" data-tag="${escapeHtml(tag)}">
+                ${escapeHtml(tag)}
+                <button type="button" class="tag-remove" data-tag="${escapeHtml(tag)}">×</button>
+            </span>
+        `).join('');
+
+        tagsList.querySelectorAll('.tag-remove').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const tagToRemove = btn.dataset.tag;
+                tags = tags.filter(t => t !== tagToRemove);
+                renderTags();
+            });
+        });
+    }
+
+    async function showSuggestions(query) {
+        if (query.length < 2) {
+            hideSuggestions();
+            return;
+        }
+
+        const queryLower = query.toLowerCase();
+        const matches = await window.electronAPI.searchTags(queryLower);
+        const lowerTags = tags.map(t => t.toLowerCase());
+        const availableTags = matches
+            .filter(t => !lowerTags.includes(t.toLowerCase()))
+            .slice(0, 5);
+
+        if (availableTags.length === 0) {
+            hideSuggestions();
+            return;
+        }
+
+        suggestionsDiv.innerHTML = availableTags.map(tag => `
+            <div class="tag-suggestion" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</div>
+        `).join('');
+
+        setTimeout(() => {
+            positionSuggestions();
+            suggestionsDiv.style.display = 'block';
+        }, 10);
+
+        suggestionsDiv.querySelectorAll('.tag-suggestion').forEach(sug => {
+            sug.addEventListener('click', () => {
+                addTag(sug.dataset.tag);
+                newTagInput.value = '';
+            });
+        });
+    }
+
+    function hideSuggestions() {
+        suggestionsDiv.style.display = 'none';
+    }
+
+    function addTag(tagName) {
+        tagName = tagName.toLowerCase().trim();
+        if (!tagName) return;
+
+        if (tagName.includes(',')) {
+            const parts = tagName.split(',').map(p => p.trim()).filter(p => p);
+            parts.forEach(part => addTag(part));
+            return;
+        }
+
+        if (tags.includes(tagName)) return;
+        tags.push(tagName);
+        renderTags();
+
+        tagInput.value = '';
+
+        hideSuggestions();
+        tagInput.focus();
+    }
+
+    let newTagInput = tagInput.cloneNode(true);
+    tagInput.parentNode.replaceChild(newTagInput, tagInput);
+
+    // Используем newTagInput для обработчиков
+    newTagInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && newTagInput.value.trim()) {
+
+            e.preventDefault();
+            addTag(newTagInput.value);
+            newTagInput.value = '';
+        } else if (e.key === 'Backspace' && !newTagInput.value && tags.length > 0) {
+
+            e.preventDefault();
+            tags.pop();
+            renderTags();
+            newTagInput.value = '';
+        } else if (e.key === ',' && newTagInput.value.trim()) {
+
+            e.preventDefault();
+            addTag(newTagInput.value);
+            newTagInput.value = '';
+        }
+    });
+
+    newTagInput.addEventListener('input', (e) => {
+        const value = e.target.value;
+        if (value.endsWith(',')) {
+            addTag(value.slice(0, -1));
+        } else {
+            showSuggestions(value);
+        }
+    });
+
+    newTagInput.addEventListener('focus', () => {
+        if (newTagInput.value.length >= 2) {
+            showSuggestions(newTagInput.value);
+        }
+    });
+
+    window.addEventListener('resize', () => {
+        if (suggestionsDiv.style.display === 'block') {
+            positionSuggestions();
+        }
+    });
+
+    document.addEventListener('click', function closeSuggestions(e) {
+        if (!suggestionsDiv.contains(e.target) && e.target !== newTagInput) {
+            hideSuggestions();
+        }
+    });
+
+    window.getAddFormTags = () => tags;
+    window.clearAddFormTags = () => {
+        tags = [];
+        renderTags();
+        tagInput.value = '';
+        hideSuggestions();
+    };
 }
 
 function escapeHtml(str) {
@@ -1775,13 +1946,16 @@ async function addNewData(section) {
     const ratingSelect = document.getElementById('ratingSelect');
     const statusSelect = document.getElementById('statusSelect');
 
+    // Получаем теги из формы
+    const tags = window.getAddFormTags ? window.getAddFormTags() : [];
+
     const cardData = {
         name: nameInput.value.trim(),
         icoUrl: icoInput.value.trim(),
         rating: ratingSelect.value,
         status: statusSelect.value,
         description: '',
-        tags: []
+        tags: tags
     };
 
     if (!cardData.name) {
@@ -1805,7 +1979,10 @@ async function addNewData(section) {
                 return;
             }
         }
+
+        // ← В ЭТОЙ СТРОКЕ ТЭГИ ДОЛЖНЫ ПЕРЕДАВАТЬСЯ
         await window.electronAPI.addData(section, cardData);
+
         // Перезагружаем данные и рендерим раздел заново
         let data = await window.electronAPI.getData(section);
         await renderSection(section, data, true, false, false, true);
@@ -1816,6 +1993,13 @@ async function addNewData(section) {
         }
         let overlay = document.querySelector('.add-form-overlay');
         overlay.classList.remove('visible');
+
+        // Очищаем форму
+        nameInput.value = '';
+        icoInput.value = '';
+        if (window.clearAddFormTags) {
+            window.clearAddFormTags();
+        }
     } catch (error) {
         console.error('Ошибка при добавлении:', error);
         await showError(`Ошибка при добавлении: ${error.message}`);

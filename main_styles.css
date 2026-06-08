@@ -493,7 +493,7 @@ body {
     box-shadow: 0 0 0 2px rgba(162, 155, 254, 0.2);
 }
 
-.add-form input::placeholder {
+    .add-form input::placeholder {
     color: rgba(255, 255, 255, 0.5);
     font-size: 0.85rem;
 }
@@ -2032,76 +2032,215 @@ select option[value="Ожидается"] { background-color: var(--rating-waiti
     filter: brightness(0) invert(1);
     opacity: 0.9;
 }
+/* ========== ТЭГИ ========== */
 
-/* ТЭГИ */
+/* Базовый контейнер для ввода тегов */
+.tags-input-wrapper {
+    background: var(--dark-input-background);
+    border: 1px solid var(--dark-main-text-color);
+    border-radius: 8px;
+    padding: 8px 10px;
+    width: 100%;
+    box-sizing: border-box;
+    transition: all 0.2s ease;
+}
+
+.tags-input-wrapper:focus-within {
+    border-color: #91c9d6;
+    box-shadow: 0 0 0 2px rgba(145, 201, 214, 0.2);
+}
+
+/* Список тегов */
+.tags-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+    min-height: 28px;
+}
+
+/* Разделитель между тегами и полем ввода */
+.tags-list:not(:empty) {
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.15);
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+}
+
+/* Базовый стиль тега (единый для всех) */
 .tag {
     display: inline-flex;
     align-items: center;
     gap: 6px;
-    background: #0078d4;
-    border-radius: 4px;
-    padding: 2px 8px;
+    background: linear-gradient(135deg, #0078d4 0%, #106ebe 100%);
+    border-radius: 8px;
+    padding: 4px 10px;
     font-size: 12px;
+    font-weight: 500;
     color: white;
     line-height: 1.4;
-    height: 24px;  /* Фиксированная высота */
-    max-width: 120px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    transition: all 0.15s ease;
 }
 
+.tag:hover {
+    background: linear-gradient(135deg, #106ebe 0%, #0a5a9e 100%);
+    transform: translateY(-1px);
+}
+
+/* Кнопка удаления тега (базовая) */
 .tag-remove {
-    background: none;
+    background: rgba(255, 255, 255, 0.2);
     border: none;
     color: white;
     cursor: pointer;
     font-size: 14px;
+    font-weight: bold;
     padding: 0;
-    width: 16px;
-    height: 16px;
+    width: 18px;
+    height: 18px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
-    border-radius: 50%;
-    opacity: 0.7;
+    border-radius: 50% !important;
+    transition: all 0.1s ease;
 }
 
 .tag-remove:hover {
-    opacity: 1;
-    background: rgba(255,255,255,0.2);
+    background: rgba(255, 255, 255, 0.4);
+    transform: scale(1.1);
 }
 
+/* Поле ввода тега (базовое) */
+#addFormTagInput,
+#tagInput {
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: var(--dark-main-text-color);
+    font-size: 13px;
+    outline: none;
+    padding: 6px 0 4px 0;
+    margin: 0;
+    box-sizing: border-box;
+}
+
+#addFormTagInput::placeholder,
+#tagInput::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 12px;
+    font-style: italic;
+}
+
+/* ========== СТИЛИ ДЛЯ ФОРМЫ ДОБАВЛЕНИЯ (addForm) ========== */
+
+#addForm .tags-input-wrapper {
+    padding: 10px 12px;
+}
+
+#addForm .tags-list {
+    gap: 8px;
+    margin-bottom: 10px;
+    min-height: 32px;
+}
+
+#addForm .tags-list:not(:empty) {
+    padding-bottom: 10px;
+    margin-bottom: 10px;
+}
+
+#addForm .tag {
+    padding: 5px 12px;
+    height: 28px;
+    max-width: 150px;
+    font-size: 12px;
+}
+
+#modalTagsList .tag-remove {
+    background: rgba(255, 255, 255, 0.2);
+    width: 18px;
+    height: 18px;
+}
+
+/* В форме добавления */
+#addForm .tag-remove {
+    width: 20px;
+    height: 20px;
+    font-size: 14px;
+}
+
+#addFormTagInput {
+    padding: 8px 0 4px 0;
+}
+
+/* ========== ПОДСКАЗКИ ТЕГОВ ========== */
+
+/* Базовые подсказки */
 .tag-suggestions {
     position: absolute;
     background: #2d2d2d;
-    border: 1px solid #4a4a4a;
-    border-radius: 8px;
-    max-height: 180px;
+    border: 1px solid #4a9eff;
+    border-radius: 10px;
+    max-height: 200px;
     overflow-y: auto;
     z-index: 101;
     min-width: 180px;
     width: auto;
     max-width: 280px;
-    left: 0;
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
 }
 
 .tag-suggestion {
-    padding: 6px 12px;
+    padding: 8px 14px;
     cursor: pointer;
-    font-size: 12px;
+    font-size: 13px;
     color: #e0e0e0;
-    transition: background 0.1s;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
+    transition: all 0.1s ease;
+    border-bottom: 1px solid #3a3a3a;
+}
+
+.tag-suggestion:last-child {
+    border-bottom: none;
 }
 
 .tag-suggestion:hover {
-    background: #3d3d3d;
+    background: #0078d4;
+    color: white;
+    padding-left: 18px;
+}
+
+/* Подсказки для формы добавления */
+#addFormTagSuggestions {
+    position: fixed !important;
+    background: #2d2d2d;
+    border: 1px solid #4a9eff;
+    border-radius: 10px;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 10001 !important;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+}
+
+#addFormTagSuggestions .tag-suggestion {
+    padding: 10px 14px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #e0e0e0;
+    border-bottom: 1px solid #3a3a3a;
+}
+
+
+#addFormTagSuggestions .tag-suggestion:hover {
+    background: #0078d4;
     color: white;
 }
+
+#addFormTagSuggestions .tag-suggestion:last-child {
+    border-bottom: none;
+}
+/* ========== ТУЛТИПЫ ========== */
 
 .card-tooltip-desc {
     margin-bottom: 8px;
@@ -2115,8 +2254,6 @@ select option[value="Ожидается"] { background-color: var(--rating-waiti
     margin-top: 6px;
     padding-top: 6px;
 }
-
-
 
 .card-tooltip-tag {
     background: #0078d4;
@@ -2136,13 +2273,14 @@ select option[value="Ожидается"] { background-color: var(--rating-waiti
     display: inline-block;
 }
 
+/* ========== ПРОЧИЕ ЭЛЕМЕНТЫ ========== */
+
 #editDescTextarea {
     width: 100%;
     background: #1e1e1e;
     border: 1px solid #4a4a4a;
     border-radius: 8px;
     color: white;
-    padding: 8px 8px; /* увеличил правый отступ */
     margin-bottom: 12px;
     font-size: 13px;
     resize: vertical;
