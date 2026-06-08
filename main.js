@@ -95,6 +95,7 @@ async function syncUserData(uid, idToken, email) {
             for (const section of sections) {
                 await saveSectionToFirestore(uid, idToken, section, localData[section] || []);
             }
+            await saveAllTagsToFirestore();
             const now = new Date().toISOString();
             await updateSyncTime(uid, idToken, now);
             statements.setStatistic.run('last_firestore_update', now, now);
@@ -149,6 +150,7 @@ async function applySyncChoice(uid, idToken, choice, localData, remoteData) {
             for (const section of sections) {
                 await saveSectionToFirestore(uid, freshToken, section, localData[section] || []);
             }
+            await saveAllTagsToFirestore(uid, freshToken);
             const localLastSync = statements.getStatistic.get('last_firestore_update');
             const localSyncTime = localLastSync ? localLastSync.value : null;
             await updateSyncTime(uid, freshToken, localSyncTime);
@@ -156,6 +158,14 @@ async function applySyncChoice(uid, idToken, choice, localData, remoteData) {
 
         } else if (choice === 'remote') {
             saveAllLocalData(remoteData);
+            const remoteTags = await loadAllTagsFromFirestore(uid, freshToken);
+            if (remoteTags) {
+                db.prepare('DELETE FROM tags').run();
+                for (const tag of remoteTags) {
+                    db.prepare('INSERT INTO tags (name, count) VALUES (?, ?)').run(tag.name, tag.count);
+                }
+                clearTagsDirty();
+            }
             const remoteSyncTime = await getSyncTime(uid, freshToken);
             statements.setStatistic.run('last_firestore_update', remoteSyncTime, remoteSyncTime);
             return { success: true, source: 'remote' };
@@ -578,7 +588,6 @@ async function createWindow() {
 
     win.setMenu(null);
 
-    // ⚡⚡⚡ СНАЧАЛА ДОСТАЁМ ПОЛЬЗОВАТЕЛЯ ИЗ БД
     const storedUser = getStoredUser();
 
     if (storedUser && storedUser.is_authenticated) {
@@ -850,11 +859,18 @@ ipcMain.handle('get-data', async (event, section) => {
 
 ipcMain.handle('add-data', async (event, section, data) => {
     const result = statements.addData.run(data.name, section, data.icoUrl || null, data.rating, data.status || 'Уточнить', data.description);
+
+    if (data.tags && Array.isArray(data.tags)) {
+        for (const tag of data.tags) {
+            statements.addTagToCard.run(data.name, tag);
+            statements.addOrUpdateTag.run(tag);
+        }
+        markTagsDirty();
+    }
+
     markSectionDirty(section);
-    // Обновляем локальное время синхронизации (данные изменились)
     const now = new Date().toISOString();
     statements.setStatistic.run('last_firestore_update', now, now);
-
     return result;
 });
 
@@ -883,12 +899,10 @@ ipcMain.handle('delete-data', async (event, section, dataName) => {
 
 ipcMain.handle('move-to-category', async (event, data) => {
     // Удаляем из старой категории
+    const result = statements.addData.run(data.name, data.newCategory, data.oldIcoUrl || null, data.oldRating || '0', data.oldStatus || 'Уточнить', data.oldDescription);
     statements.deleteData.run(data.name, data.oldCategory);
-    // Добавляем в новую категорию
-    const result = statements.addData.run(data.name, data.newCategory, data.oldIcoUrl || null, data.oldRating || '0', data.oldStatus || 'Уточнить');
     markSectionDirty(data.newCategory);
     markSectionDirty(data.oldCategory);
-    // Обновляем локальное время синхронизации
     const now = new Date().toISOString();
     statements.setStatistic.run('last_firestore_update', now, now);
 
@@ -1493,7 +1507,7 @@ ipcMain.handle('sync-all-sections-to-cloud', async () => {
             const sectionData = statements.getDataBySection.all(section);
             await saveSectionToFirestore(storedUser.uid, freshToken, section, sectionData);
         }
-
+        await saveAllTagsToFirestore();
         const now = new Date().toISOString();
         await updateSyncTime(storedUser.uid, freshToken, now);
 
@@ -1508,6 +1522,20 @@ ipcMain.handle('sync-all-sections-to-cloud', async () => {
 function markSectionDirty(section) {
     const now = new Date().toISOString();
     statements.setStatistic.run(`dirty_${section}`, 'true', now);
+}
+
+function markTagsDirty() {
+    const now = new Date().toISOString();
+    statements.setStatistic.run('dirty_tags', 'true', now);
+}
+
+function isTagsDirty() {
+    const dirty = statements.getStatistic.get('dirty_tags');
+    return dirty && dirty.value === 'true';
+}
+
+function clearTagsDirty() {
+    statements.deleteStatistic.run('dirty_tags');
 }
 
 // Проверка, нужно ли синхронизировать раздел
@@ -1544,11 +1572,91 @@ async function syncDirtySections(uid, idToken) {
         clearSectionDirty(section);
     }
 
+    if (isTagsDirty()) {
+        console.log('[i] Syncing tags...');
+        await saveAllTagsToFirestore(uid, freshToken);
+        clearTagsDirty();
+    }
+
     const now = new Date().toISOString();
     await updateSyncTime(uid, freshToken, now);
     statements.setStatistic.run('last_firestore_update', now, now);
 
     return true;
+}
+
+async function saveAllTagsToFirestore(uid, idToken) {
+    const allTags = statements.getAllTags.all(); // [{name, count}]
+
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/sections/tags`;
+
+    const body = {
+        fields: {
+            items: {
+                arrayValue: {
+                    values: allTags.map(tag => ({
+                        mapValue: {
+                            fields: {
+                                name: { stringValue: tag.name },
+                                count: { integerValue: tag.count }
+                            }
+                        }
+                    }))
+                }
+            },
+            updatedAt: { timestampValue: new Date().toISOString() }
+        }
+    };
+
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+            'Authorization': `Bearer ${idToken}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+
+    console.log(`✅ Tags saved (${allTags.length} tags)`);
+    return true;
+}
+
+async function loadAllTagsFromFirestore(uid, idToken) {
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/sections/tags`;
+
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${idToken}` }
+        });
+
+        if (response.status === 404) return [];
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const data = await response.json();
+        const items = [];
+
+        if (data.fields && data.fields.items && data.fields.items.arrayValue) {
+            const values = data.fields.items.arrayValue.values || [];
+            for (const item of values) {
+                const fields = item.mapValue.fields;
+                items.push({
+                    name: fields.name?.stringValue || '',
+                    count: fields.count?.integerValue || 0
+                });
+            }
+        }
+
+        return items;
+    } catch (error) {
+        console.error('Error loading tags:', error);
+        return null;
+    }
 }
 
 async function refreshAccessToken(refreshToken) {
@@ -1646,23 +1754,15 @@ ipcMain.handle('get-card-tags', async (event, section, cardName) => {
 });
 
 ipcMain.handle('update-card-tags', async (event, section, cardName, newTags) => {
-    // Получаем текущие теги карточки
     const oldTags = statements.getTagsByCard.all(cardName).map(row => row.tag_name);
-
-    // Теги, которые были удалены
     const removedTags = oldTags.filter(tag => !newTags.includes(tag));
-    // Теги, которые были добавлены
     const addedTags = newTags.filter(tag => !oldTags.includes(tag));
-
-    // Удаляем старые связи
     statements.clearCardTags.run(cardName);
 
-    // Добавляем новые связи
     for (const tag of newTags) {
         statements.addTagToCard.run(cardName, tag);
     }
 
-    // Обновляем счётчики в таблице tags
     for (const tag of removedTags) {
         statements.removeTagCount.run(tag);
         statements.deleteTagIfZero.run(tag);
@@ -1673,9 +1773,12 @@ ipcMain.handle('update-card-tags', async (event, section, cardName, newTags) => 
     }
 
     markSectionDirty(section);
+    markTagsDirty();
     const now = new Date().toISOString();
     statements.setStatistic.run('last_firestore_update', now, now);
 
     return { success: true };
 });
+
+
 

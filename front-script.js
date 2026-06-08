@@ -1531,20 +1531,25 @@ function setupChangeCategoryButtons() {
             const icoUrl = btn.getAttribute('datatype');
             const status = btn.dataset.status;
             const rating = btn.dataset.rating;
+
+
+            const card = document.querySelector(`.data-card[data-name="${itemName}"]`);
+            const description = card?.dataset.description || '';
+
             const section = document.querySelector('.nav-item.active')?.dataset.section;
-            showCategoryChangeModal(section, itemName, icoUrl, status, rating);
+            showCategoryChangeModal(section, itemName, icoUrl, status, rating, description);
         });
     });
 }
 
-function showCategoryChangeModal(oldSection, itemName, icoUrl, status, rating) {
+function showCategoryChangeModal(oldSection, itemName, icoUrl, status, rating, oldDesc) {
     const modal = document.createElement('div');
     modal.className = 'modal';
     modal.style.display = 'block';
 
     modal.innerHTML = `
         <div class="modal-content" style="max-width: 300px;">
-            <h3 data-section="${oldSection}" data-rating="${rating}" data-status="${status}" datatype="${icoUrl}">${itemName}</h3>
+            <h3>${escapeHtml(itemName)}</h3>
             <p>Выберите новую категорию</p>
             <select id="categorySelect" class="edit-select">
                 <option value="games">Игры</option>
@@ -1568,16 +1573,17 @@ function showCategoryChangeModal(oldSection, itemName, icoUrl, status, rating) {
     });
 
     modal.querySelector('.confirm-btn').addEventListener('click', async () => {
-        const oldCat = modal.querySelector('h3').getAttribute('data-section');
+        const oldCat = oldSection;
         const newCat = modal.querySelector('#categorySelect').value;
-        const name = modal.querySelector('h3').innerText;
-        const status = modal.querySelector('h3').getAttribute('data-status');
-        const rating = modal.querySelector('h3').getAttribute('data-rating');
-        const icoUrl = modal.querySelector('h3').getAttribute('datatype');
+        const name = itemName;
+        const description = oldDesc || '';
+
+        console.log('📝 Saving description:', description);
 
         try {
             const hasDuplicates = await window.electronAPI.checkDuplicates(newCat, name);
             const isDuplicate = (oldCat !== newCat && hasDuplicates);
+
             if (isDuplicate) {
                 const confirmReplace = await showConfirmModal(
                     'Элемент уже существует',
@@ -1587,24 +1593,27 @@ function showCategoryChangeModal(oldSection, itemName, icoUrl, status, rating) {
                 );
 
                 if (!confirmReplace) {
-                    isAddingGame = false;
                     return;
                 }
             }
+
             if (oldCat === newCat) {
-                isAddingGame = false;
                 document.body.removeChild(modal);
                 return;
             }
+
             const data = {
                 name: name,
                 oldStatus: status,
                 oldRating: rating,
                 oldIcoUrl: icoUrl,
                 oldCategory: oldCat,
-                newCategory: newCat
+                newCategory: newCat,
+                oldDescription: description
             };
+
             await window.electronAPI.moveDataToCategory(data);
+
             const card = document.querySelector(`.data-card[data-name="${name}"]`);
             if (card) {
                 card.remove();
@@ -1612,7 +1621,6 @@ function showCategoryChangeModal(oldSection, itemName, icoUrl, status, rating) {
                 if (oldSectionIndex !== -1) {
                     window.allSectionData.splice(oldSectionIndex, 1);
                 }
-
                 const oldFilteredIndex = window.filteredData.findIndex(item => item.name === name);
                 if (oldFilteredIndex !== -1) {
                     window.filteredData.splice(oldFilteredIndex, 1);
@@ -1620,6 +1628,7 @@ function showCategoryChangeModal(oldSection, itemName, icoUrl, status, rating) {
             }
             document.body.removeChild(modal);
         } catch (error) {
+            console.error(error);
             await showError('Не удалось сменить категорию');
         }
     });
@@ -1710,47 +1719,52 @@ function escapeHtml(str) {
 
 function renderCardList(cards) {
     return cards.map(card => `
-            <div class="data-card" data-name="${escapeHtml(card.name)}" data-description="${escapeHtml(card.description || '')}" data-tags='${JSON.stringify(card.tags || [])}' style="display: block;">
-                <div class="card-hover-icon">
-                    <img src="assets/icons/search-web.svg" alt="🔍">
-                </div>
-                <div class="card-buttons">
-                    <button class="card-btn edit-desc-btn" data-name="${escapeHtml(card.name)}">
-                        <img src="assets/icons/note.svg" alt="📝" class="button-icon-no-text">
-                        <span class="btn-text">Заметки</span>
-                    </button>
-                    <button class="card-btn change-image-btn" data-name="${escapeHtml(card.name)}">
-                        <img src="assets/icons/changeImage.svg" alt="🖼️" class="button-icon-no-text">
-                        <span class="btn-text">Обложка</span>
-                    </button>
-                    <button class="card-btn change-category-btn" data-name="${escapeHtml(card.name)}" data-status="${card.status}" data-rating="${card.rating}" datatype="${card.icoUrl}">
-                        <img src="assets/icons/changeCategory.svg" alt="⇄" class="button-icon-no-text">
-                        <span class="btn-text">Переместить</span>
-                    </button>
-                    <button class="card-btn delete-btn" data-name="${escapeHtml(card.name)}">
-                        <img src="assets/icons/delete.svg" alt="🗑️" class="button-icon-no-text">
-                    </button>
-                </div>
-                ${getCardIconHTML(card)}
-                <div class="data-info">
-                    <h3 class="data-title">${escapeHtml(card.name)}</h3>
-                    <div class="data-ratings-container">
-                        <span class="card-rating rating-value editable-field"
-                              data-rating="${card.rating}"
-                              data-name="${escapeHtml(card.name)}"
-                              title="Редактировать">
-                            ${card.rating || '0'}
-                        </span>
-                        <span class="card-status status-value editable-field"
-                              data-status="${card.status}"
-                              data-name="${escapeHtml(card.name)}"
-                              title="Редактировать">
-                            ${card.status || 'Уточнить'}
-                        </span>
-                    </div>
+        <div class="data-card" data-name="${escapeHtml(card.name)}" data-description="${escapeHtml(card.description || '')}" data-tags='${JSON.stringify(card.tags || [])}' style="display: block;">
+            <div class="card-hover-icon">
+                <img src="assets/icons/search-web.svg" alt="🔍">
+            </div>
+            <div class="card-buttons">
+                <button class="card-btn edit-desc-btn" data-name="${escapeHtml(card.name)}">
+                    <img src="assets/icons/note.svg" alt="📝" class="button-icon-no-text">
+                    <span class="btn-text">Заметки</span>
+                </button>
+                <button class="card-btn change-image-btn" data-name="${escapeHtml(card.name)}">
+                    <img src="assets/icons/changeImage.svg" alt="🖼️" class="button-icon-no-text">
+                    <span class="btn-text">Обложка</span>
+                </button>
+                <button class="card-btn change-category-btn" 
+                    data-name="${escapeHtml(card.name)}" 
+                    data-status="${card.status}" 
+                    data-rating="${card.rating}" 
+                    datatype="${card.icoUrl}" 
+                    data-description="${escapeHtml(card.description || '')}">
+                    <img src="assets/icons/changeCategory.svg" alt="⇄" class="button-icon-no-text">
+                    <span class="btn-text">Переместить</span>
+                </button>
+                <button class="card-btn delete-btn" data-name="${escapeHtml(card.name)}">
+                    <img src="assets/icons/delete.svg" alt="🗑️" class="button-icon-no-text">
+                </button>
+            </div>
+            ${getCardIconHTML(card)}
+            <div class="data-info">
+                <h3 class="data-title">${escapeHtml(card.name)}</h3>
+                <div class="data-ratings-container">
+                    <span class="card-rating rating-value editable-field"
+                          data-rating="${card.rating}"
+                          data-name="${escapeHtml(card.name)}"
+                          title="Редактировать">
+                        ${card.rating || '0'}
+                    </span>
+                    <span class="card-status status-value editable-field"
+                          data-status="${card.status}"
+                          data-name="${escapeHtml(card.name)}"
+                          title="Редактировать">
+                        ${card.status || 'Уточнить'}
+                    </span>
                 </div>
             </div>
-        `).join('');
+        </div>
+    `).join('');
 }
 
 async function addNewData(section) {
