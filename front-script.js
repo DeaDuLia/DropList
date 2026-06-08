@@ -105,9 +105,41 @@ function createTooltip() {
     return tooltipElement;
 }
 
-function showTooltip(text, x, y) {
+function showTooltip(description, tags, x, y) {
     const tooltip = createTooltip();
-    tooltip.textContent = text || 'Нет заметок';
+
+    let tagsHtml = '';
+    if (tags && tags.length > 0) {
+        const maxVisible = 6;
+        const visibleTags = tags.slice(0, maxVisible);
+        const remainingCount = tags.length - maxVisible;
+
+        tagsHtml = `
+            <div class="card-tooltip-tags">
+                ${visibleTags.map(tag => `<span class="card-tooltip-tag">#${escapeHtml(tag)}</span>`).join('')}
+                ${remainingCount > 0 ? `<span class="card-tooltip-tag-more">+${remainingCount}</span>` : ''}
+            </div>
+        `;
+    }
+
+    let descHtml = '';
+    if (description && description.trim()) {
+        descHtml = `<div class="card-tooltip-desc">${escapeHtml(description)}</div>`;
+    }
+
+    if (!descHtml && !tags.length) {
+        tooltip.style.display = 'none';
+        return;
+    }
+
+    // Добавляем классы для разных сценариев
+    let tooltipClass = 'card-tooltip';
+    if (!descHtml && tags.length > 0) {
+        tooltipClass += ' card-tooltip-delayed';
+    }
+
+    tooltip.className = tooltipClass;
+    tooltip.innerHTML = descHtml + tagsHtml;
     tooltip.style.display = 'block';
     tooltip.style.left = (x + 15) + 'px';
     tooltip.style.top = (y + 15) + 'px';
@@ -116,6 +148,10 @@ function showTooltip(text, x, y) {
 function hideTooltip() {
     if (tooltipElement) {
         tooltipElement.style.display = 'none';
+    }
+    if (tooltipTimeout) {
+        clearTimeout(tooltipTimeout);
+        tooltipTimeout = null;
     }
 }
 
@@ -142,15 +178,34 @@ function setupEditDescriptionButtons() {
             const itemName = btn.dataset.name;
             const card = document.querySelector(`.data-card[data-name="${itemName}"]`);
             const currentDesc = card?.dataset.description || '';
+            const currentTags = JSON.parse(card?.dataset.tags || '[]');
 
-            // Твоя стилизованная модалка
             const modal = document.createElement('div');
             modal.className = 'modal';
             modal.style.display = 'block';
             modal.innerHTML = `
-                <div class="modal-content" style="max-width: 400px;">
-                    <h3>Редактировать заметку</h3>
-                    <textarea id="editDescTextarea" rows="4" style="width: 100%; background: #1e1e1e; border: 1px solid #4a4a4a; border-radius: 8px; color: white; padding: 8px; margin: 10px 0; font-size: 13px;">${escapeHtml(currentDesc)}</textarea>
+                <div class="modal-content" style="max-width: 450px; position: relative;">
+                    <h3>Редактировать</h3>
+                    
+                    <!-- Поле для заметки -->
+                    <label style="font-size: 12px; opacity: 0.7; margin-bottom: 4px;">Заметка</label>
+                    <textarea id="editDescTextarea" rows="3" style="width: 100%; background: #1e1e1e; border: 1px solid #4a4a4a; border-radius: 8px; color: white; padding: 8px; margin-bottom: 12px; font-size: 13px; resize: vertical;">${escapeHtml(currentDesc)}</textarea>
+                    
+                    <!-- Поле для тегов -->
+                    <label style="font-size: 12px; opacity: 0.7; margin-bottom: 4px;">Теги (через запятую или Enter)</label>
+                    <div class="tags-input-wrapper" style="background: #1e1e1e; border: 1px solid #4a4a4a; border-radius: 8px; padding: 6px; margin-bottom: 16px;">
+                        <div class="tags-list" id="modalTagsList" style="display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 6px;">
+                            ${currentTags.map(tag => `
+                                <span class="tag" data-tag="${escapeHtml(tag)}">
+                                    ${escapeHtml(tag)}
+                                    <button type="button" class="tag-remove" data-tag="${escapeHtml(tag)}">×</button>
+                                </span>
+                            `).join('')}
+                        </div>
+                        <input type="text" id="tagInput" placeholder="Например: хоррор, комедия, шедевр" autocomplete="off" style="width: 100%; background: transparent; border: none; color: white; font-size: 13px; outline: none; padding: 4px;">
+                    </div>
+                    <div id="tagSuggestions" class="tag-suggestions" style="display: none;"></div>
+                    
                     <div style="display: flex; gap: 10px; margin-top: 10px;">
                         <button class="modal-button cancel-btn" style="flex: 1;">Отмена</button>
                         <button class="modal-button confirm-btn" style="flex: 1;">Сохранить</button>
@@ -159,9 +214,134 @@ function setupEditDescriptionButtons() {
             `;
 
             document.body.appendChild(modal);
+
             const textarea = modal.querySelector('#editDescTextarea');
+            const tagInput = modal.querySelector('#tagInput');
+            const tagsList = modal.querySelector('#modalTagsList');
+            const suggestionsDiv = modal.querySelector('#tagSuggestions');
+            let tags = [...currentTags];
+
+            // Функция позиционирования подсказок
+            function positionSuggestions() {
+                const rect = tagInput.getBoundingClientRect();
+                const modalRect = modal.querySelector('.modal-content').getBoundingClientRect();
+
+                suggestionsDiv.style.position = 'absolute';
+                suggestionsDiv.style.top = (rect.bottom - modalRect.top) + 'px';
+                suggestionsDiv.style.left = (rect.left - modalRect.left) + 'px';
+                suggestionsDiv.style.minWidth = Math.max(rect.width, 150) + 'px';
+            }
+
+            // Функция обновления отображения тегов
+            function renderTags() {
+                tagsList.innerHTML = tags.map(tag => `
+                    <span class="tag" data-tag="${escapeHtml(tag)}">
+                        ${escapeHtml(tag)}
+                        <button type="button" class="tag-remove" data-tag="${escapeHtml(tag)}">×</button>
+                    </span>
+                `).join('');
+
+                tagsList.querySelectorAll('.tag-remove').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const tagToRemove = btn.dataset.tag;
+                        tags = tags.filter(t => t !== tagToRemove);
+                        renderTags();
+                    });
+                });
+            }
+
+            // Добавление тега
+            function addTag(tagName) {
+                tagName = tagName.toLowerCase().trim();
+                if (!tagName) return;
+                if (tagName.includes(',')) {
+                    tagName.split(',').forEach(t => addTag(t));
+                    return;
+                }
+                if (tags.includes(tagName)) return;
+                tags.push(tagName);
+                renderTags();
+                tagInput.value = '';
+                hideSuggestions();
+            }
+
+            // Показ подсказок
+            async function showSuggestions(query) {
+                if (query.length < 2) {
+                    hideSuggestions();
+                    return;
+                }
+                query = query.toLowerCase();
+
+                const matches = await window.electronAPI.searchTags(query);
+                const lowerTags = tags.map(t => t.toLowerCase());
+                const availableTags = matches
+                    .filter(t => !lowerTags.includes(t.toLowerCase()))
+                    .slice(0, 5);
+                if (availableTags.length === 0) {
+                    hideSuggestions();
+                    return;
+                }
+
+                suggestionsDiv.innerHTML = availableTags.map(tag => `
+                    <div class="tag-suggestion" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</div>
+                `).join('');
+
+                positionSuggestions();
+                suggestionsDiv.style.display = 'block';
+
+                suggestionsDiv.querySelectorAll('.tag-suggestion').forEach(sug => {
+                    sug.addEventListener('click', () => {
+                        addTag(sug.dataset.tag);
+                        tagInput.focus();
+                    });
+                });
+            }
+
+            function hideSuggestions() {
+                suggestionsDiv.style.display = 'none';
+            }
+
+            // Обработчики событий для поля ввода тегов
+            tagInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && tagInput.value.trim()) {
+                    e.preventDefault();
+                    addTag(tagInput.value);
+                } else if (e.key === 'Backspace' && !tagInput.value && tags.length > 0) {
+                    tags.pop();
+                    renderTags();
+                } else if (e.key === ',' && tagInput.value.trim()) {
+                    e.preventDefault();
+                    addTag(tagInput.value);
+                }
+            });
+
+            tagInput.addEventListener('input', () => {
+                const value = tagInput.value;
+                if (value.endsWith(',')) {
+                    addTag(value.slice(0, -1));
+                } else {
+                    showSuggestions(value);
+                }
+            });
+
+            tagInput.addEventListener('focus', positionSuggestions);
+            window.addEventListener('resize', positionSuggestions);
+
+            // Закрытие подсказок при клике вне
+            document.addEventListener('click', function closeSuggestions(e) {
+                if (!suggestionsDiv.contains(e.target) && e.target !== tagInput) {
+                    hideSuggestions();
+                    document.removeEventListener('click', closeSuggestions);
+                }
+            });
+
+            // Инициализация
+            renderTags();
             textarea.focus();
 
+            // Обработчики кнопок модалки
             modal.querySelector('.cancel-btn').onclick = () => {
                 document.body.removeChild(modal);
             };
@@ -171,8 +351,11 @@ function setupEditDescriptionButtons() {
                 const section = document.querySelector('.nav-item.active')?.dataset.section;
 
                 await window.electronAPI.updateDataDescription(section, itemName, newDescription);
+                await window.electronAPI.updateCardTags(section, itemName, tags);
+
                 if (card) {
                     card.dataset.description = newDescription;
+                    card.dataset.tags = JSON.stringify(tags);
                 }
                 document.body.removeChild(modal);
             };
@@ -863,6 +1046,11 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
         allItemsLoaded = false;
     }
 
+    data = data.map(item => ({
+        ...item,
+        tags: item.tags ? item.tags.split(',') : []
+    }));
+
     window.allSectionData = data;
 
     if (preserveFilters) {
@@ -1487,7 +1675,7 @@ function escapeHtml(str) {
 
 function renderCardList(cards) {
     return cards.map(card => `
-            <div class="data-card" data-name="${escapeHtml(card.name)}" data-description="${escapeHtml(card.description || '')}" style="display: block;">
+            <div class="data-card" data-name="${escapeHtml(card.name)}" data-description="${escapeHtml(card.description || '')}" data-tags='${JSON.stringify(card.tags || [])}' style="display: block;">
                 <div class="card-hover-icon">
                     <img src="assets/icons/search-web.svg" alt="🔍">
                 </div>
@@ -1543,7 +1731,8 @@ async function addNewData(section) {
         icoUrl: icoInput.value.trim(),
         rating: ratingSelect.value,
         status: statusSelect.value,
-        description: ''
+        description: '',
+        tags: []
     };
 
     if (!cardData.name) {
@@ -2143,8 +2332,8 @@ function setupCardClickHandlers() {
 
         card.addEventListener('mouseenter', (e) => {
             const description = card.dataset.description || '';
-            if (description) { showTooltip(description, e.clientX, e.clientY); }
-
+            const tags = JSON.parse(card.dataset.tags || '[]');
+            showTooltip(description, tags, e.clientX, e.clientY);
         });
 
         card.addEventListener('mousemove', (e) => {

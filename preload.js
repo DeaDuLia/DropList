@@ -1,6 +1,11 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
+    getAllTags: () => ipcRenderer.invoke('get-all-tags'),
+    searchTags: (query) => ipcRenderer.invoke('search-tags', query),
+    getCardTags: (section, cardName) => ipcRenderer.invoke('get-card-tags', section, cardName),
+    updateCardTags: (section, cardName, tags) => ipcRenderer.invoke('update-card-tags', section, cardName, tags),
+
     authSignIn: (email, password) => ipcRenderer.invoke('auth-sign-in', email, password),
     authSignUp: (email, password) => ipcRenderer.invoke('auth-sign-up', email, password),
     authSignOut: () => ipcRenderer.invoke('auth-sign-out'),

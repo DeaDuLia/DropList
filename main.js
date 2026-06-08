@@ -49,6 +49,12 @@ function saveAllLocalData(allData) {
     const sections = ['games', 'movies', 'cartoons', 'serials', 'anime', 'books'];
 
     const transaction = db.transaction(() => {
+        // Очищаем tags_assign перед удалением карточек
+        db.prepare(`DELETE FROM tags_assign`).run();
+
+        // Очищаем таблицу tags (счётчики тегов)
+        db.prepare(`DELETE FROM tags`).run();
+
         for (const section of sections) {
             db.prepare(`DELETE FROM data_cards WHERE section = ?`).run(section);
         }
@@ -60,6 +66,14 @@ function saveAllLocalData(allData) {
                         item.name, section, item.icoUrl || null,
                         item.rating || '0', item.status || 'Уточнить', item.description || ''
                     );
+
+                    // Добавляем теги для карточки
+                    if (item.tags && Array.isArray(item.tags)) {
+                        for (const tag of item.tags) {
+                            statements.addTagToCard.run(item.name, tag);
+                            statements.addOrUpdateTag.run(tag);
+                        }
+                    }
                 }
             }
         }
@@ -377,6 +391,12 @@ function initializeDatabase(db) {
         )
     `);
     db.exec(`
+        CREATE TABLE IF NOT EXISTS tags (
+            name TEXT PRIMARY KEY,
+            count INTEGER DEFAULT 1
+        )
+    `);
+    db.exec(`
         CREATE TABLE IF NOT EXISTS app_statistics (
             info TEXT PRIMARY KEY,
             value TEXT,
@@ -469,9 +489,16 @@ const statements = {
         (name, section, ico_url, rating, status, description) 
         VALUES (?, ?, ?, ?, ?, ?)`),
     getDataBySection: db.prepare(`
-        SELECT name as name, ico_url as icoUrl, 
-               rating as rating, status as status, description as description
-        FROM data_cards WHERE section = ?`),
+    SELECT 
+            name, 
+            ico_url as icoUrl, 
+            rating, 
+            status, 
+            description,
+            (SELECT GROUP_CONCAT(tag_name, ',') FROM tags_assign WHERE card_name = data_cards.name) as tags
+        FROM data_cards 
+        WHERE section = ?
+    `),
     addData: db.prepare(`
         INSERT OR REPLACE INTO data_cards 
         (name, section, ico_url, rating, status, description) 
@@ -488,7 +515,33 @@ const statements = {
         VALUES (?, ?, ?)
     `),
     deleteStatistic: db.prepare('DELETE FROM app_statistics WHERE info = ?'),
-    getAllStatistics: db.prepare('SELECT info, value, actual_date FROM app_statistics')
+    getAllStatistics: db.prepare('SELECT info, value, actual_date FROM app_statistics'),
+    getAllTags: db.prepare('SELECT name, count FROM tags ORDER BY count DESC'),
+    addOrUpdateTag: db.prepare(`
+    INSERT INTO tags (name, count) VALUES (?, 1)
+    ON CONFLICT(name) DO UPDATE SET count = count + 1
+`),
+    removeTagCount: db.prepare(`
+    UPDATE tags SET count = count - 1 WHERE name = ?
+`),
+    deleteTagIfZero: db.prepare(`
+    DELETE FROM tags WHERE name = ? AND count <= 0
+`),
+    getTagsByCard: db.prepare(`
+    SELECT tag_name FROM tags_assign WHERE card_name = ?
+`),
+    addTagToCard: db.prepare(`
+    INSERT OR IGNORE INTO tags_assign (card_name, tag_name) VALUES (?, ?)
+`),
+    removeTagFromCard: db.prepare(`
+    DELETE FROM tags_assign WHERE card_name = ? AND tag_name = ?
+`),
+    clearCardTags: db.prepare(`
+    DELETE FROM tags_assign WHERE card_name = ?
+`),
+    searchTags: db.prepare(`
+    SELECT name FROM tags WHERE name LIKE ? ORDER BY count DESC LIMIT 10
+`)
 };
 
 let win;
@@ -806,9 +859,22 @@ ipcMain.handle('add-data', async (event, section, data) => {
 });
 
 ipcMain.handle('delete-data', async (event, section, dataName) => {
+    // Сначала получаем теги карточки
+    const tags = statements.getTagsByCard.all(dataName).map(row => row.tag_name);
+
+    // Удаляем связи тегов
+    statements.clearCardTags.run(dataName);
+
+    // Удаляем карточку
     const result = statements.deleteData.run(dataName, section);
+
+    // Обновляем счётчики тегов
+    for (const tag of tags) {
+        statements.removeTagCount.run(tag);
+        statements.deleteTagIfZero.run(tag);
+    }
+
     markSectionDirty(section);
-    // Обновляем локальное время синхронизации
     const now = new Date().toISOString();
     statements.setStatistic.run('last_firestore_update', now, now);
 
@@ -1264,17 +1330,34 @@ async function saveSectionToFirestore(uid, idToken, section, items) {
         fields: {
             items: {
                 arrayValue: {
-                    values: items.map(item => ({
-                        mapValue: {
-                            fields: {
-                                name: { stringValue: item.name || '' },
-                                icoUrl: { stringValue: item.icoUrl || '' },
-                                rating: { stringValue: item.rating || '0' },
-                                status: { stringValue: item.status || 'Уточнить' },
-                                description: { stringValue: item.description || '' }
+                    values: items.map(item => {
+                        // Преобразуем tags из строки в массив
+                        let tagsArray = [];
+                        if (item.tags) {
+                            if (typeof item.tags === 'string') {
+                                tagsArray = item.tags.split(',').filter(t => t);
+                            } else if (Array.isArray(item.tags)) {
+                                tagsArray = item.tags;
                             }
                         }
-                    }))
+
+                        return {
+                            mapValue: {
+                                fields: {
+                                    name: { stringValue: item.name || '' },
+                                    icoUrl: { stringValue: item.icoUrl || '' },
+                                    rating: { stringValue: item.rating || '0' },
+                                    status: { stringValue: item.status || 'Уточнить' },
+                                    description: { stringValue: item.description || '' },
+                                    tags: {
+                                        arrayValue: {
+                                            values: tagsArray.map(tag => ({ stringValue: tag }))
+                                        }
+                                    }
+                                }
+                            }
+                        };
+                    })
                 }
             },
             updatedAt: { timestampValue: new Date().toISOString() }
@@ -1318,12 +1401,19 @@ async function getSectionFromFirestore(uid, idToken, section) {
             const values = data.fields.items.arrayValue.values || [];
             for (const item of values) {
                 const fields = item.mapValue.fields;
+                // Читаем теги из массива
+                let tags = [];
+                if (fields.tags && fields.tags.arrayValue) {
+                    tags = (fields.tags.arrayValue.values || []).map(v => v.stringValue);
+                }
+
                 items.push({
                     name: fields.name?.stringValue || '',
                     icoUrl: fields.icoUrl?.stringValue || '',
                     rating: fields.rating?.stringValue || '0',
                     status: fields.status?.stringValue || 'Уточнить',
-                    description: fields.description?.stringValue || ''
+                    description: fields.description?.stringValue || '',
+                    tags: tags
                 });
             }
         }
@@ -1541,3 +1631,51 @@ ipcMain.handle('update-data-description', async (event, section, name, descripti
     statements.setStatistic.run('last_firestore_update', now, now);
     return result;
 });
+
+
+ipcMain.handle('get-all-tags', async () => {
+    return statements.getAllTags.all();
+});
+
+ipcMain.handle('search-tags', async (event, query) => {
+    return statements.searchTags.all(`${query}%`).map(row => row.name);
+});
+
+ipcMain.handle('get-card-tags', async (event, section, cardName) => {
+    return statements.getTagsByCard.all(cardName).map(row => row.tag_name);
+});
+
+ipcMain.handle('update-card-tags', async (event, section, cardName, newTags) => {
+    // Получаем текущие теги карточки
+    const oldTags = statements.getTagsByCard.all(cardName).map(row => row.tag_name);
+
+    // Теги, которые были удалены
+    const removedTags = oldTags.filter(tag => !newTags.includes(tag));
+    // Теги, которые были добавлены
+    const addedTags = newTags.filter(tag => !oldTags.includes(tag));
+
+    // Удаляем старые связи
+    statements.clearCardTags.run(cardName);
+
+    // Добавляем новые связи
+    for (const tag of newTags) {
+        statements.addTagToCard.run(cardName, tag);
+    }
+
+    // Обновляем счётчики в таблице tags
+    for (const tag of removedTags) {
+        statements.removeTagCount.run(tag);
+        statements.deleteTagIfZero.run(tag);
+    }
+
+    for (const tag of addedTags) {
+        statements.addOrUpdateTag.run(tag);
+    }
+
+    markSectionDirty(section);
+    const now = new Date().toISOString();
+    statements.setStatistic.run('last_firestore_update', now, now);
+
+    return { success: true };
+});
+
