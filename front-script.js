@@ -32,7 +32,8 @@ let allItemsLoaded = false;
 
 let currentFilters = {
     searchQuery: '',
-    statusFilter: 'Все'
+    statusFilter: 'Все',
+    isTag: false
 };
 
 let currentUser = null;
@@ -1124,12 +1125,13 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
     setupContentWrapperScroll();
 }
 
-function filterData(data, searchQuery, statusFilter) {
+function filterData(data, searchQuery, statusFilter, isTag = false) {
     const queryLower = (searchQuery || '').toLowerCase();
     return data.filter(item => {
         // Поиск по названию
-        const nameMatches = !queryLower || item.name.toLowerCase().includes(queryLower);
-
+        const nameMatches = isTag
+            ? false
+            : !queryLower || item.name.toLowerCase().includes(queryLower);
         // Поиск по тегам
         let tagMatches = false;
         if (queryLower && item.tags && item.tags.length) {
@@ -1352,8 +1354,8 @@ function setupSearchInput() {
         const suggestion = e.target.closest('.suggestion-item');
         if (suggestion) {
             searchInput.value = suggestion.dataset.value;
+            const isTag = suggestion.dataset.type === 'tag';
             searchSuggestions.style.display = 'none';
-
             // Сбрасываем фильтр статуса на "Все"
             if (currentFilters.statusFilter !== 'Все') {
                 currentFilters.statusFilter = 'Все';
@@ -1364,7 +1366,7 @@ function setupSearchInput() {
                     }
                 });
             }
-            filterCards(suggestion.dataset.value);
+            filterCards(suggestion.dataset.value, isTag);
         }
     });
 
@@ -1436,7 +1438,7 @@ function sortData(data, sortBy) {
     });
 }
 
-function filterCards(query = '') {
+function filterCards(query = '', isTag = false) {
     const statusFilter = currentFilters.statusFilter || 'Все';
     const clearSearchBtn = document.getElementById('clearSearchBtn');
     const selectedSort = currentFilters.sortBy || 'date';
@@ -1453,7 +1455,7 @@ function filterCards(query = '') {
     }
 
     // Сначала фильтруем, затем сортируем
-    const filtered = filterData(window.allSectionData, query, statusFilter);
+    const filtered = filterData(window.allSectionData, query, statusFilter, isTag);
     window.filteredData = sortData(filtered, selectedSort);
 
     // Сбрасываем пагинацию и перерисовываем
