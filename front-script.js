@@ -202,7 +202,7 @@ function setupEditDescriptionButtons() {
                                 </span>
                             `).join('')}
                         </div>
-                        <input type="text" id="tagInput" placeholder="Например: хоррор, комедия, шедевр" autocomplete="off">
+                        <input type="text" id="tagInput" maxlength="15" placeholder="Например: хоррор, комедия, шедевр" autocomplete="off">
                     </div>
                     <div id="tagSuggestions" class="tag-suggestions" style="display: none;"></div>
                     
@@ -229,7 +229,6 @@ function setupEditDescriptionButtons() {
                 suggestionsDiv.style.position = 'absolute';
                 suggestionsDiv.style.top = (rect.bottom - modalRect.top) + 'px';
                 suggestionsDiv.style.left = (rect.left - modalRect.left) + 'px';
-                suggestionsDiv.style.minWidth = Math.max(rect.width, 150) + 'px';
             }
 
             // Функция обновления отображения тегов
@@ -1689,7 +1688,7 @@ function getAddFormHTML(addMoreChecked = false, visible = '') {
                             <div class="tags-list" id="addFormTagsList">
                                 <!-- Теги будут добавляться сюда -->
                             </div>
-                            <input type="text" id="addFormTagInput" placeholder="Добавить теги (нажмите Enter или запятую)" autocomplete="off">
+                            <input type="text" id="addFormTagInput" maxlength="15" placeholder="Добавить теги (нажмите Enter или запятую)" autocomplete="off">
                         </div>
                         <div id="addFormTagSuggestions" class="tag-suggestions"></div>
                     </div>
