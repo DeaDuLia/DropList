@@ -1,6 +1,11 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
+    searchYummyAniAnime: (title) => ipcRenderer.invoke('search-yummyani-anime', title),
+    searchKinopoiskMovie: (title) => ipcRenderer.invoke('search-kinopoisk-movie', title),
+    searchLitresBook: (title) => ipcRenderer.invoke('search-litres-book', title),
+    fetchSteamTags: (title) => ipcRenderer.invoke('fetch-steam-tags', title),
+    searchTagsWeb: (title, section) => ipcRenderer.invoke('search-tags-web', title, section),
     getAllTags: () => ipcRenderer.invoke('get-all-tags'),
     searchTags: (query) => ipcRenderer.invoke('search-tags', query),
     getCardTags: (section, cardName) => ipcRenderer.invoke('get-card-tags', section, cardName),

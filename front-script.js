@@ -97,6 +97,8 @@ function updateStats() {
 }
 
 
+
+
 function createTooltip() {
     if (!tooltipElement) {
         tooltipElement = document.createElement('div');
@@ -2788,6 +2790,29 @@ function updatePreview(name, icoUrl, rating, status) {
     }
 }
 
+async function autoFetchTags(title, section) {
+    let result;
+    switch (section) {
+        case 'movies':
+        case 'serials':
+        case 'cartoons':
+            result = await window.electronAPI.searchKinopoiskMovie(title);
+            return result && result.tags ? result.tags : [];
+        case 'anime':
+            const animeResult = await window.electronAPI.searchYummyAniAnime(title);
+            return animeResult?.tags || [];
+        case 'games':
+            return await window.electronAPI.fetchSteamTags(title);
+        case 'books':
+            result = await window.electronAPI.searchLitresBook(title);
+            return result && result.tags ? result.tags : [];
+        default:
+            return [];
+    }
+}
+
+
+
 function setupAddButton() {
     const toggleBtn = document.getElementById('toggleAddFormBtn');
     const addForm = document.getElementById('addForm');
@@ -2824,7 +2849,34 @@ function setupAddButton() {
                         nameInput.value = text;
                         lastTextFromClipboard = text;
                         updatePreview(text, null, null, null);
-                        await autoSearchCover(text);
+
+                        const section = document.querySelector('.nav-item.active')?.dataset.section;
+
+                        // Параллельный поиск обложки и тегов
+                        const [coverUrl, webTags] = await Promise.all([
+                            autoSearchCover(text),
+                            autoFetchTags(text, section)
+                        ]);
+
+                        if (webTags && webTags.length > 0 && window.getAddFormTags) {
+                            const currentTags = window.getAddFormTags();
+                            const newTags = [...new Set([...currentTags, ...webTags])];
+                            // Очищаем текущие теги и добавляем новые
+                            if (window.clearAddFormTags) window.clearAddFormTags();
+                            // Добавляем каждый тег
+                            for (const tag of newTags.slice(0, 5)) {
+                                // Имитируем добавление тега
+                                const tagInput = document.getElementById('addFormTagInput');
+                                if (tagInput) {
+                                    const addTagEvent = new Event('input');
+                                    tagInput.value = tag;
+                                    tagInput.dispatchEvent(addTagEvent);
+                                    // Имитируем нажатие Enter
+                                    const enterEvent = new KeyboardEvent('keydown', { key: 'Enter' });
+                                    tagInput.dispatchEvent(enterEvent);
+                                }
+                            }
+                        }
                     }
                     document.getElementById('nameInput')?.focus();
                 } catch (error) {
