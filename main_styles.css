@@ -2302,3 +2302,51 @@ select option[value="Ожидается"] { background-color: var(--rating-waiti
     content: '#';
     margin-right: 2px;
 }
+
+/* Подсказка для названия - абсолютное позиционирование */
+.title-suggestion {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #2d2d2d;
+    border: 1px solid #4a9eff;
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-top: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 13px;
+    color: #e0e0e0;
+    animation: slideDown 0.2s ease;
+    z-index: 1000;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.title-suggestion:hover {
+    background: #3d3d3d;
+    border-color: #6ab0ff;
+}
+
+.suggestion-title {
+    flex: 1;
+    color: #4a9eff;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}

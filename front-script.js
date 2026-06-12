@@ -12,6 +12,7 @@ let addFormOverlay = null;
 let tooltipElement = null;
 let tooltipTimeout = null;
 
+let titleSuggestionTimeout = null;
 let searchTimeout = null;
 let lastValue = '';
 let lastChangeTime = 0;
@@ -2991,7 +2992,49 @@ async function autoFetchTags(title, section) {
         if (icoInput) icoInput.value = result.coverUrl;
         updatePreview(title, result.coverUrl, null, null);
     }
+    if (result && result.fullTitle && result.fullTitle !== title.toLowerCase()) {
+        showTitleSuggestion(result.fullTitle);
+    }
+
     return result?.tags || [];
+}
+
+function showTitleSuggestion(fullTitle) {
+    const nameInput = document.getElementById('nameInput');
+    if (!nameInput) return;
+
+    // Удаляем старую подсказку
+    const oldSuggestion = document.querySelector('.title-suggestion');
+    if (oldSuggestion) {
+        oldSuggestion.remove();
+    }
+
+    // Находим или создаём обертку с relative positioning
+    let wrapper = nameInput.closest('.title-input-wrapper');
+    if (!wrapper) {
+        wrapper = document.createElement('div');
+        wrapper.className = 'title-input-wrapper';
+        wrapper.style.position = 'relative';
+        wrapper.style.width = '100%';
+        nameInput.parentNode.insertBefore(wrapper, nameInput);
+        wrapper.appendChild(nameInput);
+    }
+
+    // Создаём подсказку
+    const suggestion = document.createElement('div');
+    suggestion.className = 'title-suggestion';
+    suggestion.innerHTML = `
+        <span class="suggestion-title">${escapeHtml(fullTitle)}</span>
+    `;
+
+    wrapper.appendChild(suggestion);
+
+    // При клике — заменяем название
+    suggestion.addEventListener('click', () => {
+        nameInput.value = fullTitle;
+        updatePreview(fullTitle, null, null, null);
+        suggestion.remove();
+    });
 }
 
 
