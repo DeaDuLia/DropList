@@ -2368,25 +2368,12 @@ async function fetchLitresBookTags(bookName) {
             // Находим ссылку на книгу
             const bookInfo = await hiddenWindow.webContents.executeJavaScript(`
                 (function() {
-                    const searchQuery = "${cleanName.toLowerCase()}";
                     const allLinks = document.querySelectorAll('a[href*="/book/"]');
                     
+                    // Берём первую НЕ-РЕКЛАМНУЮ ссылку
                     for (const link of allLinks) {
                         const href = link.href;
-                        if (href.includes('erid=') || href.includes('banner') || href.includes('campaign')) continue;
-                        
-                        const parentText = link.closest('.art-item__cover, .art-item, .result__item')?.innerText || link.innerText;
-                        const title = parentText.split('\\n')[0].trim();
-                        
-                        if (title && (title.toLowerCase().includes(searchQuery) || searchQuery.includes(title.toLowerCase()))) {
-                            const fullUrl = href.startsWith('http') ? href : 'https://www.litres.ru' + href;
-                            return { url: fullUrl, title: title };
-                        }
-                    }
-                    
-                    for (const link of allLinks) {
-                        const href = link.href;
-                        if (!href.includes('erid=') && !href.includes('banner')) {
+                        if (!href.includes('erid=') && !href.includes('banner') && !href.includes('campaign')) {
                             const fullUrl = href.startsWith('http') ? href : 'https://www.litres.ru' + href;
                             return { url: fullUrl, title: 'Найдена книга' };
                         }

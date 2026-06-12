@@ -12,6 +12,11 @@ let addFormOverlay = null;
 let tooltipElement = null;
 let tooltipTimeout = null;
 
+let searchTimeout = null;
+let lastValue = '';
+let lastChangeTime = 0;
+
+
 // Кнопки шапки
 const exportBtn = document.getElementById('exportBtn');
 const importBtn = document.getElementById('importBtn');
@@ -77,6 +82,172 @@ window.addEventListener('resize', () => {
     itemsPerPage = calculateItemsPerPage();
     if (itemsPerPage > itemsPerPagePred) { loadMoreItems(); }
 });
+
+function getAdaptiveDelay(currentValue) {
+    const now = Date.now();
+    const timeSinceLastChange = lastChangeTime ? now - lastChangeTime : 0;
+    const addedChars = currentValue.length - lastValue.length;
+
+    // Если это первый ввод
+    if (!lastValue) return 1500;
+
+    // Вычисляем скорость ввода (символов в секунду)
+    const speed = addedChars / (timeSinceLastChange / 1000);
+
+    console.log(`[AutoSearch] Speed: ${speed.toFixed(1)} chars/sec, added: ${addedChars}, time: ${timeSinceLastChange}ms`);
+
+    // Адаптивная логика
+    if (speed > 10) {
+        // Печатает очень быстро (>10 символов/сек) → видимо копирует название
+        return 800;
+    } else if (speed > 5) {
+        // Печатает быстро (5-10 символов/сек)
+        return 1000;
+    } else if (speed > 2) {
+        // Печатает медленно (2-5 символов/сек)
+        return 1500;
+    } else {
+        // Печатает очень медленно или пауза
+        return 2000;
+    }
+}
+
+async function autoSearchOnInput(title, section) {
+    if (!title || title.trim() === '') return;
+
+    console.log(`[AutoSearch] Searching for: ${title}`);
+
+    // Сохраняем оригинальные значения для восстановления
+    const originalTagPlaceholder = 'Добавить теги (нажмите Enter или запятую)';
+    const originalCoverPlaceholder = 'Ссылка на обложку';
+
+    try {
+        // Меняем placeholder у тегов
+        const tagInput = document.getElementById('addFormTagInput');
+        if (tagInput) {
+            tagInput.placeholder = '🔍 Поиск тегов...';
+            tagInput.disabled = true;
+        }
+
+        // Меняем placeholder у обложки
+        const icoInput = document.getElementById('icoInput');
+        if (icoInput) {
+            icoInput.placeholder = '🔍 Поиск обложки...';
+            icoInput.disabled = true;
+        }
+
+        // Меняем обложку в превью на заглушку "поиск"
+        updatePreview(title, null, null, null);
+        const previewCard = document.getElementById('previewCard');
+        if (previewCard) {
+            const icon = previewCard.querySelector('.game-icon');
+            if (icon) {
+                icon.style.opacity = '0.5';
+            }
+        }
+
+        // Ищем теги и обложку
+        const tags = await autoFetchTags(title, section);
+
+        if (tags && tags.length > 0 && window.getAddFormTags) {
+            if (window.clearAddFormTags) {
+                window.clearAddFormTags();
+            }
+
+            for (const tag of tags) {
+                const tagInputEl = document.getElementById('addFormTagInput');
+                if (tagInputEl) {
+                    tagInputEl.value = tag;
+                    const enterEvent = new KeyboardEvent('keydown', { key: 'Enter' });
+                    tagInputEl.dispatchEvent(enterEvent);
+                }
+            }
+
+            console.log(`[AutoSearch] Added ${tags.length} tags`);
+        }
+
+    } catch (error) {
+        console.error('[AutoSearch] Error:', error);
+    } finally {
+        // Восстанавливаем всё, что меняли
+        const tagInput = document.getElementById('addFormTagInput');
+        if (tagInput) {
+            tagInput.placeholder = originalTagPlaceholder;
+            tagInput.disabled = false;
+        }
+
+        const icoInput = document.getElementById('icoInput');
+        if (icoInput) {
+            icoInput.placeholder = originalCoverPlaceholder;
+            icoInput.disabled = false;
+        }
+
+        // Восстанавливаем прозрачность обложки
+        const previewCard = document.getElementById('previewCard');
+        if (previewCard) {
+            const icon = previewCard.querySelector('.game-icon');
+            if (icon) {
+                icon.style.opacity = '1';
+            }
+        }
+
+        // Обновляем превью с текущими значениями
+        const nameInput = document.getElementById('nameInput');
+        const icoInputValue = document.getElementById('icoInput')?.value || '';
+        const ratingSelect = document.getElementById('ratingSelect');
+        const statusSelect = document.getElementById('statusSelect');
+        updatePreview(
+            nameInput?.value || 'Название',
+            icoInputValue,
+            ratingSelect?.value || '0',
+            statusSelect?.value || 'Уточнить'
+        );
+    }
+}
+
+function setupAutoSearchOnNameInput() {
+    const nameInput = document.getElementById('nameInput');
+    if (!nameInput) return;
+
+    nameInput.addEventListener('input', (e) => {
+        const currentValue = e.target.value.trim();
+        const section = document.querySelector('.nav-item.active')?.dataset.section;
+        const now = Date.now();
+
+        // Сохраняем предыдущее значение и время
+        if (searchTimeout) clearTimeout(searchTimeout);
+
+        // Вычисляем задержку на основе скорости
+        const delay = getAdaptiveDelay(currentValue);
+        console.log(`[AutoSearch] Delay: ${delay}ms (value: "${currentValue}")`);
+
+        // Обновляем для следующего раза
+        lastValue = currentValue;
+        lastChangeTime = now;
+
+        searchTimeout = setTimeout(() => {
+            autoSearchOnInput(currentValue, section);
+        }, delay);
+    });
+}
+
+function showLoadingPreview() {
+    const icon = document.querySelector('#previewCard .game-icon');
+    if (icon && !icon.dataset.originalSrc) {
+        icon.dataset.originalSrc = icon.src;
+        icon.src = 'assets/images/search-loading.gif';  // локальная гифка
+    }
+}
+
+
+// Скрываем заглушку загрузки
+function hideLoadingPreview() {
+    const icon = document.querySelector('#previewCard .game-icon');
+    if (icon && icon.dataset.originalSrc) {
+        icon.src = icon.dataset.originalSrc;
+        delete icon.dataset.originalSrc;
+    }
+}
 
 function updateStats() {
     const data = window.filteredData || window.allSectionData || [];
@@ -1501,6 +1672,8 @@ async function initCardSection() {
     // Настраиваем кнопку добавления
     setupAddButton();
     setupAddFormTags();
+    setupAutoSearchOnNameInput();
+
 
     setupDeleteButtons();
     setupEditableFields();
@@ -2791,46 +2964,34 @@ function updatePreview(name, icoUrl, rating, status) {
 }
 
 async function autoFetchTags(title, section) {
+    showLoadingPreview(title);
+    let result;
     switch (section) {
         case 'movies':
         case 'serials':
         case 'cartoons':
-            const movieResult = await window.electronAPI.searchKinopoiskMovie(title);
-            if (movieResult && movieResult.coverUrl) {
-                // Обновляем поле ввода обложки
-                const icoInput = document.getElementById('icoInput');
-                if (icoInput) icoInput.value = movieResult.coverUrl;
-                // Обновляем превью
-                updatePreview(title, movieResult.coverUrl, null, null);
-            }
-            return movieResult?.tags || [];
+            result = await window.electronAPI.searchKinopoiskMovie(title);
+            break
         case 'anime':
-            const animeResult = await window.electronAPI.searchYummyAniAnime(title);
-            if (animeResult && animeResult.coverUrl) {
-                const icoInput = document.getElementById('icoInput');
-                if (icoInput) icoInput.value = animeResult.coverUrl;
-                updatePreview(title, animeResult.coverUrl, null, null);
-            }
-            return animeResult?.tags || [];
+            result = await window.electronAPI.searchYummyAniAnime(title);
+            break;
         case 'games':
-            const gameResult = await window.electronAPI.fetchSteamTags(title);
-            if (gameResult && gameResult.coverUrl) {
-                const icoInput = document.getElementById('icoInput');
-                if (icoInput) icoInput.value = gameResult.coverUrl;
-                updatePreview(title, gameResult.coverUrl, null, null);
-            }
-            return gameResult?.tags || [];
+            result = await window.electronAPI.fetchSteamTags(title);
+            break;
         case 'books':
-            const bookResult = await window.electronAPI.searchLitresBook(title);
-            if (bookResult && bookResult.coverUrl) {
-                const icoInput = document.getElementById('icoInput');
-                if (icoInput) icoInput.value = bookResult.coverUrl;
-                updatePreview(title, bookResult.coverUrl, null, null);
-            }
-            return bookResult?.tags || [];
+            result = await window.electronAPI.searchLitresBook(title);
+            break;
         default:
-            return [];
+            result = [];
+            break;
     }
+    hideLoadingPreview();
+    if (result && result.coverUrl) {
+        const icoInput = document.getElementById('icoInput');
+        if (icoInput) icoInput.value = result.coverUrl;
+        updatePreview(title, result.coverUrl, null, null);
+    }
+    return result?.tags || [];
 }
 
 
