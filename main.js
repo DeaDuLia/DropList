@@ -3011,4 +3011,3 @@ ipcMain.handle('delete-release-date', async (event, cardName, section) => {
 ipcMain.handle('get-all-expected-releases', async () => {
     return statements.getAllExpectedReleases.all();
 });
-
