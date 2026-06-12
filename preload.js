@@ -1,6 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
+    getSectionReleaseNotifications: (section) => ipcRenderer.invoke('get-section-release-notifications', section),
+    markReleaseNotificationShown: (cardName, section) => ipcRenderer.invoke('mark-release-notification-shown', cardName, section),
     searchYummyAniAnime: (title) => ipcRenderer.invoke('search-yummyani-anime', title),
     searchKinopoiskMovie: (title) => ipcRenderer.invoke('search-kinopoisk-movie', title),
     searchLitresBook: (title) => ipcRenderer.invoke('search-litres-book', title),

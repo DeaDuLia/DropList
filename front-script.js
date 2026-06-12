@@ -84,6 +84,129 @@ window.addEventListener('resize', () => {
     if (itemsPerPage > itemsPerPagePred) { loadMoreItems(); }
 });
 
+async function checkSectionReleaseNotifications(section) {
+    const result = await window.electronAPI.getSectionReleaseNotifications(section);
+
+    if (result.success && result.notifications.length > 0) {
+        // Показываем самое ближайшее
+        const first = result.notifications[0];
+        showReleaseNotification(first);
+
+        // Отмечаем как показанное
+        await window.electronAPI.markReleaseNotificationShown(first.cardName, first.section);
+    }
+}
+
+async function showReleaseNotification(notification) {
+    // Получаем URL обложки карточки из allSectionData
+    let coverUrl = '';
+    const cardData = window.allSectionData?.find(c => c.name === notification.cardName);
+    if (cardData && cardData.icoUrl && cardData.icoUrl.trim()) {
+        coverUrl = cardData.icoUrl;
+    }
+
+    // Если не нашли в allSectionData, пробуем найти в DOM
+    if (!coverUrl) {
+        const cardElement = document.querySelector(`.data-card[data-name="${notification.cardName}"]`);
+        if (cardElement) {
+            const icon = cardElement.querySelector('.game-icon');
+            if (icon && icon.src && !icon.src.includes('apptor.studio')) {
+                coverUrl = icon.src;
+            }
+        }
+    }
+
+    // Форматируем дату
+    const releaseDate = new Date(notification.releaseDate);
+    const formattedDate = releaseDate.toLocaleDateString('ru-RU', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+    });
+
+    const banner = document.createElement('div');
+    banner.className = `release-banner ${notification.isReleased ? 'release-banner-released' :
+        (notification.daysLeft <= 7 ? 'release-banner-upcoming_week' : 'release-banner-upcoming_month')}`;
+
+    banner.innerHTML = `
+        <div class="release-banner-content">
+            ${coverUrl ?
+        `<img src="${coverUrl}" class="release-banner-image" alt="${escapeHtml(notification.cardName)}" onerror="this.src='https://apptor.studio/assets/cache/images/600-856x600-629.png'">` :
+        `<div class="release-banner-image" style="background: linear-gradient(135deg, #0078d4, #106ebe); display: flex; align-items: center; justify-content: center; font-size: 20px;">${notification.isReleased ? '🎉' : '📅'}</div>`
+    }
+            <div class="release-banner-text">
+                <div class="release-banner-title">${escapeHtml(notification.cardName)}</div>
+                <div class="release-banner-message">
+                    
+                    <span>${notification.message.replace(notification.cardName, '').trim()}</span>
+                </div>
+                <div class="release-banner-date">${formattedDate}</div>
+            </div>
+            <button class="release-banner-close">×</button>
+        </div>
+    `;
+
+    document.body.appendChild(banner);
+
+    const closeBtn = banner.querySelector('.release-banner-close');
+    closeBtn.onclick = (e) => {
+        e.stopPropagation();
+        hideBanner(banner);
+    };
+
+    // Клик по баннеру (кроме кнопки закрытия)
+    banner.onclick = async (e) => {
+        if (e.target === closeBtn || closeBtn.contains(e.target)) return;
+
+        // Сбрасываем фильтры на "Все"
+        currentFilters.statusFilter = 'Все';
+        document.querySelectorAll('.filter-button').forEach(btn => {
+            btn.classList.remove('active');
+            if (btn.dataset.status === 'Все') {
+                btn.classList.add('active');
+            }
+        });
+
+        // Сбрасываем сортировку на "по дате"
+        currentFilters.sortBy = 'date';
+        document.querySelectorAll('.sort-button').forEach(btn => {
+            btn.classList.remove('active');
+            if (btn.dataset.sort === 'date') {
+                btn.classList.add('active');
+            }
+        });
+
+        // Вставляем название в поиск
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput) {
+            searchInput.value = notification.cardName;
+        }
+
+        // Вызываем поиск
+        filterCards(notification.cardName);
+
+        // Скрываем баннер
+        hideBanner(banner);
+    };
+
+    // Авто-скрытие через 8 секунд
+    const timeoutId = setTimeout(() => {
+        if (banner.parentNode) hideBanner(banner);
+    }, 8000);
+
+    banner.dataset.timeoutId = timeoutId;
+}
+
+function hideBanner(banner) {
+    if (banner.dataset.timeoutId) {
+        clearTimeout(parseInt(banner.dataset.timeoutId));
+    }
+    banner.classList.add('hiding');
+    setTimeout(() => {
+        if (banner.parentNode) banner.remove();
+    }, 300);
+}
+
 function getAdaptiveDelay(currentValue) {
     const now = Date.now();
     const timeSinceLastChange = lastChangeTime ? now - lastChangeTime : 0;
@@ -1297,6 +1420,7 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
     // Добавляем обработчик прокрутки для бесконечной загрузки
     contentWrapper.addEventListener('scroll', handleScroll);
     setupContentWrapperScroll();
+    await checkSectionReleaseNotifications(section);
 }
 
 function filterData(data, searchQuery, statusFilter, isTag = false) {
@@ -1687,7 +1811,127 @@ async function initCardSection() {
     updateStats();
     setupEditDescriptionButtons();
 
+    const testBtn = document.createElement('button');
+    testBtn.textContent = '🧪 Тест релизов';
+    testBtn.style.cssText = 'position:fixed; bottom:10px; right:10px; z-index:9999; background:#6c5ce7; color:white; border:none; border-radius:20px; padding:8px 16px; cursor:pointer; font-size:12px; opacity:0.5;';
+    testBtn.onclick = () => runReleaseTests();
+    document.body.appendChild(testBtn);
+}
 
+async function runReleaseTests() {
+    console.clear();
+    console.log('🧪 ===== ТЕСТИРОВАНИЕ EXPECTED_RELEASES ===== 🧪');
+
+    const section = document.querySelector('.nav-item.active')?.dataset.section || 'games';
+
+    // ===== ТЕСТ 1: Создание карточки со статусом "Ожидается" =====
+    console.log('\n📝 ТЕСТ 1: Создание карточки со статусом "Ожидается"');
+    const testCardName = `Моана`;
+
+    const testCard = {
+        name: testCardName,
+        icoUrl: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT2GRJCyWk7oNVLU4LXBSBayCHmGb1EdxKNIQ&s',
+        rating: '0',
+        status: 'Ожидается',
+        description: 'Тестовая карточка для проверки релизов',
+        tags: ['тест', 'релиз']
+    };
+
+    await window.electronAPI.addData(section, testCard);
+    console.log('✅ Карточка создана:', testCardName);
+
+    // Ждём 2 секунды (чтобы успел сходить за датой)
+    await new Promise(r => setTimeout(r, 2000));
+
+    // Проверяем, появилась ли запись в expected_releases
+    const result = await window.electronAPI.getSectionReleaseNotifications(section);
+    const ourRelease = result.notifications.find(n => n.cardName === testCardName);
+
+    if (ourRelease) {
+        console.log('✅ Запись в expected_releases создана:', ourRelease);
+    } else {
+        console.log('❌ Запись НЕ создана!');
+    }
+
+    // ===== ТЕСТ 2: Проверка уведомления =====
+    console.log('\n🔔 ТЕСТ 2: Проверка уведомления');
+    await checkSectionReleaseNotifications(section);
+    console.log('✅ Уведомление должно было появиться');
+
+    // ===== ТЕСТ 3: Изменение статуса с "Ожидается" на другой =====
+    console.log('\n🔄 ТЕСТ 3: Изменение статуса на "Завершено"');
+    await window.electronAPI.updateDataStatus(section, testCardName, 'Завершено');
+    await new Promise(r => setTimeout(r, 500));
+
+    // Проверяем, что запись удалилась
+    const resultAfterChange = await window.electronAPI.getSectionReleaseNotifications(section);
+    const stillExists = resultAfterChange.notifications.find(n => n.cardName === testCardName);
+
+    if (!stillExists) {
+        console.log('✅ Запись удалена после смены статуса');
+    } else {
+        console.log('❌ Запись осталась!');
+    }
+
+    // ===== ТЕСТ 4: Статус "В процессе" =====
+    console.log('\n🔄 ТЕСТ 4: Статус "В процессе"');
+    await window.electronAPI.updateDataStatus(section, testCardName, 'В процессе');
+    await new Promise(r => setTimeout(r, 2000));
+
+    const resultInProgress = await window.electronAPI.getSectionReleaseNotifications(section);
+    const inProgressRelease = resultInProgress.notifications.find(n => n.cardName === testCardName);
+
+    if (inProgressRelease) {
+        console.log('✅ Запись создана для статуса "В процессе":', inProgressRelease);
+    } else {
+        console.log('❌ Запись НЕ создана для "В процессе"');
+    }
+
+    // ===== ТЕСТ 5: Удаление карточки =====
+    console.log('\n🗑️ ТЕСТ 5: Удаление карточки');
+    await window.electronAPI.deleteData(section, testCardName);
+    await new Promise(r => setTimeout(r, 500));
+
+    const resultAfterDelete = await window.electronAPI.getSectionReleaseNotifications(section);
+    const deletedStillExists = resultAfterDelete.notifications.find(n => n.cardName === testCardName);
+
+    if (!deletedStillExists) {
+        console.log('✅ Запись удалена после удаления карточки');
+    } else {
+        console.log('❌ Запись осталась после удаления!');
+    }
+
+    // ===== ТЕСТ 6: Проверка last_notification_date (откат 6 часов) =====
+    console.log('\n⏰ ТЕСТ 6: Проверка отката уведомлений');
+    // Создаём новую карточку
+    const testCard2 = {
+        name: `Одиссея `,
+        icoUrl: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT2GRJCyWk7oNVLU4LXBSBayCHmGb1EdxKNIQ&s',
+        rating: '0',
+        status: 'Ожидается',
+        description: 'Для проверки отката',
+        tags: []
+    };
+    await window.electronAPI.addData(section, testCard2);
+    await new Promise(r => setTimeout(r, 2000));
+
+    // Первое уведомление
+    await checkSectionReleaseNotifications(section);
+    console.log('✅ Первое уведомление показано');
+
+    // Проверяем, что last_notification_date установился
+    const firstCheck = await window.electronAPI.getSectionReleaseNotifications(section);
+    const firstNotif = firstCheck.notifications.find(n => n.cardName === testCard2.name);
+    console.log('📊 Статус после первого уведомления:', firstNotif ? 'ещё есть в очереди (не должно быть)' : 'нет в очереди (должно быть так)');
+
+    // Имитируем повторный вход в категорию (без реальной задержки 6 часов)
+    // Для теста можно временно уменьшить проверку в коде с 6 часов на 5 секунд
+    console.log('⚠️ Для проверки отката нужно либо подождать 6 часов, либо временно изменить в коде 6 часов на 5 секунд');
+
+
+    console.log('\n🧪 ===== ТЕСТИРОВАНИЕ ЗАВЕРШЕНО ===== 🧪');
+    console.log('📝 Проверь консоль Electron (main process) на наличие ошибок');
+    console.log('📝 Проверь таблицу expected_releases через DB Browser for SQLite');
 }
 
 function setupChangeImageButtons() {

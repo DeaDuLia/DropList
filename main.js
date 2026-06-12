@@ -151,6 +151,7 @@ async function applySyncChoice(uid, idToken, choice, localData, remoteData) {
                 await saveSectionToFirestore(uid, freshToken, section, localData[section] || []);
             }
             await saveAllTagsToFirestore(uid, freshToken);
+            await saveExpectedReleasesToFirestore(uid, freshToken);
             const localLastSync = statements.getStatistic.get('last_firestore_update');
             const localSyncTime = localLastSync ? localLastSync.value : null;
             await updateSyncTime(uid, freshToken, localSyncTime);
@@ -166,11 +167,24 @@ async function applySyncChoice(uid, idToken, choice, localData, remoteData) {
                 }
                 clearTagsDirty();
             }
-            const remoteSyncTime = await getSyncTime(uid, freshToken);
-            statements.setStatistic.run('last_firestore_update', remoteSyncTime, remoteSyncTime);
-            return { success: true, source: 'remote' };
-        }
+            const remoteReleases = await loadExpectedReleasesFromFirestore(uid, freshToken);
+            if (remoteReleases) {
+                statements.replaceAllExpectedReleases.run();
+                for (const release of remoteReleases) {
+                    statements.setExpectedRelease.run(
+                        release.card_name,
+                        release.section,
+                        release.release_date,
+                        release.last_notification_date
+                    );
+                }
+                clearExpectedReleasesDirty();
 
+                const remoteSyncTime = await getSyncTime(uid, freshToken);
+                statements.setStatistic.run('last_firestore_update', remoteSyncTime, remoteSyncTime);
+                return {success: true, source: 'remote'};
+            }
+        }
         return { success: false, error: 'Неверный выбор' };
     } catch (error) {
         console.error('Apply sync error:', error);
@@ -413,6 +427,19 @@ function initializeDatabase(db) {
             actual_date DATETIME NOT NULL
         )
     `);
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS expected_releases (
+            card_name TEXT,
+            section TEXT,
+            release_date TEXT NOT NULL,
+            last_notification_date TEXT,
+            PRIMARY KEY (card_name, section)
+        )
+    `);
+    db.exec(`
+    INSERT OR IGNORE INTO app_statistics (info, value, actual_date)
+    VALUES ('last_release_update', '1970-01-01', datetime('now'))
+`);
 }
 
 function saveUserSession(email, uid, idToken, refreshToken) {
@@ -509,6 +536,9 @@ const statements = {
         FROM data_cards 
         WHERE section = ?
     `),
+    getStatusByNameAndSection: db.prepare(`
+        SELECT status FROM data_cards WHERE name = ? AND section = ?
+    `),
     addData: db.prepare(`
         INSERT OR REPLACE INTO data_cards 
         (name, section, ico_url, rating, status, description) 
@@ -528,30 +558,63 @@ const statements = {
     getAllStatistics: db.prepare('SELECT info, value, actual_date FROM app_statistics'),
     getAllTags: db.prepare('SELECT name, count FROM tags ORDER BY count DESC'),
     addOrUpdateTag: db.prepare(`
-    INSERT INTO tags (name, count) VALUES (?, 1)
-    ON CONFLICT(name) DO UPDATE SET count = count + 1
-`),
+        INSERT INTO tags (name, count) VALUES (?, 1)
+        ON CONFLICT(name) DO UPDATE SET count = count + 1
+    `),
     removeTagCount: db.prepare(`
-    UPDATE tags SET count = count - 1 WHERE name = ?
-`),
+        UPDATE tags SET count = count - 1 WHERE name = ?
+    `),
     deleteTagIfZero: db.prepare(`
-    DELETE FROM tags WHERE name = ? AND count <= 0
-`),
+        DELETE FROM tags WHERE name = ? AND count <= 0
+    `),
     getTagsByCard: db.prepare(`
-    SELECT tag_name FROM tags_assign WHERE card_name = ?
-`),
+        SELECT tag_name FROM tags_assign WHERE card_name = ?
+    `),
     addTagToCard: db.prepare(`
-    INSERT OR IGNORE INTO tags_assign (card_name, tag_name) VALUES (?, ?)
-`),
+        INSERT OR IGNORE INTO tags_assign (card_name, tag_name) VALUES (?, ?)
+    `),
     removeTagFromCard: db.prepare(`
-    DELETE FROM tags_assign WHERE card_name = ? AND tag_name = ?
-`),
+        DELETE FROM tags_assign WHERE card_name = ? AND tag_name = ?
+    `),
     clearCardTags: db.prepare(`
-    DELETE FROM tags_assign WHERE card_name = ?
-`),
+        DELETE FROM tags_assign WHERE card_name = ?
+    `),
     searchTags: db.prepare(`
-    SELECT name FROM tags WHERE name LIKE ? ORDER BY count DESC LIMIT 10
-`)
+        SELECT name FROM tags WHERE name LIKE ? ORDER BY count DESC LIMIT 10
+    `),
+    getExpectedRelease: db.prepare('SELECT * FROM expected_releases WHERE card_name = ? AND section = ?'),
+    setExpectedRelease: db.prepare(`
+        INSERT OR REPLACE INTO expected_releases (card_name, section, release_date, last_notification_date)
+        VALUES (?, ?, ?, ?)
+    `),
+    deleteExpectedRelease: db.prepare('DELETE FROM expected_releases WHERE card_name = ? AND section = ?'),  // ← ЭТОТ ОТСУТСТВОВАЛ
+
+    getExpectedReleasesBySection: db.prepare(`
+        SELECT er.*, dc.status 
+        FROM expected_releases er
+        JOIN data_cards dc ON dc.name = er.card_name AND dc.section = er.section
+        WHERE er.section = ? AND (dc.status = 'Ожидается' OR dc.status = 'В процессе')
+        ORDER BY date(er.release_date) ASC
+    `),
+    updateCardNameInExpected: db.prepare(`
+        UPDATE expected_releases SET card_name = ? WHERE card_name = ? AND section = ?
+    `),
+    updateSectionInExpected: db.prepare(`
+        UPDATE expected_releases SET section = ? WHERE card_name = ? AND section = ?
+    `),
+
+    isExpectedReleasesDirty: db.prepare('SELECT value FROM app_statistics WHERE info = ?'),
+        setExpectedReleasesDirty: db.prepare(`
+        INSERT OR REPLACE INTO app_statistics (info, value, actual_date) 
+        VALUES ('dirty_expected_releases', 'true', ?)
+    `),
+    clearExpectedReleasesDirty: db.prepare(`
+        DELETE FROM app_statistics WHERE info = 'dirty_expected_releases'
+    `),
+    getAllExpectedReleases: db.prepare('SELECT card_name, section, release_date, last_notification_date FROM expected_releases'),
+    replaceAllExpectedReleases: db.prepare(`
+        DELETE FROM expected_releases
+    `)
 };
 
 let win;
@@ -876,6 +939,14 @@ ipcMain.handle('add-data', async (event, section, data) => {
         markTagsDirty();
     }
 
+    if ((data.status === 'Ожидается' || data.status === 'В процессе')) {
+        const releaseDate = await fetchReleaseDateForCard(data.name, section);
+        if (releaseDate) {
+            statements.setExpectedRelease.run(data.name, section, releaseDate, null);
+            markExpectedReleasesDirty();
+        }
+    }
+
     markSectionDirty(section);
     const now = new Date().toISOString();
     statements.setStatistic.run('last_firestore_update', now, now);
@@ -888,6 +959,8 @@ ipcMain.handle('delete-data', async (event, section, dataName) => {
 
     // Удаляем связи тегов
     statements.clearCardTags.run(dataName);
+    statements.deleteExpectedRelease.run(dataName, section);
+
 
     // Удаляем карточку
     const result = statements.deleteData.run(dataName, section);
@@ -899,6 +972,7 @@ ipcMain.handle('delete-data', async (event, section, dataName) => {
     }
 
     markSectionDirty(section);
+    markExpectedReleasesDirty();
     const now = new Date().toISOString();
     statements.setStatistic.run('last_firestore_update', now, now);
 
@@ -938,9 +1012,25 @@ ipcMain.handle('update-data-rating', async (event, section, dataName, rating) =>
 });
 
 ipcMain.handle('update-data-status', async (event, section, dataName, status) => {
+    const oldStatus = statements.getStatusByNameAndSection.get(dataName, section)?.status;
     const result = statements.updateDataStatus.run(status, dataName, section);
+
+    // Если статус изменился на Ожидается или В процессе
+    if ((status === 'Ожидается' || status === 'В процессе') && oldStatus !== status) {
+        const releaseDate = await fetchReleaseDateForCard(dataName, section);
+        if (releaseDate) {
+            statements.setExpectedRelease.run(dataName, section, releaseDate, null);
+            markExpectedReleasesDirty();
+        }
+    }
+    // Если статус изменился с Ожидается/В процессе на другой
+    else if ((oldStatus === 'Ожидается' || oldStatus === 'В процессе') &&
+        status !== 'Ожидается' && status !== 'В процессе') {
+        statements.deleteExpectedRelease.run(dataName, section);
+    }
+
     markSectionDirty(section);
-    // Обновляем локальное время синхронизации
+    markExpectedReleasesDirty();
     const now = new Date().toISOString();
     statements.setStatistic.run('last_firestore_update', now, now);
 
@@ -1586,6 +1676,13 @@ async function syncDirtySections(uid, idToken) {
         clearTagsDirty();
     }
 
+    const dirtyExpectedReleases = statements.isExpectedReleasesDirty.get('dirty_expected_releases');
+    if (dirtyExpectedReleases && dirtyExpectedReleases.value === 'true') {
+        console.log('[i] Syncing expected releases...');
+        await saveExpectedReleasesToFirestore(uid, idToken);
+        clearExpectedReleasesDirty();
+    }
+
     const now = new Date().toISOString();
     await updateSyncTime(uid, freshToken, now);
     statements.setStatistic.run('last_firestore_update', now, now);
@@ -1849,7 +1946,7 @@ ipcMain.handle('search-yummyani-anime', async (event, title) => {
 });
 
 // ========== кино, сериалы, мультфильы ==========
-async function fetchKinopoiskMovieTags(movieName) {
+async function  fetchKinopoiskMovieTags(movieName) {
     return new Promise(async (resolve) => {
         let hiddenWindow = null;
         let isResolved = false;
@@ -1867,8 +1964,8 @@ async function fetchKinopoiskMovieTags(movieName) {
         };
 
         try {
-            const cleanName = movieName.split(' ').slice(0, 3).join(' ');
-            const searchUrl = `https://www.kinopoisk.ru/index.php?kp_query=${encodeURIComponent(cleanName)}`;
+
+            const searchUrl = `https://www.kinopoisk.ru/index.php?kp_query=${encodeURIComponent(movieName)}`;
             console.log(`[Kinopoisk] Searching: ${searchUrl}`);
 
             hiddenWindow = new BrowserWindow({
@@ -1930,13 +2027,13 @@ async function fetchKinopoiskMovieTags(movieName) {
 
             if (!movieInfo || !movieInfo.url) {
                 console.log('[Kinopoisk] Movie not found');
-                finish({ tags: [], description: '', coverUrl: '', fullTitle: '' });
+                finish({ tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null });
                 return;
             }
 
             console.log(`[Kinopoisk] Found movie: ${movieInfo.url}`);
 
-            // ========== ПОИСК ТЕГОВ НА СТРАНИЦЕ ФИЛЬМА ==========
+            // ========== ПОИСК ТЕГОВ И ДАТЫ НА СТРАНИЦЕ ФИЛЬМА ==========
             isLoaded = false;
 
             hiddenWindow.loadURL(movieInfo.url);
@@ -1970,7 +2067,6 @@ async function fetchKinopoiskMovieTags(movieName) {
                     if (titleElement) {
                         fullTitle = titleElement.textContent.trim();
                     }
-                    // Запасной вариант, если не нашли через span
                     if (!fullTitle) {
                         const titleH1 = document.querySelector('h1[itemprop="name"]');
                         if (titleH1) {
@@ -1978,6 +2074,7 @@ async function fetchKinopoiskMovieTags(movieName) {
                         }
                     }
                     
+                    // Теги (жанры)
                     const tags = [];
                     const genresBlock = document.querySelector('[data-test-id="genres"]');
                     if (genresBlock) {
@@ -1990,7 +2087,6 @@ async function fetchKinopoiskMovieTags(movieName) {
                         });
                     }
                     
-                    // Запасные селекторы
                     if (tags.length === 0) {
                         const fallbackSelectors = [
                             '.styles_rowDark__Q3Dh2 a[href*="/genre/"]',
@@ -2008,12 +2104,14 @@ async function fetchKinopoiskMovieTags(movieName) {
                         }
                     }
                     
+                    // Описание
                     let description = '';
                     const descElement = document.querySelector('[data-test-id="synopsis"]');
                     if (descElement) {
                         description = descElement.textContent.trim().substring(0, 500);
                     }
                     
+                    // Обложка
                     let coverUrl = '';
                     const posterElement = document.querySelector('.film-poster');
                     if (posterElement && posterElement.src) {
@@ -2028,11 +2126,56 @@ async function fetchKinopoiskMovieTags(movieName) {
                         }
                     }
                     
+                    // ДАТА ПРЕМЬЕРЫ
+                    let releaseDate = null;
+                    const premiereBlock = document.querySelector('[data-test-id="worldPremieres"]');
+                    if (premiereBlock) {
+                        const dateLink = premiereBlock.querySelector('a[href*="/dates/"]');
+                        if (dateLink) {
+                            const dateText = dateLink.textContent.trim();
+                            
+                            // Парсим дату в формате "15 июля 2026"
+                            const months = {
+                                'января': '01', 'февраля': '02', 'марта': '03', 'апреля': '04',
+                                'мая': '05', 'июня': '06', 'июля': '07', 'августа': '08',
+                                'сентября': '09', 'октября': '10', 'ноября': '11', 'декабря': '12'
+                            };
+                            
+                            // Разбиваем строку на части
+                            const parts = dateText.split(/\\s+/);
+                            
+                            let day = null;
+                            let monthNum = null;
+                            let year = null;
+                            
+                            for (let i = 0; i < parts.length; i++) {
+                                const part = parts[i];
+                                // Ищем день (число от 1 до 31)
+                                if (/^\\d{1,2}$/.test(part) && !day) {
+                                    day = part.padStart(2, '0');
+                                }
+                                // Ищем год (4 цифры)
+                                else if (/^\\d{4}$/.test(part) && !year) {
+                                    year = part;
+                                }
+                                // Ищем месяц (русское название)
+                                else if (months[part] && !monthNum) {
+                                    monthNum = months[part];
+                                }
+                            }
+                            
+                            if (day && monthNum && year) {
+                                releaseDate = year + '-' + monthNum + '-' + day;
+                            }
+                        }
+                    }
+                    
                     return {
                         tags: tags.slice(0, 10),
                         description: description,
                         coverUrl: coverUrl,
-                        fullTitle: fullTitle
+                        fullTitle: fullTitle,
+                        releaseDate: releaseDate
                     };
                 })();
             `);
@@ -2040,12 +2183,13 @@ async function fetchKinopoiskMovieTags(movieName) {
             console.log(`[Kinopoisk] Full title: ${movieData.fullTitle}`);
             console.log(`[Kinopoisk] Found tags for "${movieName}":`, movieData.tags);
             console.log(`[Kinopoisk] Cover: ${movieData.coverUrl}`);
+            console.log(`[Kinopoisk] Release date: ${movieData.releaseDate || 'not found'}`);
 
             finish(movieData);
 
         } catch (error) {
             console.error('[Kinopoisk] Error:', error);
-            finish({ tags: [], description: '', coverUrl: '', fullTitle: '' });
+            finish({ tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null });
         }
     });
 }
@@ -2068,8 +2212,7 @@ async function fetchYummyAniTags(animeName) {
         };
 
         try {
-            const cleanName = animeName.split(' ').slice(0, 3).join(' ');
-            const searchUrl = `https://old.yummyani.me/search?word=${encodeURIComponent(cleanName)}`;
+            const searchUrl = `https://old.yummyani.me/search?word=${encodeURIComponent(animeName)}`;
             console.log(`[YummyAni] Searching: ${searchUrl}`);
 
             hiddenWindow = new BrowserWindow({
@@ -2124,13 +2267,13 @@ async function fetchYummyAniTags(animeName) {
 
             if (!animeLink) {
                 console.log('[YummyAni] No link found');
-                finish({ tags: [], description: '', coverUrl: '', fullTitle: '' });
+                finish({ tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null });
                 return;
             }
 
             console.log(`[YummyAni] Found: ${animeLink}`);
 
-            // ========== ПОИСК ТЕГОВ ==========
+            // ========== ПОИСК ТЕГОВ И ДАТЫ ==========
             isLoaded = false;
 
             hiddenWindow.loadURL(animeLink);
@@ -2165,6 +2308,7 @@ async function fetchYummyAniTags(animeName) {
                         fullTitle = titleElement.textContent.trim();
                     }
                     
+                    // Теги (жанры)
                     const tags = [];
                     const genreContainer = document.querySelector('.categories-list.no-comma');
                     if (genreContainer) {
@@ -2177,12 +2321,14 @@ async function fetchYummyAniTags(animeName) {
                         });
                     }
                     
+                    // Описание
                     let description = '';
                     const descElement = document.querySelector('.item-description .text');
                     if (descElement) {
                         description = descElement.textContent.trim().substring(0, 500);
                     }
                     
+                    // Обложка
                     let coverUrl = '';
                     const coverElement = document.querySelector('.bordered-top');
                     if (coverElement && coverElement.src) {
@@ -2196,22 +2342,55 @@ async function fetchYummyAniTags(animeName) {
                         }
                     }
                     
+                    // ДАТА СЛЕДУЮЩЕГО ЭПИЗОДА
+                    let releaseDate = null;
+                    const timeCounter = document.querySelector('time-counter');
+                    if (timeCounter && timeCounter.getAttribute('data-time')) {
+                        const timestamp = timeCounter.getAttribute('data-time');
+                        if (timestamp) {
+                            // Конвертируем Unix timestamp в ISO дату (YYYY-MM-DD)
+                            const date = new Date(parseInt(timestamp) * 1000);
+                            if (!isNaN(date.getTime())) {
+                                releaseDate = date.toISOString().split('T')[0];
+                                console.log('[YummyAni] Next episode date:', releaseDate);
+                            }
+                        }
+                    }
+                    
+                    // Если нет time-counter, пробуем local-time
+                    if (!releaseDate) {
+                        const localTime = document.querySelector('local-time');
+                        if (localTime && localTime.getAttribute('data-time')) {
+                            const timestamp = localTime.getAttribute('data-time');
+                            if (timestamp) {
+                                const date = new Date(parseInt(timestamp) * 1000);
+                                if (!isNaN(date.getTime())) {
+                                    releaseDate = date.toISOString().split('T')[0];
+                                    console.log('[YummyAni] Next episode date (from local-time):', releaseDate);
+                                }
+                            }
+                        }
+                    }
+                    
                     return { 
                         tags: tags.slice(0, 12), 
                         description: description, 
                         coverUrl: coverUrl,
-                        fullTitle: fullTitle
+                        fullTitle: fullTitle,
+                        releaseDate: releaseDate
                     };
                 })();
             `);
 
             console.log(`[YummyAni] Full title: ${animeData.fullTitle}`);
             console.log(`[YummyAni] Tags:`, animeData.tags);
+            console.log(`[YummyAni] Release date (next episode): ${animeData.releaseDate || 'not found'}`);
+
             finish(animeData);
 
         } catch (error) {
             console.error('[YummyAni] Error:', error);
-            finish({ tags: [], description: '', coverUrl: '', fullTitle: '' });
+            finish({ tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null });
         }
     });
 }
@@ -2234,27 +2413,96 @@ async function fetchSteamGameTags(gameName) {
         };
 
         try {
+            // 1. Поиск игры через storesearch API
             const searchUrl = `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(gameName)}&cc=ru&l=russian`;
             const searchResponse = await fetch(searchUrl);
             const searchData = await searchResponse.json();
 
             if (!searchData.items || searchData.items.length === 0) {
                 console.log(`[Steam] Game not found: ${gameName}`);
-                finish({ tags: [], coverUrl: '', fullTitle: '' });
+                finish({ tags: [], coverUrl: '', fullTitle: '', releaseDate: null });
                 return;
             }
 
             const game = searchData.items[0];
             const appId = game.id;
-            const fullTitle = game.name;  // ← ПОЛНОЕ НАЗВАНИЕ ИЗ API
+            const fullTitle = game.name;
 
             console.log(`[Steam] Found ID for "${gameName}": ${appId}`);
             console.log(`[Steam] Full title: "${fullTitle}"`);
 
-            // Обложка — прямая ссылка
-            const coverUrl = `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`;
-            console.log(`[Steam] Cover URL: ${coverUrl}`);
+            // 2. Получаем детальную информацию через appdetails API
+            const detailsUrl = `https://store.steampowered.com/api/appdetails?appids=${appId}&cc=ru&l=russian`;
+            const detailsResponse = await fetch(detailsUrl);
+            const detailsData = await detailsResponse.json();
 
+            // Обложка и дата релиза из детального API
+            let coverUrl = '';
+            let releaseDate = null;
+
+            if (detailsData[appId] && detailsData[appId].success) {
+                const data = detailsData[appId].data;
+
+                // Обложка
+                if (data.header_image) {
+                    coverUrl = data.header_image;
+                    console.log(`[Steam] Cover URL: ${coverUrl}`);
+                }
+
+                // Дата релиза
+                if (data.release_date && data.release_date.date) {
+                    const dateStr = data.release_date.date;
+                    console.log(`[Steam] Raw release date from API: "${dateStr}"`);
+
+                    const monthNames = {
+                        // Русские месяцы
+                        'янв': '01', 'фев': '02', 'мар': '03', 'апр': '04',
+                        'мая': '05', 'май': '05', 'июн': '06', 'июл': '07',
+                        'авг': '08', 'сен': '09', 'окт': '10', 'ноя': '11', 'дек': '12',
+                        // Английские месяцы
+                        'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04',
+                        'may': '05', 'jun': '06', 'jul': '07', 'aug': '08',
+                        'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12'
+                    };
+
+                    // Разбиваем строку на части
+                    const parts = dateStr.trim().split(/\s+/);
+                    console.log(`[Steam] Split parts:`, parts);
+
+                    let day = null, monthName = null, year = null;
+
+                    for (const part of parts) {
+                        // Если часть - число от 1 до 31, это день
+                        if (/^\d{1,2}$/.test(part) && !day) {
+                            day = part.padStart(2, '0');
+                        }
+                        // Если часть - число из 4 цифр, это год
+                        else if (/^\d{4}$/.test(part) && !year) {
+                            year = part;
+                        }
+                        // Если часть - слово (возможно с точкой), это месяц
+                        else if (/^[а-яa-z]+\.?$/i.test(part) && !monthName) {
+                            monthName = part.toLowerCase().replace(/\.$/, '').substring(0, 3);
+                        }
+                    }
+
+                    console.log(`[Steam] Parsed: day=${day}, monthName=${monthName}, year=${year}`);
+
+                    if (day && monthName && year) {
+                        const month = monthNames[monthName];
+                        if (month) {
+                            releaseDate = `${year}-${month}-${day}`;
+                            console.log(`[Steam] ✅ Parsed release date: ${releaseDate}`);
+                        } else {
+                            console.log(`[Steam] ❌ Unknown month: "${monthName}"`);
+                        }
+                    } else {
+                        console.log(`[Steam] ❌ Could not parse date components`);
+                    }
+                }
+            }
+
+            // 3. Открываем страницу для парсинга тегов
             const gameUrl = `https://store.steampowered.com/app/${appId}`;
 
             hiddenWindow = new BrowserWindow({
@@ -2274,9 +2522,8 @@ async function fetchSteamGameTags(gameName) {
                 callback({ cancel: false, requestHeaders: details.requestHeaders });
             });
 
-            // ========== ЗАГРУЗКА СТРАНИЦЫ ==========
             hiddenWindow.loadURL(gameUrl);
-            console.log(`[Steam] Page loading started`);
+            console.log(`[Steam] Page loading started for tags`);
 
             const waitForLoad = new Promise((resolve) => {
                 hiddenWindow.webContents.once('did-finish-load', () => {
@@ -2317,16 +2564,18 @@ async function fetchSteamGameTags(gameName) {
             `);
 
             console.log(`[Steam] Found tags for "${gameName}":`, tags);
+            console.log(`[Steam] Release date: ${releaseDate || 'not found'}`);
 
             finish({
                 tags: tags,
                 coverUrl: coverUrl,
-                fullTitle: fullTitle
+                fullTitle: fullTitle,
+                releaseDate: releaseDate
             });
 
         } catch (error) {
             console.error('[Steam] Error:', error);
-            finish({ tags: [], coverUrl: '', fullTitle: '' });
+            finish({ tags: [], coverUrl: '', fullTitle: '', releaseDate: null });
         }
     });
 }
@@ -2506,3 +2755,212 @@ async function fetchLitresBookTags(bookName) {
         }
     });
 }
+
+async function updateAllReleaseDates() {
+    const lastUpdate = statements.getStatistic.get('last_release_update');
+    const lastDate = lastUpdate ? new Date(lastUpdate.value) : new Date(0);
+    const now = new Date();
+    const daysDiff = (now - lastDate) / (1000 * 60 * 60 * 24);
+
+    // Раз в 7 дней
+    if (daysDiff < 7) return;
+
+    console.log('[Release] Updating all release dates...');
+
+    const cards = db.prepare(`
+        SELECT name, section FROM data_cards 
+        WHERE status = 'Ожидается' OR status = 'В процессе'
+    `).all();
+
+    for (const card of cards) {
+        try {
+            let releaseDate = await fetchReleaseDateForCard(card.name, card.section);
+            if (releaseDate) {
+                const existing = statements.getExpectedRelease.get(card.name, card.section);
+                if (!existing || existing.release_date !== releaseDate) {
+                    statements.setExpectedRelease.run(card.name, card.section, releaseDate, existing?.last_notification_date || null);
+                    console.log(`[Release] Updated: ${card.name} -> ${releaseDate}`);
+                    markExpectedReleasesDirty();
+                }
+            }
+        } catch (error) {
+            console.error(`[Release] Failed to update ${card.name}:`, error);
+        }
+
+        // Задержка между запросами, чтобы не забанили
+        await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    statements.setStatistic.run('last_release_update', now.toISOString(), now.toISOString());
+    console.log('[Release] Update completed');
+}
+
+// Вызываем при запуске
+app.whenReady().then(() => {
+    setTimeout(() => {
+        updateAllReleaseDates();
+    }, 5000);
+});
+
+async function fetchReleaseDateForCard(cardName, section) {
+    // Заглушка — потом заменишь на реальные парсеры
+    switch (section) {
+        case 'anime':
+            const animeResult = await fetchYummyAniTags(cardName);
+            return animeResult?.nextEpisodeDate || animeResult?.releaseDate || null;
+        case 'games':
+            const gameResult = await fetchSteamGameTags(cardName);
+            return gameResult?.releaseDate || null;
+        case 'movies':
+        case 'serials':
+        case 'cartoons':
+            const movieResult = await fetchKinopoiskMovieTags(cardName);
+            return movieResult?.releaseDate || null;
+        case 'books':
+            const bookResult = await fetchLitresBookTags(cardName);
+            return bookResult?.releaseDate || null;
+        default:
+            return null;
+    }
+}
+
+ipcMain.handle('get-section-release-notifications', async (event, section) => {
+    const releases = statements.getExpectedReleasesBySection.all(section);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const notifications = [];
+    const sixHoursAgo = new Date(Date.now() - 6 * 60 * 60 * 1000);
+
+    for (const release of releases) {
+        const releaseDate = new Date(release.release_date);
+        releaseDate.setHours(0, 0, 0, 0);
+        const diffDays = Math.ceil((releaseDate - today) / (1000 * 60 * 60 * 24));
+
+        // Только если diffDays <= 30
+        if (diffDays > 30) continue;
+
+        // Проверяем, не показывали ли за последние 6 часов
+        const lastNotif = release.last_notification_date ? new Date(release.last_notification_date) : null;
+        if (lastNotif && lastNotif > sixHoursAgo) continue;
+        console.log(release);
+        const message = diffDays <= 0
+            ? `В релизе`
+            : `Через ${diffDays} дн. выходит`;
+
+        notifications.push({
+            cardName: release.card_name,
+            section: release.section,
+            releaseDate: release.release_date,
+            daysLeft: diffDays <= 0 ? 0 : diffDays,
+            isReleased: diffDays <= 0,
+            message: message
+        });
+    }
+
+    // Сортируем по дате (самые близкие/вышедшие первыми)
+    notifications.sort((a, b) => new Date(a.releaseDate) - new Date(b.releaseDate));
+
+    return { success: true, notifications };
+});
+
+ipcMain.handle('mark-release-notification-shown', async (event, cardName, section) => {
+    const existing = statements.getExpectedRelease.get(cardName, section);
+    if (existing) {
+        statements.setExpectedRelease.run(cardName, section, existing.release_date, new Date().toISOString());
+        markExpectedReleasesDirty();
+    }
+    return { success: true };
+});
+
+async function saveExpectedReleasesToFirestore(uid, idToken) {
+    const releases = statements.getAllExpectedReleases.all();
+
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/sections/expected_releases`;
+
+    const body = {
+        fields: {
+            items: {
+                arrayValue: {
+                    values: releases.map(release => ({
+                        mapValue: {
+                            fields: {
+                                card_name: { stringValue: release.card_name },
+                                section: { stringValue: release.section },
+                                release_date: { stringValue: release.release_date },
+                                last_notification_date: { stringValue: release.last_notification_date || '' }
+                            }
+                        }
+                    }))
+                }
+            },
+            updatedAt: { timestampValue: new Date().toISOString() }
+        }
+    };
+
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+            'Authorization': `Bearer ${idToken}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+
+    console.log(`✅ Expected releases saved (${releases.length} items)`);
+    return true;
+}
+
+async function loadExpectedReleasesFromFirestore(uid, idToken) {
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/sections/expected_releases`;
+
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${idToken}` }
+        });
+
+        if (response.status === 404) return [];
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const data = await response.json();
+        const releases = [];
+
+        if (data.fields && data.fields.items && data.fields.items.arrayValue) {
+            const values = data.fields.items.arrayValue.values || [];
+            for (const item of values) {
+                const fields = item.mapValue.fields;
+                releases.push({
+                    card_name: fields.card_name?.stringValue || '',
+                    section: fields.section?.stringValue || '',
+                    release_date: fields.release_date?.stringValue || '',
+                    last_notification_date: fields.last_notification_date?.stringValue || null
+                });
+            }
+        }
+
+        return releases;
+    } catch (error) {
+        console.error('Error loading expected releases:', error);
+        return null;
+    }
+}
+
+function markExpectedReleasesDirty() {
+    const now = new Date().toISOString();
+    statements.setExpectedReleasesDirty.run(now);
+    console.log('[i] Expected releases marked as dirty');
+}
+
+function clearExpectedReleasesDirty() {
+    statements.deleteStatistic.run('dirty_expected_releases');
+    console.log('[i] Expected releases dirty flag cleared');
+}
+
+
+
