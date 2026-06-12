@@ -1,6 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
+    getAllExpectedReleases: () => ipcRenderer.invoke('get-all-expected-releases'),
+    deleteReleaseDate: (cardName, section) => ipcRenderer.invoke('delete-release-date', cardName, section),
+    saveReleaseDate: (cardName, section, releaseDate) => ipcRenderer.invoke('save-release-date', cardName, section, releaseDate),
     getSectionReleaseNotifications: (section) => ipcRenderer.invoke('get-section-release-notifications', section),
     markReleaseNotificationShown: (cardName, section) => ipcRenderer.invoke('mark-release-notification-shown', cardName, section),
     searchYummyAniAnime: (title) => ipcRenderer.invoke('search-yummyani-anime', title),

@@ -403,8 +403,22 @@ function createTooltip() {
     return tooltipElement;
 }
 
-function showTooltip(description, tags, x, y) {
+function showTooltip(description, tags, releaseDate, x, y) {
     const tooltip = createTooltip();
+
+    let dateHtml = '';
+    if (releaseDate && releaseDate !== 'undefined' && releaseDate !== 'null') {
+        try {
+            const formattedDate = new Date(releaseDate).toLocaleDateString('ru-RU', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric'
+            });
+            dateHtml = `<div class="card-tooltip-date">📅 Дата релиза: ${formattedDate}</div>`;
+        } catch(e) {
+            console.error('Date parsing error:', e);
+        }
+    }
 
     let tagsHtml = '';
     if (tags && tags.length > 0) {
@@ -425,19 +439,20 @@ function showTooltip(description, tags, x, y) {
         descHtml = `<div class="card-tooltip-desc">${escapeHtml(description)}</div>`;
     }
 
-    if (!descHtml && !tags.length) {
+    // Если ничего нет — скрываем
+    if (!descHtml && !tags.length && !releaseDate) {
         tooltip.style.display = 'none';
         return;
     }
 
-    // Добавляем классы для разных сценариев
+    // Определяем класс: если есть описание — показываем сразу, если только теги — с задержкой
     let tooltipClass = 'card-tooltip';
     if (!descHtml && tags.length > 0) {
         tooltipClass += ' card-tooltip-delayed';
     }
 
     tooltip.className = tooltipClass;
-    tooltip.innerHTML = descHtml + tagsHtml;
+    tooltip.innerHTML = dateHtml + descHtml + tagsHtml;
     tooltip.style.display = 'block';
     tooltip.style.left = (x + 15) + 'px';
     tooltip.style.top = (y + 15) + 'px';
@@ -477,6 +492,15 @@ function setupEditDescriptionButtons() {
             const card = document.querySelector(`.data-card[data-name="${itemName}"]`);
             const currentDesc = card?.dataset.description || '';
             const currentTags = JSON.parse(card?.dataset.tags || '[]');
+            const currentReleaseDate = card?.dataset.releaseDate || '';
+
+            // Форматируем дату для отображения
+            const formattedDate = currentReleaseDate ?
+                new Date(currentReleaseDate).toLocaleDateString('ru-RU', {
+                    day: 'numeric',
+                    month: 'long',
+                    year: 'numeric'
+                }) : '';
 
             const modal = document.createElement('div');
             modal.className = 'modal';
@@ -485,13 +509,18 @@ function setupEditDescriptionButtons() {
                 <div class="modal-content" style="max-width: 450px; position: relative;">
                     <h3>Редактировать</h3>
                     
+                    <!-- Поле для даты релиза -->
+                    <label style="font-size: 12px; opacity: 0.7; margin-bottom: 4px;">Дата релиза</label>
+                    <input type="date" id="editReleaseDate" value="${currentReleaseDate}" style="width: 100%; background: #1e1e1e; border: 1px solid #4a4a4a; border-radius: 8px; color: white; padding: 8px; margin-bottom: 12px;">
+                    ${currentReleaseDate ? `<p style="font-size: 11px; opacity: 0.5; margin-top: -8px; margin-bottom: 12px;">Сейчас: ${formattedDate}</p>` : '<p style="font-size: 11px; opacity: 0.5; margin-top: -8px; margin-bottom: 12px;">Оставьте пустым, если нет даты релиза</p>'}
+                    
                     <!-- Поле для заметки -->
                     <label style="font-size: 12px; opacity: 0.7; margin-bottom: 4px;">Заметка</label>
                     <textarea id="editDescTextarea" rows="3" style="width: 100%; background: #1e1e1e; border: 1px solid #4a4a4a; border-radius: 8px; color: white; padding: 8px; margin-bottom: 12px; font-size: 13px; resize: vertical;">${escapeHtml(currentDesc)}</textarea>
                     
                     <!-- Поле для тегов -->
                     <label style="font-size: 12px; opacity: 0.7; margin-bottom: 4px;">Теги (через запятую или Enter)</label>
-                    <div class="tags-input-wrapper" >
+                    <div class="tags-input-wrapper">
                         <div class="tags-list" id="modalTagsList">
                             ${currentTags.map(tag => `
                                 <span class="tag" data-tag="${escapeHtml(tag)}">
@@ -514,6 +543,7 @@ function setupEditDescriptionButtons() {
             document.body.appendChild(modal);
 
             const textarea = modal.querySelector('#editDescTextarea');
+            const releaseDateInput = modal.querySelector('#editReleaseDate');
             const tagInput = modal.querySelector('#tagInput');
             const tagsList = modal.querySelector('#modalTagsList');
             const suggestionsDiv = modal.querySelector('#tagSuggestions');
@@ -533,7 +563,7 @@ function setupEditDescriptionButtons() {
             function renderTags() {
                 tagsList.innerHTML = tags.map(tag => `
                     <span class="tag" data-tag="${escapeHtml(tag)}">
-                        ${escapeHtml(tag)}
+                        ${escapeHtml(tag.length > 30 ? tag.substring(0, 27) + '...' : tag)}
                         <button type="button" class="tag-remove" data-tag="${escapeHtml(tag)}">×</button>
                     </span>
                 `).join('');
@@ -554,6 +584,10 @@ function setupEditDescriptionButtons() {
                 if (!tagName) return;
                 if (tagName.includes(',')) {
                     tagName.split(',').forEach(t => addTag(t));
+                    return;
+                }
+                if (tagName.length > 50) {
+                    showError('Тег слишком длинный (максимум 50 символов)');
                     return;
                 }
                 if (tags.includes(tagName)) return;
@@ -645,17 +679,65 @@ function setupEditDescriptionButtons() {
 
             modal.querySelector('.confirm-btn').onclick = async () => {
                 const newDescription = textarea.value.trim();
+                const newReleaseDate = releaseDateInput.value;
                 const section = document.querySelector('.nav-item.active')?.dataset.section;
 
                 await window.electronAPI.updateDataDescription(section, itemName, newDescription);
                 await window.electronAPI.updateCardTags(section, itemName, tags);
 
+                // Сохраняем дату релиза
+                if (newReleaseDate) {
+                    await window.electronAPI.saveReleaseDate(itemName, section, newReleaseDate);
+                    const item = window.allSectionData?.find(i => i.name === itemName);
+                    if (item) item.releaseDate = newReleaseDate;
+                } else if (currentReleaseDate) {
+                    await window.electronAPI.deleteReleaseDate(itemName, section);
+                    const item = window.allSectionData?.find(i => i.name === itemName);
+                    if (item) delete item.releaseDate;
+                }
+
+                // Обновляем DOM
                 if (card) {
                     card.dataset.description = newDescription;
                     card.dataset.tags = JSON.stringify(tags);
+                    if (newReleaseDate) {
+                        card.dataset.releaseDate = newReleaseDate;
+                    } else {
+                        card.dataset.releaseDate = '';
+                    }
                 }
+
+                // Обновляем данные в массивах
+                const allItem = window.allSectionData?.find(item => item.name === itemName);
+                if (allItem) {
+                    allItem.description = newDescription;
+                    allItem.tags = tags;
+                    if (newReleaseDate) {
+                        allItem.releaseDate = newReleaseDate;
+                    } else {
+                        delete allItem.releaseDate;
+                    }
+                }
+
+                const filteredItem = window.filteredData?.find(item => item.name === itemName);
+                if (filteredItem) {
+                    filteredItem.description = newDescription;
+                    filteredItem.tags = tags;
+                    if (newReleaseDate) {
+                        filteredItem.releaseDate = newReleaseDate;
+                    } else {
+                        delete filteredItem.releaseDate;
+                    }
+                }
+
                 document.body.removeChild(modal);
             };
+
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    document.body.removeChild(modal);
+                }
+            });
         });
     });
 }
@@ -1343,9 +1425,18 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
         allItemsLoaded = false;
     }
 
+    const allReleases = await window.electronAPI.getAllExpectedReleases();
+    const releasesMap = new Map();
+    allReleases.forEach(r => {
+        if (r.section === section) {
+            releasesMap.set(r.card_name, r.release_date);
+        }
+    });
+
     data = data.map(item => ({
         ...item,
-        tags: item.tags ? item.tags.split(',') : []
+        tags: item.tags ? item.tags.split(',') : [],
+        releaseDate: releasesMap.get(item.name) || null
     }));
 
     window.allSectionData = data;
@@ -2311,7 +2402,12 @@ function escapeHtml(str) {
 
 function renderCardList(cards) {
     return cards.map(card => `
-        <div class="data-card" data-name="${escapeHtml(card.name)}" data-description="${escapeHtml(card.description || '')}" data-tags='${JSON.stringify(card.tags || [])}' style="display: block;">
+        <div class="data-card" 
+             data-name="${escapeHtml(card.name)}" 
+             data-description="${escapeHtml(card.description || '')}" 
+             data-tags='${JSON.stringify(card.tags || [])}'
+             data-release-date="${card.releaseDate || ''}"
+             style="display: block;">
             <div class="card-hover-icon">
                 <img src="assets/icons/search-web.svg" alt="🔍">
             </div>
@@ -2994,7 +3090,8 @@ function setupCardClickHandlers() {
         card.addEventListener('mouseenter', (e) => {
             const description = card.dataset.description || '';
             const tags = JSON.parse(card.dataset.tags || '[]');
-            showTooltip(description, tags, e.clientX, e.clientY);
+            const releaseDate = card.dataset.releaseDate || null;
+            showTooltip(description, tags, releaseDate, e.clientX, e.clientY);
         });
 
         card.addEventListener('mousemove', (e) => {
@@ -3245,6 +3342,9 @@ async function autoFetchTags(title, section) {
     }
     if (result && result.fullTitle && result.fullTitle !== title.toLowerCase()) {
         showTitleSuggestion(result.fullTitle);
+    }
+    if (result && result.releaseDate) {
+        await window.electronAPI.saveReleaseDate(title, section, result.releaseDate);
     }
 
     return result?.tags || [];

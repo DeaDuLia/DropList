@@ -1015,26 +1015,32 @@ ipcMain.handle('update-data-status', async (event, section, dataName, status) =>
     const oldStatus = statements.getStatusByNameAndSection.get(dataName, section)?.status;
     const result = statements.updateDataStatus.run(status, dataName, section);
 
-    // Если статус изменился на Ожидается или В процессе
+    // Если статус изменился на Ожидается или В процессе — запускаем асинхронно, НЕ ждём
     if ((status === 'Ожидается' || status === 'В процессе') && oldStatus !== status) {
-        const releaseDate = await fetchReleaseDateForCard(dataName, section);
-        if (releaseDate) {
-            statements.setExpectedRelease.run(dataName, section, releaseDate, null);
-            markExpectedReleasesDirty();
-        }
+        // Запускаем в фоне, не блокируя ответ
+        fetchReleaseDateForCard(dataName, section).then(releaseDate => {
+            if (releaseDate) {
+                statements.setExpectedRelease.run(dataName, section, releaseDate, null);
+                markExpectedReleasesDirty();
+                // Уведомляем фронт, что дата обновилась (опционально)
+                if (win) {
+                    win.webContents.send('release-date-updated', { cardName: dataName, section, releaseDate });
+                }
+            }
+        }).catch(err => console.error('Failed to fetch release date:', err));
     }
     // Если статус изменился с Ожидается/В процессе на другой
     else if ((oldStatus === 'Ожидается' || oldStatus === 'В процессе') &&
         status !== 'Ожидается' && status !== 'В процессе') {
         statements.deleteExpectedRelease.run(dataName, section);
+        markExpectedReleasesDirty();
     }
 
     markSectionDirty(section);
-    markExpectedReleasesDirty();
     const now = new Date().toISOString();
     statements.setStatistic.run('last_firestore_update', now, now);
 
-    return result;
+    return result; // Возвращаем сразу, не дожидаясь поиска даты
 });
 
 ipcMain.handle('check-duplicates', async (event, section, name) => {
@@ -2344,29 +2350,44 @@ async function fetchYummyAniTags(animeName) {
                     
                     // ДАТА СЛЕДУЮЩЕГО ЭПИЗОДА
                     let releaseDate = null;
+
+                    // 1. Пробуем получить дату следующего эпизода из time-counter
                     const timeCounter = document.querySelector('time-counter');
                     if (timeCounter && timeCounter.getAttribute('data-time')) {
                         const timestamp = timeCounter.getAttribute('data-time');
                         if (timestamp) {
-                            // Конвертируем Unix timestamp в ISO дату (YYYY-MM-DD)
                             const date = new Date(parseInt(timestamp) * 1000);
                             if (!isNaN(date.getTime())) {
                                 releaseDate = date.toISOString().split('T')[0];
-                                console.log('[YummyAni] Next episode date:', releaseDate);
                             }
                         }
                     }
                     
-                    // Если нет time-counter, пробуем local-time
+                    // 2. Если нет — берём дату премьеры из ссылки /catalog/filter
                     if (!releaseDate) {
-                        const localTime = document.querySelector('local-time');
-                        if (localTime && localTime.getAttribute('data-time')) {
-                            const timestamp = localTime.getAttribute('data-time');
-                            if (timestamp) {
-                                const date = new Date(parseInt(timestamp) * 1000);
-                                if (!isNaN(date.getTime())) {
-                                    releaseDate = date.toISOString().split('T')[0];
-                                    console.log('[YummyAni] Next episode date (from local-time):', releaseDate);
+                        const filterLink = document.querySelector('a[href*="/catalog/filter"]');
+                        if (filterLink) {
+                            const yearText = filterLink.textContent.trim();
+                            
+                            const seasons = {
+                                'зима': '01',
+                                'весна': '04',
+                                'лето': '07',
+                                'осень': '10'
+                            };
+                            
+                            const match = yearText.match(/(зима|весна|лето|осень)\\s+(\\d{4})/i);
+                            if (match) {
+                                const season = match[1].toLowerCase();
+                                const year = match[2];
+                                const month = seasons[season];
+                                if (month) {
+                                    releaseDate = year + '-' + month + '-01';
+                                }
+                            } else {
+                                const yearMatch = yearText.match(/(\\d{4})/);
+                                if (yearMatch) {
+                                    releaseDate = yearMatch[1] + '-01-01';
                                 }
                             }
                         }
@@ -2962,5 +2983,32 @@ function clearExpectedReleasesDirty() {
     console.log('[i] Expected releases dirty flag cleared');
 }
 
+ipcMain.handle('save-release-date', async (event, cardName, section, releaseDate) => {
+    // Проверяем, существует ли карточка и имеет ли она статус "Ожидается" или "В процессе"
+    const card = statements.getStatusByNameAndSection.get(cardName, section);
 
+    if (card) {
+        // Если статус подходящий — сохраняем/обновляем в expected_releases
+        const existing = statements.getExpectedRelease.get(cardName, section);
+        if (existing) {
+            statements.setExpectedRelease.run(cardName, section, releaseDate, existing.last_notification_date);
+        } else {
+            statements.setExpectedRelease.run(cardName, section, releaseDate, null);
+        }
+        markExpectedReleasesDirty();
+        console.log(`[Release] Saved date for "${cardName}": ${releaseDate}`);
+    } 
+
+    return { success: true };
+});
+
+ipcMain.handle('delete-release-date', async (event, cardName, section) => {
+    statements.deleteExpectedRelease.run(cardName, section);
+    markExpectedReleasesDirty();
+    return { success: true };
+});
+
+ipcMain.handle('get-all-expected-releases', async () => {
+    return statements.getAllExpectedReleases.all();
+});
 
