@@ -2791,21 +2791,43 @@ function updatePreview(name, icoUrl, rating, status) {
 }
 
 async function autoFetchTags(title, section) {
-    let result;
     switch (section) {
         case 'movies':
         case 'serials':
         case 'cartoons':
-            result = await window.electronAPI.searchKinopoiskMovie(title);
-            return result && result.tags ? result.tags : [];
+            const movieResult = await window.electronAPI.searchKinopoiskMovie(title);
+            if (movieResult && movieResult.coverUrl) {
+                // Обновляем поле ввода обложки
+                const icoInput = document.getElementById('icoInput');
+                if (icoInput) icoInput.value = movieResult.coverUrl;
+                // Обновляем превью
+                updatePreview(title, movieResult.coverUrl, null, null);
+            }
+            return movieResult?.tags || [];
         case 'anime':
             const animeResult = await window.electronAPI.searchYummyAniAnime(title);
+            if (animeResult && animeResult.coverUrl) {
+                const icoInput = document.getElementById('icoInput');
+                if (icoInput) icoInput.value = animeResult.coverUrl;
+                updatePreview(title, animeResult.coverUrl, null, null);
+            }
             return animeResult?.tags || [];
         case 'games':
-            return await window.electronAPI.fetchSteamTags(title);
+            const gameResult = await window.electronAPI.fetchSteamTags(title);
+            if (gameResult && gameResult.coverUrl) {
+                const icoInput = document.getElementById('icoInput');
+                if (icoInput) icoInput.value = gameResult.coverUrl;
+                updatePreview(title, gameResult.coverUrl, null, null);
+            }
+            return gameResult?.tags || [];
         case 'books':
-            result = await window.electronAPI.searchLitresBook(title);
-            return result && result.tags ? result.tags : [];
+            const bookResult = await window.electronAPI.searchLitresBook(title);
+            if (bookResult && bookResult.coverUrl) {
+                const icoInput = document.getElementById('icoInput');
+                if (icoInput) icoInput.value = bookResult.coverUrl;
+                updatePreview(title, bookResult.coverUrl, null, null);
+            }
+            return bookResult?.tags || [];
         default:
             return [];
     }
@@ -2816,7 +2838,6 @@ async function autoFetchTags(title, section) {
 function setupAddButton() {
     const toggleBtn = document.getElementById('toggleAddFormBtn');
     const addForm = document.getElementById('addForm');
-
     const overlay = initAddFormOverlay();
 
     function closeAddForm() {
@@ -2825,13 +2846,11 @@ function setupAddButton() {
         toggleBtn.textContent = '+ Добавить';
     }
 
-    // Закрытие по клику на overlay
     overlay.onclick = closeAddForm;
 
     if (toggleBtn && addForm) {
         toggleBtn.onclick = async (e) => {
             e.stopPropagation();
-
             const isVisible = addForm.classList.contains('visible');
 
             if (isVisible) {
@@ -2852,26 +2871,18 @@ function setupAddButton() {
 
                         const section = document.querySelector('.nav-item.active')?.dataset.section;
 
-                        // Параллельный поиск обложки и тегов
-                        const [coverUrl, webTags] = await Promise.all([
-                            autoSearchCover(text),
-                            autoFetchTags(text, section)
-                        ]);
+                        // Один вызов — получаем и теги, и обложку
+                        const tags = await autoFetchTags(text, section);
 
-                        if (webTags && webTags.length > 0 && window.getAddFormTags) {
+                        if (tags && tags.length > 0 && window.getAddFormTags) {
                             const currentTags = window.getAddFormTags();
-                            const newTags = [...new Set([...currentTags, ...webTags])];
-                            // Очищаем текущие теги и добавляем новые
+                            const newTags = [...new Set([...currentTags, ...tags])];
                             if (window.clearAddFormTags) window.clearAddFormTags();
-                            // Добавляем каждый тег
+
                             for (const tag of newTags.slice(0, 5)) {
-                                // Имитируем добавление тега
                                 const tagInput = document.getElementById('addFormTagInput');
                                 if (tagInput) {
-                                    const addTagEvent = new Event('input');
                                     tagInput.value = tag;
-                                    tagInput.dispatchEvent(addTagEvent);
-                                    // Имитируем нажатие Enter
                                     const enterEvent = new KeyboardEvent('keydown', { key: 'Enter' });
                                     tagInput.dispatchEvent(enterEvent);
                                 }
@@ -2884,51 +2895,6 @@ function setupAddButton() {
                 }
             }
         };
-    }
-}
-
-async function autoSearchCover(title) {
-    if (!title || title.trim() === '') return;
-
-    const icoInput = document.getElementById('icoInput');
-    if (icoInput) {
-        icoInput.value = 'Ищем обложку...';
-        icoInput.style.color = '#91c9d6';
-        icoInput.style.borderColor = '#91c9d6';
-        icoInput.disabled = true;
-    }
-
-    try {
-        const section = document.querySelector('.nav-item.active')?.dataset.section;
-        let imageUrl = '';
-
-
-        // Можно использовать разные поиски в зависимости от категории
-        imageUrl = await window.electronAPI.searchImage(title);
-
-        if (imageUrl && icoInput) {
-            icoInput.value = imageUrl;
-            icoInput.disabled = false;
-
-            // Обновляем превью
-            updatePreview(title, imageUrl,
-                document.getElementById('ratingSelect')?.value || '5',
-                document.getElementById('statusSelect')?.value || 'Уточнить');
-        } else {
-            if (icoInput) {
-                icoInput.value = '';
-                icoInput.disabled = false;
-            }
-        }
-        icoInput.style.color = null;
-        icoInput.style.borderColor = null;
-
-    } catch (error) {
-        console.error('Ошибка поиска обложки:', error);
-        if (icoInput) {
-            icoInput.value = '';
-            icoInput.disabled = false;
-        }
     }
 }
 

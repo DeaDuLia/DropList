@@ -1825,269 +1825,47 @@ ipcMain.handle('search-tags-web', async (event, title, section) => {
 
 
 
-async function fetchSteamGameTags(gameName) {
-    return new Promise(async (resolve) => {
-        try {
-            // 1. Поиск ID игры через API
-            const searchUrl = `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(gameName)}&cc=ru&l=russian`;
-            const searchResponse = await fetch(searchUrl);
-            const searchData = await searchResponse.json();
 
-            if (!searchData.items || searchData.items.length === 0) {
-                console.log(`[Steam] Game not found: ${gameName}`);
-                resolve([]);
-                return;
-            }
-
-            const appId = searchData.items[0].id;
-            console.log(`[Steam] Found ID for "${gameName}": ${appId}`);
-
-            // 2. Открываем страницу игры в headless-браузере (для пользовательских тегов)
-            const gameUrl = `https://store.steampowered.com/app/${appId}`;
-
-            const hiddenWindow = new BrowserWindow({
-                show: false,
-                width: 1280,
-                height: 800,
-                webPreferences: {
-                    nodeIntegration: false,
-                    contextIsolation: true
-                }
-            });
-
-            // Устанавливаем заголовки
-            hiddenWindow.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
-                details.requestHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-                details.requestHeaders['Accept-Language'] = 'ru-RU,ru;q=0.9';
-                callback({ cancel: false, requestHeaders: details.requestHeaders });
-            });
-
-            hiddenWindow.loadURL(gameUrl);
-
-            hiddenWindow.webContents.on('dom-ready', async () => {
-                try {
-                    // Даём время на рендер тегов
-                    await new Promise(r => setTimeout(r, 2000));
-
-                    // Парсим пользовательские теги со страницы
-                    const userTags = await hiddenWindow.webContents.executeJavaScript(`
-                        (function() {
-                            // Ищем блок с популярными тегами
-                            const tagsContainer = document.querySelector('.glance_tags.popular_tags, .popular_tags_ctn');
-                            if (!tagsContainer) return [];
-                            
-                            const tagElements = tagsContainer.querySelectorAll('a.app_tag');
-                            const tagsArray = [];
-                            
-                            for (const el of tagElements) {
-                                const tagText = el.textContent.trim();
-                                if (tagText && tagText !== '+' && el.style.display !== 'none') {
-                                    tagsArray.push(tagText);
-                                }
-                            }
-                            
-                            return tagsArray;
-                        })();
-                    `);
-
-                    console.log(`[Steam] Found user tags for "${gameName}":`, userTags);
-                    hiddenWindow.close();
-                    resolve(userTags);
-
-                } catch (error) {
-                    console.error('[Steam] Parse error:', error);
-                    hiddenWindow.close();
-                    resolve([]);
-                }
-            });
-
-            hiddenWindow.webContents.on('did-fail-load', (event, errorCode, errorDescription) => {
-                console.error('[Steam] Load error:', errorCode, errorDescription);
-                hiddenWindow.close();
-                resolve([]);
-            });
-
-            setTimeout(() => {
-                if (!hiddenWindow.isDestroyed()) {
-                    console.log('[Steam] Timeout');
-                    hiddenWindow.close();
-                    resolve([]);
-                }
-            }, 30000);
-
-        } catch (error) {
-            console.error('[Steam] General error:', error);
-            resolve([]);
-        }
-    });
-}
 
 ipcMain.handle('fetch-steam-tags', async (event, title) => {
     return await fetchSteamGameTags(title);
 });
 
-async function fetchLitresBookTags(bookName) {
-    return new Promise(async (resolve) => {
-        let hiddenWindow = null;
-        try {
-            const cleanName = bookName.split(' ').slice(0, 3).join(' ');
-            const searchUrl = `https://www.litres.ru/search/?q=${encodeURIComponent(cleanName)}`;
-            console.log(`[Litres] Searching: ${searchUrl}`);
 
-            hiddenWindow = new BrowserWindow({
-                show: false,
-                width: 1280,
-                height: 800,
-                webPreferences: { nodeIntegration: false, contextIsolation: true }
-            });
-
-            hiddenWindow.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
-                details.requestHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-                details.requestHeaders['Accept-Language'] = 'ru-RU,ru;q=0.9';
-                callback({ cancel: false, requestHeaders: details.requestHeaders });
-            });
-
-            await hiddenWindow.loadURL(searchUrl);
-            await new Promise(r => setTimeout(r, 3000));
-
-            // Ищем реальную книгу, а не рекламу
-            const bookInfo = await hiddenWindow.webContents.executeJavaScript(`
-                (function() {
-                    function isExactMatch(title, query) {
-                        if (!title) return false;
-                        const q = query.toLowerCase();
-                        const t = title.toLowerCase();
-                        return t.includes(q) || q.includes(t);
-                    }
-
-                    const searchQuery = "${cleanName.toLowerCase()}";
-                    let bestMatch = null;
-
-                    const allLinks = document.querySelectorAll('a[href*="/book/"]');
-                    
-                    for (const link of allLinks) {
-                        const href = link.href;
-                        if (href.includes('erid=') || href.includes('banner') || href.includes('campaign')) continue;
-                        
-                        const parent = link.closest('div')?.innerText || link.innerText;
-                        const title = parent.split('\\n')[0].trim();
-                        
-                        if (title && isExactMatch(title, searchQuery)) {
-                            const fullUrl = href.startsWith('http') ? href : 'https://www.litres.ru' + href;
-                            bestMatch = { url: fullUrl, title: title };
-                            break;
-                        }
-                    }
-                    
-                    return bestMatch;
-                })();
-            `);
-
-            if (!bookInfo || !bookInfo.url) {
-                console.log('[Litres] Book not found');
-                if (hiddenWindow) hiddenWindow.close();
-                resolve({ tags: [], description: '', coverUrl: '' });
-                return;
-            }
-
-            console.log(`[Litres] Found book: ${bookInfo.title} — ${bookInfo.url}`);
-
-            await hiddenWindow.loadURL(bookInfo.url);
-            await new Promise(r => setTimeout(r, 4000));
-
-            const bookData = await hiddenWindow.webContents.executeJavaScript(`
-                (function() {
-                    // Универсальный поиск тегов
-                    const genres = [];
-                    const genreSelectors = [
-                        '.BookGenresAndTags_genresList__rd8vU .Tag_tag__A2jv3',
-                        '[class*="genresList"] [class*="Tag_tag"]',
-                        '[class*="genresList"] a',
-                        '[class*="tagsList"] a',
-                        'a[href*="/genre/"]',
-                        'a[href*="/tags/"]'
-                    ];
-                    
-                    for (const selector of genreSelectors) {
-                        const elements = document.querySelectorAll(selector);
-                        if (elements.length) {
-                            elements.forEach(el => {
-                                const text = el.textContent.trim();
-                                if (text && text !== 'Только на Литрес' && text.length < 40 && !genres.includes(text)) {
-                                    genres.push(text);
-                                }
-                            });
-                            break;
-                        }
-                    }
-                    
-                    // Описание
-                    let description = '';
-                    const descSelectors = [
-                        '.BookDescription_text',
-                        '[class*="description"] p',
-                        '[class*="annotation"]',
-                        '.book-annotation'
-                    ];
-                    
-                    for (const selector of descSelectors) {
-                        const el = document.querySelector(selector);
-                        if (el) {
-                            description = el.textContent.trim();
-                            if (description) break;
-                        }
-                    }
-                    
-                    // Обложка
-                    let coverUrl = '';
-                    const coverSelectors = [
-                        '.AdaptiveCover_image__f_21W',
-                        '.ArtCover_cover__image__ClWcc',
-                        '[class*="cover"] img',
-                        '.BookCover_image img'
-                    ];
-                    
-                    for (const selector of coverSelectors) {
-                        const el = document.querySelector(selector);
-                        if (el && el.src) {
-                            coverUrl = el.src;
-                            break;
-                        }
-                    }
-                    
-                    return {
-                        tags: genres.slice(0, 10),
-                        description: description.substring(0, 500),
-                        coverUrl: coverUrl
-                    };
-                })();
-            `);
-
-            console.log(`[Litres] Found tags for "${bookName}":`, bookData.tags);
-            console.log(`[Litres] Cover: ${bookData.coverUrl}`);
-
-            if (hiddenWindow) hiddenWindow.close();
-            resolve({
-                tags: bookData.tags || [],
-                description: bookData.description || '',
-                coverUrl: bookData.coverUrl || ''
-            });
-
-        } catch (error) {
-            console.error('[Litres] Error:', error);
-            if (hiddenWindow && !hiddenWindow.isDestroyed()) hiddenWindow.close();
-            resolve({ tags: [], description: '', coverUrl: '' });
-        }
-    });
-}
 
 ipcMain.handle('search-litres-book', async (event, title) => {
     return await fetchLitresBookTags(title);
 });
 
+
+
+ipcMain.handle('search-kinopoisk-movie', async (event, title) => {
+    return await fetchKinopoiskMovieTags(title);
+});
+
+// ========== ОБРАБОТЧИК IPC ДЛЯ YUMMYANI ==========
+ipcMain.handle('search-yummyani-anime', async (event, title) => {
+    return await fetchYummyAniTags(title);
+});
+
+// ========== кино, сериалы, мультфильы ==========
 async function fetchKinopoiskMovieTags(movieName) {
     return new Promise(async (resolve) => {
         let hiddenWindow = null;
+        let isResolved = false;
+        let loadTimeout = null;
+        let isLoaded = false;
+
+        const finish = (result) => {
+            if (isResolved) return;
+            isResolved = true;
+            if (loadTimeout) clearTimeout(loadTimeout);
+            if (hiddenWindow && !hiddenWindow.isDestroyed()) {
+                hiddenWindow.close();
+            }
+            resolve(result);
+        };
+
         try {
             const cleanName = movieName.split(' ').slice(0, 3).join(' ');
             const searchUrl = `https://www.kinopoisk.ru/index.php?kp_query=${encodeURIComponent(cleanName)}`;
@@ -2106,8 +1884,29 @@ async function fetchKinopoiskMovieTags(movieName) {
                 callback({ cancel: false, requestHeaders: details.requestHeaders });
             });
 
-            await hiddenWindow.loadURL(searchUrl);
-            await new Promise(r => setTimeout(r, 3000));
+            // ========== ПОИСК ССЫЛКИ НА ФИЛЬМ ==========
+            hiddenWindow.loadURL(searchUrl);
+            console.log(`[Kinopoisk] Search page loading started`);
+
+            const waitForSearchLoad = new Promise((resolve) => {
+                hiddenWindow.webContents.once('did-finish-load', () => {
+                    console.log(`[Kinopoisk] Search page finished loading`);
+                    isLoaded = true;
+                    resolve();
+                });
+
+                loadTimeout = setTimeout(() => {
+                    if (!isLoaded) {
+                        console.log(`[Kinopoisk] Search page timeout (2s), stopping load`);
+                        hiddenWindow.webContents.stop();
+                        isLoaded = true;
+                        resolve();
+                    }
+                }, 2000);
+            });
+
+            await waitForSearchLoad;
+            if (loadTimeout) clearTimeout(loadTimeout);
 
             // Ищем ссылку на фильм
             const movieInfo = await hiddenWindow.webContents.executeJavaScript(`
@@ -2131,19 +1930,40 @@ async function fetchKinopoiskMovieTags(movieName) {
 
             if (!movieInfo || !movieInfo.url) {
                 console.log('[Kinopoisk] Movie not found');
-                if (hiddenWindow) hiddenWindow.close();
-                resolve({ tags: [], description: '', coverUrl: '' });
+                finish({ tags: [], description: '', coverUrl: '' });
                 return;
             }
 
             console.log(`[Kinopoisk] Found movie: ${movieInfo.url}`);
 
-            await hiddenWindow.loadURL(movieInfo.url);
-            await new Promise(r => setTimeout(r, 4000));
+            // ========== ПОИСК ТЕГОВ НА СТРАНИЦЕ ФИЛЬМА ==========
+            isLoaded = false;
+
+            hiddenWindow.loadURL(movieInfo.url);
+            console.log(`[Kinopoisk] Movie page loading started`);
+
+            const waitForMovieLoad = new Promise((resolve) => {
+                hiddenWindow.webContents.once('did-finish-load', () => {
+                    console.log(`[Kinopoisk] Movie page finished loading`);
+                    isLoaded = true;
+                    resolve();
+                });
+
+                loadTimeout = setTimeout(() => {
+                    if (!isLoaded) {
+                        console.log(`[Kinopoisk] Movie page timeout (2s), stopping load`);
+                        hiddenWindow.webContents.stop();
+                        isLoaded = true;
+                        resolve();
+                    }
+                }, 2000);
+            });
+
+            await waitForMovieLoad;
+            if (loadTimeout) clearTimeout(loadTimeout);
 
             const movieData = await hiddenWindow.webContents.executeJavaScript(`
                 (function() {
-                    // Жанры (теги) через data-test-id="genres"
                     const tags = [];
                     const genresBlock = document.querySelector('[data-test-id="genres"]');
                     if (genresBlock) {
@@ -2174,14 +1994,12 @@ async function fetchKinopoiskMovieTags(movieName) {
                         }
                     }
                     
-                    // Описание
                     let description = '';
                     const descElement = document.querySelector('[data-test-id="synopsis"]');
                     if (descElement) {
-                        description = descElement.textContent.trim();
+                        description = descElement.textContent.trim().substring(0, 500);
                     }
                     
-                    // Обложка
                     let coverUrl = '';
                     const posterElement = document.querySelector('.film-poster');
                     if (posterElement && posterElement.src) {
@@ -2198,7 +2016,7 @@ async function fetchKinopoiskMovieTags(movieName) {
                     
                     return {
                         tags: tags.slice(0, 10),
-                        description: description.substring(0, 500),
+                        description: description,
                         coverUrl: coverUrl
                     };
                 })();
@@ -2207,81 +2025,127 @@ async function fetchKinopoiskMovieTags(movieName) {
             console.log(`[Kinopoisk] Found tags for "${movieName}":`, movieData.tags);
             console.log(`[Kinopoisk] Cover: ${movieData.coverUrl}`);
 
-            if (hiddenWindow) hiddenWindow.close();
-            resolve({
-                tags: movieData.tags || [],
-                description: movieData.description || '',
-                coverUrl: movieData.coverUrl || ''
-            });
+            finish(movieData);
 
         } catch (error) {
             console.error('[Kinopoisk] Error:', error);
-            if (hiddenWindow && !hiddenWindow.isDestroyed()) hiddenWindow.close();
-            resolve({ tags: [], description: '', coverUrl: '' });
+            finish({ tags: [], description: '', coverUrl: '' });
         }
     });
 }
-
-ipcMain.handle('search-kinopoisk-movie', async (event, title) => {
-    return await fetchKinopoiskMovieTags(title);
-});
-
-// ========== АНИМЕ (YummyAni) ==========
+// ========== +++++АНИМЕ ТЕГИ ==========
 async function fetchYummyAniTags(animeName) {
     return new Promise(async (resolve) => {
         let hiddenWindow = null;
+        let isResolved = false;
+        let loadTimeout = null;
+        let isLoaded = false;
+
+        const finish = (result) => {
+            if (isResolved) return;
+            isResolved = true;
+            if (loadTimeout) clearTimeout(loadTimeout);
+            if (hiddenWindow && !hiddenWindow.isDestroyed()) {
+                hiddenWindow.close();
+            }
+            resolve(result);
+        };
+
         try {
-            // Очищаем название для поиска
             const cleanName = animeName.split(' ').slice(0, 3).join(' ');
             const searchUrl = `https://old.yummyani.me/search?word=${encodeURIComponent(cleanName)}`;
             console.log(`[YummyAni] Searching: ${searchUrl}`);
 
             hiddenWindow = new BrowserWindow({
                 show: false,
-                width: 1280,
-                height: 800,
+                width: 480,
+                height: 640,
                 webPreferences: {
                     nodeIntegration: false,
-                    contextIsolation: true
+                    contextIsolation: true,
+                    images: true
                 }
             });
 
-            // Подменяем User-Agent
             hiddenWindow.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
-                details.requestHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+                details.requestHeaders['User-Agent'] = 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1';
                 details.requestHeaders['Accept-Language'] = 'ru-RU,ru;q=0.9';
                 callback({ cancel: false, requestHeaders: details.requestHeaders });
             });
 
-            await hiddenWindow.loadURL(searchUrl);
-            // Ждем, пока загрузятся результаты поиска
-            await new Promise(r => setTimeout(r, 3000));
+            // ========== ПОИСК ССЫЛКИ ==========
+            // Запускаем загрузку
+            hiddenWindow.loadURL(searchUrl);
+            console.log(`[YummyAni] Search page loading started`);
 
-            // 1. Находим ссылку на первую карточку аниме в результатах поиска
+            // Функция, которая разрешится когда isLoaded станет true
+            const waitForLoad = new Promise((resolve) => {
+                // Слушаем окончание загрузки
+                hiddenWindow.webContents.once('did-finish-load', () => {
+                    console.log(`[YummyAni] Search page finished loading`);
+                    isLoaded = true;
+                    resolve();
+                });
+
+                // Таймер 5 секунд
+                loadTimeout = setTimeout(() => {
+                    if (!isLoaded) {
+                        console.log(`[YummyAni] Search page timeout (5s), stopping load`);
+                        hiddenWindow.webContents.stop();
+                        isLoaded = true;
+                        resolve();
+                    }
+                }, 2000);
+            });
+
+            // Ждём, пока загрузится ИЛИ таймер сработает
+            await waitForLoad;
+            if (loadTimeout) clearTimeout(loadTimeout);
+
+            // Теперь можно выполнять JS
             const animeLink = await hiddenWindow.webContents.executeJavaScript(`
                 (function() {
-                    const firstCard = document.querySelector('.anime-column a.image-block');
-                    if (firstCard && firstCard.href) {
-                        return { url: firstCard.href };
-                    }
-                    return null;
+                    const firstCard = document.querySelector('.grid-container.animes-search .anime-column');
+                    if (!firstCard) return null;
+                    const link = firstCard.querySelector('a.image-block');
+                    return link ? link.href : null;
                 })();
             `);
 
-            if (!animeLink || !animeLink.url) {
-                console.log('[YummyAni] Anime not found');
-                if (hiddenWindow) hiddenWindow.close();
-                resolve({ tags: [], description: '', coverUrl: '' });
+            if (!animeLink) {
+                console.log('[YummyAni] No link found');
+                finish({ tags: [], description: '', coverUrl: '' });
                 return;
             }
 
-            console.log(`[YummyAni] Found anime: ${animeLink.url}`);
+            console.log(`[YummyAni] Found: ${animeLink}`);
 
-            // 2. Загружаем страницу самого аниме
-            await hiddenWindow.loadURL(animeLink.url);
-            await new Promise(r => setTimeout(r, 4000));
+            // ========== ПОИСК ТЕГОВ ==========
+            isLoaded = false;
 
-            // 3. Парсим данные: теги, описание, обложку
+            hiddenWindow.loadURL(animeLink);
+            console.log(`[YummyAni] Anime page loading started`);
+
+            const waitForAnimeLoad = new Promise((resolve) => {
+                hiddenWindow.webContents.once('did-finish-load', () => {
+                    console.log(`[YummyAni] Anime page finished loading`);
+                    isLoaded = true;
+                    resolve();
+                });
+
+                loadTimeout = setTimeout(() => {
+                    if (!isLoaded) {
+                        console.log(`[YummyAni] Anime page timeout (5s), stopping load`);
+                        hiddenWindow.webContents.stop();
+                        isLoaded = true;
+                        resolve();
+                    }
+                }, 2000);
+            });
+
+            await waitForAnimeLoad;
+            if (loadTimeout) clearTimeout(loadTimeout);
+
             const animeData = await hiddenWindow.webContents.executeJavaScript(`
                 (function() {
                     const tags = [];
@@ -2295,50 +2159,319 @@ async function fetchYummyAniTags(animeName) {
                             }
                         });
                     }
-
+                    
                     let description = '';
                     const descElement = document.querySelector('.item-description .text');
                     if (descElement) {
-                        description = descElement.textContent.trim();
+                        description = descElement.textContent.trim().substring(0, 500);
                     }
-
+                    
                     let coverUrl = '';
-                    const coverElement = document.querySelector('.image-block .big-preview');
-                    if (coverElement && coverElement.href) {
-                        coverUrl = coverElement.href;
+                    const coverElement = document.querySelector('.bordered-top');
+                    if (coverElement && coverElement.src) {
+                        coverUrl = coverElement.src;
                     }
                     if (!coverUrl) {
                         const imgElement = document.querySelector('.image-block img');
                         if (imgElement && imgElement.src) {
-                            let src = imgElement.src;
-                            if (src.startsWith('//')) src = 'https:' + src;
-                            coverUrl = src;
+                            coverUrl = imgElement.src;
+                            if (coverUrl.startsWith('//')) coverUrl = 'https:' + coverUrl;
                         }
                     }
-
-                    return {
-                        tags: tags.slice(0, 12),
-                        description: description.substring(0, 500),
-                        coverUrl: coverUrl
-                    };
+                    
+                    return { tags: tags.slice(0, 12), description: description, coverUrl: coverUrl };
                 })();
             `);
 
-            console.log(`[YummyAni] Found tags for "${animeName}":`, animeData.tags);
-            console.log(`[YummyAni] Cover URL: ${animeData.coverUrl}`);
-
-            if (hiddenWindow) hiddenWindow.close();
-            resolve(animeData);
+            console.log(`[YummyAni] Tags:`, animeData.tags);
+            finish(animeData);
 
         } catch (error) {
             console.error('[YummyAni] Error:', error);
-            if (hiddenWindow && !hiddenWindow.isDestroyed()) hiddenWindow.close();
-            resolve({ tags: [], description: '', coverUrl: '' });
+            finish({ tags: [], description: '', coverUrl: '' });
         }
     });
 }
+// ========== +++++ИГРЫ ТЕГИ ==========
+async function fetchSteamGameTags(gameName) {
+    return new Promise(async (resolve) => {
+        let hiddenWindow = null;
+        let isResolved = false;
+        let loadTimeout = null;
+        let isLoaded = false;
 
-// ========== ОБРАБОТЧИК IPC ДЛЯ YUMMYANI ==========
-ipcMain.handle('search-yummyani-anime', async (event, title) => {
-    return await fetchYummyAniTags(title);
-});
+        const finish = (result) => {
+            if (isResolved) return;
+            isResolved = true;
+            if (loadTimeout) clearTimeout(loadTimeout);
+            if (hiddenWindow && !hiddenWindow.isDestroyed()) {
+                hiddenWindow.close();
+            }
+            resolve(result);
+        };
+
+        try {
+            const searchUrl = `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(gameName)}&cc=ru&l=russian`;
+            const searchResponse = await fetch(searchUrl);
+            const searchData = await searchResponse.json();
+
+            if (!searchData.items || searchData.items.length === 0) {
+                console.log(`[Steam] Game not found: ${gameName}`);
+                finish({ tags: [], coverUrl: '' });
+                return;
+            }
+
+            const appId = searchData.items[0].id;
+            console.log(`[Steam] Found ID for "${gameName}": ${appId}`);
+
+            // Обложка — прямая ссылка, не нужно ждать страницу
+            const coverUrl = `https://shared.fastly.steamstatic.com/store_item_assets/steam/apps/${appId}/header.jpg`;
+            console.log(`[Steam] Cover URL: ${coverUrl}`);
+
+            const gameUrl = `https://store.steampowered.com/app/${appId}`;
+
+            hiddenWindow = new BrowserWindow({
+                show: false,
+                width: 400,
+                height: 400,
+                webPreferences: {
+                    nodeIntegration: false,
+                    contextIsolation: true,
+                    images: false
+                }
+            });
+
+            hiddenWindow.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
+                details.requestHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+                details.requestHeaders['Accept-Language'] = 'ru-RU,ru;q=0.9';
+                callback({ cancel: false, requestHeaders: details.requestHeaders });
+            });
+
+            // ========== ЗАГРУЗКА СТРАНИЦЫ ==========
+            hiddenWindow.loadURL(gameUrl);
+            console.log(`[Steam] Page loading started`);
+
+            const waitForLoad = new Promise((resolve) => {
+                hiddenWindow.webContents.once('did-finish-load', () => {
+                    console.log(`[Steam] Page finished loading`);
+                    isLoaded = true;
+                    resolve();
+                });
+
+                loadTimeout = setTimeout(() => {
+                    if (!isLoaded) {
+                        console.log(`[Steam] Page timeout (2s), stopping load`);
+                        hiddenWindow.webContents.stop();
+                        isLoaded = true;
+                        resolve();
+                    }
+                }, 2000);
+            });
+
+            await waitForLoad;
+            if (loadTimeout) clearTimeout(loadTimeout);
+
+            // Парсим теги
+            const tags = await hiddenWindow.webContents.executeJavaScript(`
+                (function() {
+                    const tagsContainer = document.querySelector('.glance_tags.popular_tags, .popular_tags_ctn');
+                    const tags = [];
+                    if (tagsContainer) {
+                        const tagElements = tagsContainer.querySelectorAll('a.app_tag');
+                        for (const el of tagElements) {
+                            const tagText = el.textContent.trim();
+                            if (tagText && tagText !== '+' && el.style.display !== 'none') {
+                                tags.push(tagText);
+                            }
+                        }
+                    }
+                    return tags;
+                })();
+            `);
+
+            console.log(`[Steam] Found tags for "${gameName}":`, tags);
+
+            finish({ tags: tags, coverUrl: coverUrl });
+
+        } catch (error) {
+            console.error('[Steam] Error:', error);
+            finish({ tags: [], coverUrl: '' });
+        }
+    });
+}
+// ========== +++++КНИГИ ТЕГИ ==========
+async function fetchLitresBookTags(bookName) {
+    return new Promise(async (resolve) => {
+        let hiddenWindow = null;
+        let isResolved = false;
+        let loadTimeout = null;
+        let isLoaded = false;
+
+        const finish = (result) => {
+            if (isResolved) return;
+            isResolved = true;
+            if (loadTimeout) clearTimeout(loadTimeout);
+            if (hiddenWindow && !hiddenWindow.isDestroyed()) {
+                hiddenWindow.close();
+            }
+            resolve(result);
+        };
+
+        try {
+            const cleanName = bookName.split(' ').slice(0, 3).join(' ');
+            const searchUrl = `https://www.litres.ru/search/?q=${encodeURIComponent(cleanName)}&languages=ru&art_types=text_book&limit=10`;
+            console.log(`[Litres] Searching: ${searchUrl}`);
+
+            hiddenWindow = new BrowserWindow({
+                show: false,  // Для отладки можно временно поставить true
+                width: 480,
+                height: 640,
+                webPreferences: {
+                    nodeIntegration: false,
+                    contextIsolation: true,
+                    images: true,
+                    javascript: true
+                }
+            });
+
+            hiddenWindow.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
+                details.requestHeaders['User-Agent'] = 'Mozilla/5.0 (Linux; Android 11; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Mobile Safari/537.36';
+                details.requestHeaders['Accept-Language'] = 'ru-RU,ru;q=0.9';
+                details.requestHeaders['Accept'] = 'text/html,application/xhtml+xml';
+                callback({ cancel: false, requestHeaders: details.requestHeaders });
+            });
+
+            // ========== ПОИСК ССЫЛКИ НА КНИГУ ==========
+            hiddenWindow.loadURL(searchUrl);
+            console.log(`[Litres] Search page loading started`);
+
+            const waitForLoad = new Promise((resolve) => {
+                hiddenWindow.webContents.once('did-finish-load', () => {
+                    console.log(`[Litres] Search page finished loading`);
+                    isLoaded = true;
+                    resolve();
+                });
+
+                loadTimeout = setTimeout(() => {
+                    if (!isLoaded) {
+                        console.log(`[Litres] Search page timeout (2s), stopping load`);
+                        hiddenWindow.webContents.stop();
+                        isLoaded = true;
+                        resolve();
+                    }
+                }, 2000);
+            });
+
+            await waitForLoad;
+            if (loadTimeout) clearTimeout(loadTimeout);
+            await new Promise(r => setTimeout(r, 1000));
+            // Находим ссылку на книгу
+            const bookInfo = await hiddenWindow.webContents.executeJavaScript(`
+                (function() {
+                    const searchQuery = "${cleanName.toLowerCase()}";
+                    const allLinks = document.querySelectorAll('a[href*="/book/"]');
+                    
+                    for (const link of allLinks) {
+                        const href = link.href;
+                        if (href.includes('erid=') || href.includes('banner') || href.includes('campaign')) continue;
+                        
+                        const parentText = link.closest('.art-item__cover, .art-item, .result__item')?.innerText || link.innerText;
+                        const title = parentText.split('\\n')[0].trim();
+                        
+                        if (title && (title.toLowerCase().includes(searchQuery) || searchQuery.includes(title.toLowerCase()))) {
+                            const fullUrl = href.startsWith('http') ? href : 'https://www.litres.ru' + href;
+                            return { url: fullUrl, title: title };
+                        }
+                    }
+                    
+                    for (const link of allLinks) {
+                        const href = link.href;
+                        if (!href.includes('erid=') && !href.includes('banner')) {
+                            const fullUrl = href.startsWith('http') ? href : 'https://www.litres.ru' + href;
+                            return { url: fullUrl, title: 'Найдена книга' };
+                        }
+                    }
+                    
+                    return null;
+                })();
+            `);
+
+            if (!bookInfo || !bookInfo.url) {
+                console.log('[Litres] Book not found');
+                finish({ tags: [], description: '', coverUrl: '' });
+                return;
+            }
+
+            console.log(`[Litres] Found book: ${bookInfo.title} — ${bookInfo.url}`);
+
+            // ========== ПОИСК ТЕГОВ НА СТРАНИЦЕ КНИГИ ==========
+            isLoaded = false;
+
+            hiddenWindow.loadURL(bookInfo.url);
+            console.log(`[Litres] Book page loading started`);
+
+            const waitForBookLoad = new Promise((resolve) => {
+                hiddenWindow.webContents.once('did-finish-load', () => {
+                    console.log(`[Litres] Book page finished loading`);
+                    isLoaded = true;
+                    resolve();
+                });
+
+                loadTimeout = setTimeout(() => {
+                    if (!isLoaded) {
+                        console.log(`[Litres] Book page timeout (2s), stopping load`);
+                        hiddenWindow.webContents.stop();
+                        isLoaded = true;
+                        resolve();
+                    }
+                }, 2000);
+            });
+
+            await waitForBookLoad;
+            if (loadTimeout) clearTimeout(loadTimeout);
+
+            // Парсим данные
+            const bookData = await hiddenWindow.webContents.executeJavaScript(`
+                (function() {
+                    const tags = [];
+                    const tagSelectors = [
+                        '.BookGenresAndTags_genresList__rd8vU a',
+                        '[class*="genresList"] a',
+                        'a[href*="/genre/"]',
+                        'a[href*="/tags/"]'
+                    ];
+                    
+                    for (const selector of tagSelectors) {
+                        const elements = document.querySelectorAll(selector);
+                        for (const el of elements) {
+                            const text = el.textContent.trim();
+                            if (text && text !== 'Только на Литрес' && text.length < 40 && !tags.includes(text)) {
+                                tags.push(text);
+                            }
+                        }
+                        if (tags.length) break;
+                    }
+                    
+                    let description = '';
+                    const descEl = document.querySelector('.BookDescription_text, [class*="description"] p');
+                    if (descEl) description = descEl.textContent.trim().substring(0, 500);
+                    
+                    let coverUrl = '';
+                    const coverEl = document.querySelector('.AdaptiveCover_image__f_21W, .ArtCover_cover__image__ClWcc, [class*="cover"] img');
+                    if (coverEl && coverEl.src) coverUrl = coverEl.src;
+                    
+                    return { tags: tags.slice(0, 10), description: description, coverUrl: coverUrl };
+                })();
+            `);
+
+            console.log(`[Litres] Found tags for "${bookName}":`, bookData.tags);
+            console.log(`[Litres] Cover: ${bookData.coverUrl}`);
+
+            finish(bookData);
+
+        } catch (error) {
+            console.error('[Litres] Error:', error);
+            finish({ tags: [], description: '', coverUrl: '' });
+        }
+    });
+}
