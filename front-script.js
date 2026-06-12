@@ -377,7 +377,7 @@ function setupEditDescriptionButtons() {
                                 </span>
                             `).join('')}
                         </div>
-                        <input type="text" id="tagInput" maxlength="15" placeholder="Например: хоррор, комедия, шедевр" autocomplete="off">
+                        <input type="text" id="tagInput" maxlength="50" placeholder="Например: хоррор, комедия, шедевр" autocomplete="off">
                     </div>
                     <div id="tagSuggestions" class="tag-suggestions" style="display: none;"></div>
                     
@@ -1866,7 +1866,7 @@ function getAddFormHTML(addMoreChecked = false, visible = '') {
                             <div class="tags-list" id="addFormTagsList">
                                 <!-- Теги будут добавляться сюда -->
                             </div>
-                            <input type="text" id="addFormTagInput" maxlength="15" placeholder="Добавить теги (нажмите Enter или запятую)" autocomplete="off">
+                            <input type="text" id="addFormTagInput" maxlength="50" placeholder="Добавить теги (нажмите Enter или запятую)" autocomplete="off">
                         </div>
                         <div id="addFormTagSuggestions" class="tag-suggestions"></div>
                     </div>
@@ -2143,7 +2143,8 @@ async function addNewData(section) {
     }
 
     try {
-        const isDuplicate = await window.electronAPI.checkDuplicates(section, cardData.name)
+        const isDuplicate = await window.electronAPI.checkDuplicates(section, cardData.name);
+
         if (isDuplicate) {
             const confirmReplace = await showConfirmModal(
                 'Элемент уже существует',
@@ -2155,19 +2156,24 @@ async function addNewData(section) {
                 isAddingGame = false;
                 return;
             }
+
+            // При замене — сначала удаляем старую карточку с её тегами
+            await window.electronAPI.deleteData(section, cardData.name);
         }
 
-        // ← В ЭТОЙ СТРОКЕ ТЭГИ ДОЛЖНЫ ПЕРЕДАВАТЬСЯ
+        // Добавляем новую карточку с тегами
         await window.electronAPI.addData(section, cardData);
 
         // Перезагружаем данные и рендерим раздел заново
         let data = await window.electronAPI.getData(section);
         await renderSection(section, data, true, false, false, true);
+
         const searchInput = document.getElementById('searchInput');
         if (searchInput) {
             searchInput.value = cardData.name;
             filterCards(cardData.name);
         }
+
         let overlay = document.querySelector('.add-form-overlay');
         overlay.classList.remove('visible');
 
@@ -2177,6 +2183,7 @@ async function addNewData(section) {
         if (window.clearAddFormTags) {
             window.clearAddFormTags();
         }
+
     } catch (error) {
         console.error('Ошибка при добавлении:', error);
         await showError(`Ошибка при добавлении: ${error.message}`);
@@ -3093,7 +3100,6 @@ function setupAddButton() {
                             }
                         }
                     }
-                    document.getElementById('nameInput')?.focus();
                 } catch (error) {
                     console.error('Ошибка чтения буфера обмена:', error);
                 }

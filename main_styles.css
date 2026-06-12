@@ -2050,6 +2050,7 @@ select option[value="Ожидается"] { background-color: var(--rating-waiti
     box-shadow: 0 0 0 2px rgba(145, 201, 214, 0.2);
 }
 
+
 /* Список тегов */
 .tags-list {
     display: flex;
@@ -2060,6 +2061,14 @@ select option[value="Ожидается"] { background-color: var(--rating-waiti
 }
 
 /* Разделитель между тегами и полем ввода */
+.tags-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+    min-height: 32px;
+}
+
 .tags-list:not(:empty) {
     border-bottom: 1px dashed rgba(255, 255, 255, 0.15);
     padding-bottom: 8px;
@@ -2070,20 +2079,22 @@ select option[value="Ожидается"] { background-color: var(--rating-waiti
 .tag {
     display: inline-flex;
     align-items: center;
-    gap: 6px;
+    gap: 8px;
     background: linear-gradient(135deg, #0078d4 0%, #106ebe 100%);
     border-radius: 8px;
-    padding: 4px 10px;
-    font-size: 12px;
+    padding: 5px 12px !important;
+    font-size: 13px;
     font-weight: 500;
     color: white;
     line-height: 1.4;
-    white-space: nowrap !important;;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;;
+    /* Убираем ограничения */
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    max-width: none;
     box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
     transition: all 0.15s ease;
-    max-width: 120px !important;;
+    flex-shrink: 0;
 }
 
 .tag:hover {
@@ -2091,28 +2102,31 @@ select option[value="Ожидается"] { background-color: var(--rating-waiti
     transform: translateY(-1px);
 }
 
-/* Кнопка удаления тега (базовая) */
 .tag-remove {
-    background: rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.25);
     border: none;
     color: white;
     cursor: pointer;
     font-size: 14px;
     font-weight: bold;
-    padding: 0;
-    width: 18px;
-    height: 18px;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     border-radius: 50% !important;
     transition: all 0.1s ease;
+    flex-shrink: 0;
+    margin-left: 2px;
 }
 
+
 .tag-remove:hover {
-    background: rgba(255, 255, 255, 0.4);
+    background: rgba(255, 255, 255, 0.5);
     transform: scale(1.1);
 }
+
 
 /* Поле ввода тега (базовое) */
 #addFormTagInput,
@@ -2241,6 +2255,22 @@ select option[value="Ожидается"] { background-color: var(--rating-waiti
 
 #addFormTagSuggestions .tag-suggestion:last-child {
     border-bottom: none;
+}
+
+.tag {
+    max-width: 100%;
+    word-break: break-word;
+    white-space: normal;
+}
+
+/* Для модального окна - теги могут быть длиннее */
+#modalTagsList .tag {
+    max-width: calc(100% - 20px);
+    white-space: normal;
+}
+
+.tag[title] {
+    cursor: help;
 }
 /* ========== ТУЛТИПЫ ========== */
 
