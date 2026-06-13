@@ -1960,7 +1960,7 @@ async function  fetchKinopoiskMovieTags(movieName) {
         let isResolved = false;
         let loadTimeout = null;
         let isLoaded = false;
-
+        let currentUrl;
         const finish = (result) => {
             if (isResolved) return;
             isResolved = true;
@@ -1974,6 +1974,7 @@ async function  fetchKinopoiskMovieTags(movieName) {
         try {
 
             const searchUrl = `https://www.kinopoisk.ru/index.php?kp_query=${encodeURIComponent(movieName)}`;
+
             console.log(`[Kinopoisk] Searching: ${searchUrl}`);
 
             hiddenWindow = new BrowserWindow({
@@ -2012,7 +2013,12 @@ async function  fetchKinopoiskMovieTags(movieName) {
 
             await waitForSearchLoad;
             if (loadTimeout) clearTimeout(loadTimeout);
-
+            currentUrl = hiddenWindow.webContents.getURL();
+            if (!currentUrl || currentUrl === 'about:blank' || currentUrl.includes('error')) {
+                console.log('[Имя_сервиса] Page not loaded properly, finishing with empty result');
+                finish({ tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null });
+                return;
+            }
             // Ищем ссылку на фильм
             const movieInfo = await hiddenWindow.webContents.executeJavaScript(`
                 (function() {
@@ -2038,6 +2044,10 @@ async function  fetchKinopoiskMovieTags(movieName) {
                 finish({ tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null });
                 return;
             }
+            movieInfo.url = movieInfo.url.replace('/posters/', '')
+                    .replace('/frames/', '')
+                    .replace('/dates/', '')
+                    .replace('/sr/', '');
 
             console.log(`[Kinopoisk] Found movie: ${movieInfo.url}`);
 
@@ -2066,7 +2076,12 @@ async function  fetchKinopoiskMovieTags(movieName) {
 
             await waitForMovieLoad;
             if (loadTimeout) clearTimeout(loadTimeout);
-
+            currentUrl = hiddenWindow.webContents.getURL();
+            if (!currentUrl || currentUrl === 'about:blank' || currentUrl.includes('error')) {
+                console.log('[Имя_сервиса] Page not loaded properly, finishing with empty result');
+                finish({ tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null });
+                return;
+            }
             const movieData = await hiddenWindow.webContents.executeJavaScript(`
                 (function() {
                     // Полное название фильма
@@ -2208,7 +2223,7 @@ async function fetchYummyAniTags(animeName) {
         let isResolved = false;
         let loadTimeout = null;
         let isLoaded = false;
-
+        let currentUrl;
         const finish = (result) => {
             if (isResolved) return;
             isResolved = true;
@@ -2263,6 +2278,12 @@ async function fetchYummyAniTags(animeName) {
 
             await waitForLoad;
             if (loadTimeout) clearTimeout(loadTimeout);
+            currentUrl = hiddenWindow.webContents.getURL();
+            if (!currentUrl || currentUrl === 'about:blank' || currentUrl.includes('error')) {
+                console.log('[Имя_сервиса] Page not loaded properly, finishing with empty result');
+                finish({ tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null });
+                return;
+            }
 
             const animeLink = await hiddenWindow.webContents.executeJavaScript(`
                 (function() {
@@ -2306,7 +2327,12 @@ async function fetchYummyAniTags(animeName) {
 
             await waitForAnimeLoad;
             if (loadTimeout) clearTimeout(loadTimeout);
-
+            currentUrl = hiddenWindow.webContents.getURL();
+            if (!currentUrl || currentUrl === 'about:blank' || currentUrl.includes('error')) {
+                console.log('[Имя_сервиса] Page not loaded properly, finishing with empty result');
+                finish({ tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null });
+                return;
+            }
             const animeData = await hiddenWindow.webContents.executeJavaScript(`
                 (function() {
                     // Полное название аниме
@@ -2424,6 +2450,7 @@ async function fetchSteamGameTags(gameName) {
         let isResolved = false;
         let loadTimeout = null;
         let isLoaded = false;
+        let currentUrl;
 
         const finish = (result) => {
             if (isResolved) return;
@@ -2436,14 +2463,14 @@ async function fetchSteamGameTags(gameName) {
         };
 
         try {
-            // 1. Поиск игры через storesearch API
+            // 1. Поиск игры через storesearch API (только для получения ID)
             const searchUrl = `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(gameName)}&cc=ru&l=russian`;
             const searchResponse = await fetch(searchUrl);
             const searchData = await searchResponse.json();
 
             if (!searchData.items || searchData.items.length === 0) {
                 console.log(`[Steam] Game not found: ${gameName}`);
-                finish({ tags: [], coverUrl: '', fullTitle: '', releaseDate: null });
+                finish({ tags: [], coverUrl: '', fullTitle: '', releaseDate: null, description: '' });
                 return;
             }
 
@@ -2454,88 +2481,17 @@ async function fetchSteamGameTags(gameName) {
             console.log(`[Steam] Found ID for "${gameName}": ${appId}`);
             console.log(`[Steam] Full title: "${fullTitle}"`);
 
-            // 2. Получаем детальную информацию через appdetails API
-            const detailsUrl = `https://store.steampowered.com/api/appdetails?appids=${appId}&cc=ru&l=russian`;
-            const detailsResponse = await fetch(detailsUrl);
-            const detailsData = await detailsResponse.json();
-
-            // Обложка и дата релиза из детального API
-            let coverUrl = '';
-            let releaseDate = null;
-
-            if (detailsData[appId] && detailsData[appId].success) {
-                const data = detailsData[appId].data;
-
-                // Обложка
-                if (data.header_image) {
-                    coverUrl = data.header_image;
-                    console.log(`[Steam] Cover URL: ${coverUrl}`);
-                }
-
-                // Дата релиза
-                if (data.release_date && data.release_date.date) {
-                    const dateStr = data.release_date.date;
-                    console.log(`[Steam] Raw release date from API: "${dateStr}"`);
-
-                    const monthNames = {
-                        // Русские месяцы
-                        'янв': '01', 'фев': '02', 'мар': '03', 'апр': '04',
-                        'мая': '05', 'май': '05', 'июн': '06', 'июл': '07',
-                        'авг': '08', 'сен': '09', 'окт': '10', 'ноя': '11', 'дек': '12',
-                        // Английские месяцы
-                        'jan': '01', 'feb': '02', 'mar': '03', 'apr': '04',
-                        'may': '05', 'jun': '06', 'jul': '07', 'aug': '08',
-                        'sep': '09', 'oct': '10', 'nov': '11', 'dec': '12'
-                    };
-
-                    // Разбиваем строку на части
-                    const parts = dateStr.trim().split(/\s+/);
-                    console.log(`[Steam] Split parts:`, parts);
-
-                    let day = null, monthName = null, year = null;
-
-                    for (const part of parts) {
-                        // Если часть - число от 1 до 31, это день
-                        if (/^\d{1,2}$/.test(part) && !day) {
-                            day = part.padStart(2, '0');
-                        }
-                        // Если часть - число из 4 цифр, это год
-                        else if (/^\d{4}$/.test(part) && !year) {
-                            year = part;
-                        }
-                        // Если часть - слово (возможно с точкой), это месяц
-                        else if (/^[а-яa-z]+\.?$/i.test(part) && !monthName) {
-                            monthName = part.toLowerCase().replace(/\.$/, '').substring(0, 3);
-                        }
-                    }
-
-                    console.log(`[Steam] Parsed: day=${day}, monthName=${monthName}, year=${year}`);
-
-                    if (day && monthName && year) {
-                        const month = monthNames[monthName];
-                        if (month) {
-                            releaseDate = `${year}-${month}-${day}`;
-                            console.log(`[Steam] ✅ Parsed release date: ${releaseDate}`);
-                        } else {
-                            console.log(`[Steam] ❌ Unknown month: "${monthName}"`);
-                        }
-                    } else {
-                        console.log(`[Steam] ❌ Could not parse date components`);
-                    }
-                }
-            }
-
-            // 3. Открываем страницу для парсинга тегов
-            const gameUrl = `https://store.steampowered.com/app/${appId}`;
+            // 2. Открываем страницу игры и парсим ВСЁ с неё
+            const gameUrl = `https://store.steampowered.com/app/${appId}/?l=russian`;
 
             hiddenWindow = new BrowserWindow({
                 show: false,
-                width: 400,
-                height: 400,
+                width: 1280,
+                height: 800,
                 webPreferences: {
                     nodeIntegration: false,
                     contextIsolation: true,
-                    images: false
+                    images: true
                 }
             });
 
@@ -2546,7 +2502,7 @@ async function fetchSteamGameTags(gameName) {
             });
 
             hiddenWindow.loadURL(gameUrl);
-            console.log(`[Steam] Page loading started for tags`);
+            console.log(`[Steam] Page loading started`);
 
             const waitForLoad = new Promise((resolve) => {
                 hiddenWindow.webContents.once('did-finish-load', () => {
@@ -2557,22 +2513,60 @@ async function fetchSteamGameTags(gameName) {
 
                 loadTimeout = setTimeout(() => {
                     if (!isLoaded) {
-                        console.log(`[Steam] Page timeout (2s), stopping load`);
+                        console.log(`[Steam] Page timeout (3s), stopping load`);
                         hiddenWindow.webContents.stop();
                         isLoaded = true;
                         resolve();
                     }
-                }, 2000);
+                }, 3000);
             });
 
             await waitForLoad;
             if (loadTimeout) clearTimeout(loadTimeout);
 
-            // Парсим теги
-            const tags = await hiddenWindow.webContents.executeJavaScript(`
+            currentUrl = hiddenWindow.webContents.getURL();
+            if (!currentUrl || currentUrl === 'about:blank' || currentUrl.includes('error')) {
+                console.log('[Steam] Page not loaded properly, finishing with empty result');
+                finish({ tags: [], coverUrl: '', fullTitle: '', releaseDate: null, description: '' });
+                return;
+            }
+
+            // Парсим ВСЕ данные со страницы
+            const gameData = await hiddenWindow.webContents.executeJavaScript(`
                 (function() {
-                    const tagsContainer = document.querySelector('.glance_tags.popular_tags, .popular_tags_ctn');
+                    // Обложка
+                    let coverUrl = '';
+                    const headerImg = document.querySelector('.game_header_image_full');
+                    if (headerImg && headerImg.src) {
+                        coverUrl = headerImg.src;
+                    }
+                    
+                    // Дата релиза
+                    let releaseDate = null;
+                    const releaseDateEl = document.querySelector('.release_date .date');
+                    if (releaseDateEl) {
+                        const dateText = releaseDateEl.textContent.trim();
+                        // Парсим "11 авг. 2022 г."
+                        const months = {
+                            'янв': '01', 'фев': '02', 'мар': '03', 'апр': '04',
+                            'мая': '05', 'май': '05', 'июн': '06', 'июл': '07',
+                            'авг': '08', 'сен': '09', 'окт': '10', 'ноя': '11', 'дек': '12'
+                        };
+                        const match = dateText.match(/(\\d{1,2})\\s+(\\w+)\\.?\\s+(\\d{4})/);
+                        if (match) {
+                            const day = match[1].padStart(2, '0');
+                            const monthName = match[2].toLowerCase().substring(0, 3);
+                            const year = match[3];
+                            const month = months[monthName];
+                            if (month) {
+                                releaseDate = year + '-' + month + '-' + day;
+                            }
+                        }
+                    }
+                    
+                    // Теги (Популярные метки)
                     const tags = [];
+                    const tagsContainer = document.querySelector('.glance_tags.popular_tags, .popular_tags_ctn');
                     if (tagsContainer) {
                         const tagElements = tagsContainer.querySelectorAll('a.app_tag');
                         for (const el of tagElements) {
@@ -2582,23 +2576,40 @@ async function fetchSteamGameTags(gameName) {
                             }
                         }
                     }
-                    return tags;
+                    
+                    // Описание
+                    let description = '';
+                    const descElement = document.querySelector('.game_description_snippet');
+                    if (descElement) {
+                        description = descElement.textContent.trim();
+                    }
+                    
+                    return {
+                        coverUrl: coverUrl,
+                        releaseDate: releaseDate,
+                        tags: tags.slice(0, 12),
+                        description: description,
+                        fullTitle: ''
+                    };
                 })();
             `);
 
-            console.log(`[Steam] Found tags for "${gameName}":`, tags);
-            console.log(`[Steam] Release date: ${releaseDate || 'not found'}`);
+            console.log(`[Steam] Cover: ${gameData.coverUrl}`);
+            console.log(`[Steam] Release date: ${gameData.releaseDate || 'not found'}`);
+            console.log(`[Steam] Tags:`, gameData.tags);
+            console.log(`[Steam] Description: ${gameData.description.substring(0, 100)}...`);
 
             finish({
-                tags: tags,
-                coverUrl: coverUrl,
+                tags: gameData.tags,
+                coverUrl: gameData.coverUrl,
                 fullTitle: fullTitle,
-                releaseDate: releaseDate
+                releaseDate: gameData.releaseDate,
+                description: gameData.description
             });
 
         } catch (error) {
             console.error('[Steam] Error:', error);
-            finish({ tags: [], coverUrl: '', fullTitle: '', releaseDate: null });
+            finish({ tags: [], coverUrl: '', fullTitle: '', releaseDate: null, description: '' });
         }
     });
 }
@@ -2609,6 +2620,7 @@ async function fetchLitresBookTags(bookName) {
         let isResolved = false;
         let loadTimeout = null;
         let isLoaded = false;
+        let currentUrl;
 
         const finish = (result) => {
             if (isResolved) return;
@@ -2669,22 +2681,36 @@ async function fetchLitresBookTags(bookName) {
             if (loadTimeout) clearTimeout(loadTimeout);
             await new Promise(r => setTimeout(r, 1000));
 
+            currentUrl = hiddenWindow.webContents.getURL();
+            if (!currentUrl || currentUrl === 'about:blank' || currentUrl.includes('error')) {
+                console.log('[Litres] Page not loaded properly, finishing with empty result');
+                finish({ tags: [], description: '', coverUrl: '', fullTitle: '' });
+                return;
+            }
+
             // Находим ссылку на книгу
-            const bookInfo = await hiddenWindow.webContents.executeJavaScript(`
-                (function() {
-                    const allLinks = document.querySelectorAll('a[href*="/book/"]');
-                    
-                    for (const link of allLinks) {
-                        const href = link.href;
-                        if (!href.includes('erid=') && !href.includes('banner') && !href.includes('campaign')) {
-                            const fullUrl = href.startsWith('http') ? href : 'https://www.litres.ru' + href;
-                            return { url: fullUrl };
+            let bookInfo = null;
+            try {
+                bookInfo = await hiddenWindow.webContents.executeJavaScript(`
+                    (function() {
+                        const allLinks = document.querySelectorAll('a[href*="/book/"]');
+                        
+                        for (const link of allLinks) {
+                            const href = link.href;
+                            if (!href.includes('erid=') && !href.includes('banner') && !href.includes('campaign')) {
+                                const fullUrl = href.startsWith('http') ? href : 'https://www.litres.ru' + href;
+                                return { url: fullUrl };
+                            }
                         }
-                    }
-                    
-                    return null;
-                })();
-            `);
+                        
+                        return null;
+                    })();
+                `);
+            } catch (e) {
+                console.log('[Litres] Failed to parse search page:', e.message);
+                finish({ tags: [], description: '', coverUrl: '', fullTitle: '' });
+                return;
+            }
 
             if (!bookInfo || !bookInfo.url) {
                 console.log('[Litres] Book not found');
@@ -2719,52 +2745,66 @@ async function fetchLitresBookTags(bookName) {
 
             await waitForBookLoad;
             if (loadTimeout) clearTimeout(loadTimeout);
+            currentUrl = hiddenWindow.webContents.getURL();
+            if (!currentUrl || currentUrl === 'about:blank' || currentUrl.includes('error')) {
+                console.log('[Litres] Page not loaded properly, finishing with empty result');
+                finish({ tags: [], description: '', coverUrl: '', fullTitle: '' });
+                return;
+            }
+
 
             // Парсим данные
-            const bookData = await hiddenWindow.webContents.executeJavaScript(`
-                (function() {
-                    // Полное название книги
-                    let fullTitle = '';
-                    const titleElement = document.querySelector('h1[itemprop="name"]');
-                    if (titleElement) {
-                        fullTitle = titleElement.textContent.trim();
-                    }
-                    
-                    const tags = [];
-                    const tagSelectors = [
-                        '.BookGenresAndTags_genresList__rd8vU a',
-                        '[class*="genresList"] a',
-                        'a[href*="/genre/"]',
-                        'a[href*="/tags/"]'
-                    ];
-                    
-                    for (const selector of tagSelectors) {
-                        const elements = document.querySelectorAll(selector);
-                        for (const el of elements) {
-                            const text = el.textContent.trim();
-                            if (text && text !== 'Только на Литрес' && text.length < 40 && !tags.includes(text)) {
-                                tags.push(text);
-                            }
+            let bookData = null;
+            try {
+                bookData = await hiddenWindow.webContents.executeJavaScript(`
+                    (function() {
+                        // Полное название книги
+                        let fullTitle = '';
+                        const titleElement = document.querySelector('h1[itemprop="name"]');
+                        if (titleElement) {
+                            fullTitle = titleElement.textContent.trim();
                         }
-                        if (tags.length) break;
-                    }
-                    
-                    let description = '';
-                    const descEl = document.querySelector('.BookDescription_text, [class*="description"] p');
-                    if (descEl) description = descEl.textContent.trim().substring(0, 500);
-                    
-                    let coverUrl = '';
-                    const coverEl = document.querySelector('.AdaptiveCover_image__f_21W, .ArtCover_cover__image__ClWcc, [class*="cover"] img');
-                    if (coverEl && coverEl.src) coverUrl = coverEl.src;
-                    
-                    return { 
-                        tags: tags.slice(0, 10), 
-                        description: description, 
-                        coverUrl: coverUrl,
-                        fullTitle: fullTitle
-                    };
-                })();
-            `);
+                        
+                        const tags = [];
+                        const tagSelectors = [
+                            '.BookGenresAndTags_genresList__rd8vU a',
+                            '[class*="genresList"] a',
+                            'a[href*="/genre/"]',
+                            'a[href*="/tags/"]'
+                        ];
+                        
+                        for (const selector of tagSelectors) {
+                            const elements = document.querySelectorAll(selector);
+                            for (const el of elements) {
+                                const text = el.textContent.trim();
+                                if (text && text !== 'Только на Литрес' && text.length < 40 && !tags.includes(text)) {
+                                    tags.push(text);
+                                }
+                            }
+                            if (tags.length) break;
+                        }
+                        
+                        let description = '';
+                        const descEl = document.querySelector('.BookDescription_text, [class*="description"] p');
+                        if (descEl) description = descEl.textContent.trim().substring(0, 500);
+                        
+                        let coverUrl = '';
+                        const coverEl = document.querySelector('.AdaptiveCover_image__f_21W, .ArtCover_cover__image__ClWcc, [class*="cover"] img');
+                        if (coverEl && coverEl.src) coverUrl = coverEl.src;
+                        
+                        return { 
+                            tags: tags.slice(0, 10), 
+                            description: description, 
+                            coverUrl: coverUrl,
+                            fullTitle: fullTitle
+                        };
+                    })();
+                `);
+            } catch (e) {
+                console.log('[Litres] Failed to parse book page:', e.message);
+                finish({ tags: [], description: '', coverUrl: '', fullTitle: '' });
+                return;
+            }
 
             console.log(`[Litres] Found tags for "${bookName}":`, bookData.tags);
             console.log(`[Litres] Full title: ${bookData.fullTitle}`);
@@ -2785,6 +2825,7 @@ async function fetchFilmRuSerialsTags(serialName) {
         let isResolved = false;
         let loadTimeout = null;
         let isLoaded = false;
+        let currentUrl;
 
         const finish = (result) => {
             if (isResolved) return;
@@ -2842,18 +2883,31 @@ async function fetchFilmRuSerialsTags(serialName) {
 
             await waitForLoad;
             if (loadTimeout) clearTimeout(loadTimeout);
-            await new Promise(r => setTimeout(r, 1000));
+            currentUrl = hiddenWindow.webContents.getURL();
+            if (!currentUrl || currentUrl === 'about:blank' || currentUrl.includes('error')) {
+                console.log('[Имя_сервиса] Page not loaded properly, finishing with empty result');
+                finish({ tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null });
+                return;
+            }
 
             const serialInfo = await hiddenWindow.webContents.executeJavaScript(`
                 (function() {
-                    const container = document.querySelector('#movies_list');
-                    if (!container) return null;
-                    const links = container.querySelectorAll('a[href*="/serials/"]');
-                    for (const link of links) {
-                        if (link.href && link.href.includes('/serials/')) {
+                    // Ищем любую ссылку, которая ведёт на фильм, сериал или мультфильм
+                    const allLinks = document.querySelectorAll('a[href*="/movies/"], a[href*="/serials/"], a[href*="/cartoons/"]');
+                    
+                    for (const link of allLinks) {
+                        // Берём первую попавшуюся ссылку с картинкой и названием
+                        if (link.href && link.querySelector('img')) {
                             return { url: link.href };
                         }
                     }
+                    
+                    // Если не нашли, пробуем вообще любую ссылку с картинкой
+                    const anyImageLink = document.querySelector('a img')?.closest('a');
+                    if (anyImageLink && anyImageLink.href) {
+                        return { url: anyImageLink.href };
+                    }
+                    
                     return null;
                 })();
             `);
@@ -2889,7 +2943,12 @@ async function fetchFilmRuSerialsTags(serialName) {
 
             await waitForSerialLoad;
             if (loadTimeout) clearTimeout(loadTimeout);
-            await new Promise(r => setTimeout(r, 2000));
+            currentUrl = hiddenWindow.webContents.getURL();
+            if (!currentUrl || currentUrl === 'about:blank' || currentUrl.includes('error')) {
+                console.log('[Имя_сервиса] Page not loaded properly, finishing with empty result');
+                finish({ tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null });
+                return;
+            }
 
             const serialData = await hiddenWindow.webContents.executeJavaScript(`
                 (function() {

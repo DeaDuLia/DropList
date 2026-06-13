@@ -2463,15 +2463,8 @@ async function addNewData(section) {
         if (nameInput) {
             delete nameInput.dataset.fetchedReleaseDate;
         }
-        // Перезагружаем данные и рендерим раздел заново
         let data = await window.electronAPI.getData(section);
         await renderSection(section, data, true, false, false, true);
-
-        const searchInput = document.getElementById('searchInput');
-        if (searchInput) {
-            searchInput.value = cardData.name;
-            filterCards(cardData.name);
-        }
 
         let overlay = document.querySelector('.add-form-overlay');
         overlay.classList.remove('visible');
@@ -3275,7 +3268,6 @@ async function autoFetchTags(title, section) {
     showLoadingPreview(title);
     let result = await window.electronAPI.fetchCardData(title, section);
     hideLoadingPreview();
-    hideLoadingPreview();
     if (result && result.coverUrl) {
         const icoInput = document.getElementById('icoInput');
         if (icoInput) icoInput.value = result.coverUrl;
@@ -3352,44 +3344,10 @@ function setupAddButton() {
                 addForm.classList.add('visible');
                 overlay.classList.add('visible');
                 toggleBtn.textContent = '− Скрыть';
-
-                try {
-                    const text = await navigator.clipboard.readText();
-                    const nameInput = document.getElementById('nameInput');
-
-                    if (text && nameInput && text !== lastTextFromClipboard && !text.startsWith('http')) {
-                        nameInput.value = text;
-                        lastTextFromClipboard = text;
-                        updatePreview(text, null, null, null);
-
-                        const section = document.querySelector('.nav-item.active')?.dataset.section;
-
-                        // Один вызов — получаем и теги, и обложку
-                        const result = await autoFetchTags(text, section);
-                        const tags = result.tags || [];
-                        const releaseDate = result.releaseDate;
-
-                        if (releaseDate) {
-                            nameInput.dataset.fetchedReleaseDate = releaseDate;
-                        }
-
-                        if (tags && tags.length > 0 && window.getAddFormTags) {
-                            const currentTags = window.getAddFormTags();
-                            const newTags = [...new Set([...currentTags, ...tags])];
-                            if (window.clearAddFormTags) window.clearAddFormTags();
-
-                            for (const tag of newTags.slice(0, 5)) {
-                                const tagInput = document.getElementById('addFormTagInput');
-                                if (tagInput) {
-                                    tagInput.value = tag;
-                                    const enterEvent = new KeyboardEvent('keydown', { key: 'Enter' });
-                                    tagInput.dispatchEvent(enterEvent);
-                                }
-                            }
-                        }
-                    }
-                } catch (error) {
-                    console.error('Ошибка чтения буфера обмена:', error);
+                const nameInput = document.getElementById('nameInput');
+                if (nameInput) {
+                    nameInput.focus();
+                    nameInput.setSelectionRange(nameInput.value.length, nameInput.value.length);
                 }
             }
         };
