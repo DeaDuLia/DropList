@@ -2387,8 +2387,8 @@ select option[value="Ожидается"] { background-color: var(--rating-waiti
     position: fixed;
     bottom: 20px;
     right: 20px;
-    max-width: 380px;
-    min-width: 280px;
+    max-width: 420px;
+    min-width: 320px;
     z-index: 10000;
     border-radius: 12px;
     overflow: hidden;
@@ -2406,17 +2406,17 @@ select option[value="Ожидается"] { background-color: var(--rating-waiti
 .release-banner-content {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 12px 16px;
+    gap: 15px;
+    padding: 14px 18px;
     background: linear-gradient(135deg, #1e1e2e 0%, #1a1a2e 100%);
     border-left: 4px solid;
 }
 
-/* Миниатюра карточки */
+
 .release-banner-image {
-    width: 48px;
-    height: 48px;
-    border-radius: 8px;
+    width: 56px;
+    height: 56px;
+    border-radius: 10px;
     object-fit: cover;
     flex-shrink: 0;
     background: #2d2d2d;
@@ -2428,21 +2428,22 @@ select option[value="Ожидается"] { background-color: var(--rating-waiti
 }
 
 .release-banner-title {
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 600;
     color: white;
-    margin-bottom: 4px;
+    margin-bottom: 5px;
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
 }
 
 .release-banner-message {
-    font-size: 12px;
-    color: rgba(255, 255, 255, 0.7);
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.75);
     display: flex;
     align-items: center;
     gap: 6px;
+    margin-bottom: 4px;
 }
 
 .release-banner-icon {
@@ -2450,7 +2451,7 @@ select option[value="Ожидается"] { background-color: var(--rating-waiti
 }
 
 .release-banner-date {
-    font-size: 11px;
+    font-size: 12px;
     color: rgba(255, 255, 255, 0.5);
 }
 
@@ -2458,11 +2459,11 @@ select option[value="Ожидается"] { background-color: var(--rating-waiti
     background: rgba(255, 255, 255, 0.15);
     border: none;
     color: white;
-    width: 24px;
-    height: 24px;
+    width: 28px;
+    height: 28px;
     border-radius: 50%;
     cursor: pointer;
-    font-size: 14px;
+    font-size: 16px;
     display: flex;
     align-items: center;
     justify-content: center;
