@@ -2473,7 +2473,6 @@ async function fetchSteamGameTags(gameName) {
                 finish({ tags: [], coverUrl: '', fullTitle: '', releaseDate: null, description: '' });
                 return;
             }
-
             const game = searchData.items[0];
             const appId = game.id;
             const fullTitle = game.name;
