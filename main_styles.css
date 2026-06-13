@@ -493,7 +493,7 @@ body {
     box-shadow: 0 0 0 2px rgba(162, 155, 254, 0.2);
 }
 
-.add-form input::placeholder {
+    .add-form input::placeholder {
     color: rgba(255, 255, 255, 0.5);
     font-size: 0.85rem;
 }
@@ -1972,6 +1972,34 @@ select option[value="Ожидается"] { background-color: var(--rating-waiti
     pointer-events: none;
     backdrop-filter: blur(2px);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.25);
+    opacity: 0;
+    visibility: hidden;
+    transition: visibility 0s linear 0s, opacity 0.2s ease;
+}
+
+.card-tooltip {
+    opacity: 1;
+    visibility: visible;
+}
+
+/* Задержка для тултипа без описания (только теги) */
+.card-tooltip-delayed {
+    animation: delayedAppear 1s ease forwards;
+}
+
+@keyframes delayedAppear {
+    0% {
+        opacity: 0;
+        visibility: hidden;
+    }
+    70% {
+        opacity: 0;
+        visibility: hidden;
+    }
+    100% {
+        opacity: 1;
+        visibility: visible;
+    }
 }
 
 .card-hover-icon {
@@ -2003,4 +2031,494 @@ select option[value="Ожидается"] { background-color: var(--rating-waiti
     height: 56px;
     filter: brightness(0) invert(1);
     opacity: 0.9;
+}
+/* ========== ТЭГИ ========== */
+
+/* Базовый контейнер для ввода тегов */
+.tags-input-wrapper {
+    background: var(--dark-input-background);
+    border: 1px solid var(--dark-main-text-color);
+    border-radius: 8px;
+    padding: 8px 10px;
+    width: 100%;
+    box-sizing: border-box;
+    transition: all 0.2s ease;
+}
+
+.tags-input-wrapper:focus-within {
+    border-color: #91c9d6;
+    box-shadow: 0 0 0 2px rgba(145, 201, 214, 0.2);
+}
+
+
+/* Список тегов */
+.tags-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-bottom: 8px;
+    min-height: 28px;
+}
+
+/* Разделитель между тегами и полем ввода */
+.tags-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-bottom: 8px;
+    min-height: 32px;
+}
+
+.tags-list:not(:empty) {
+    border-bottom: 1px dashed rgba(255, 255, 255, 0.15);
+    padding-bottom: 8px;
+    margin-bottom: 8px;
+}
+
+/* Базовый стиль тега (единый для всех) */
+.tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: linear-gradient(135deg, #0078d4 0%, #106ebe 100%);
+    border-radius: 8px;
+    padding: 5px 12px !important;
+    font-size: 13px;
+    font-weight: 500;
+    color: white;
+    line-height: 1.4;
+    /* Убираем ограничения */
+    white-space: normal;
+    word-break: break-word;
+    overflow-wrap: break-word;
+    max-width: none;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+    transition: all 0.15s ease;
+    flex-shrink: 0;
+}
+
+.tag:hover {
+    background: linear-gradient(135deg, #106ebe 0%, #0a5a9e 100%);
+    transform: translateY(-1px);
+}
+
+.tag-remove {
+    background: rgba(255, 255, 255, 0.25);
+    border: none;
+    color: white;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: bold;
+    width: 20px;
+    height: 20px;
+    min-width: 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50% !important;
+    transition: all 0.1s ease;
+    flex-shrink: 0;
+    margin-left: 2px;
+}
+
+
+.tag-remove:hover {
+    background: rgba(255, 255, 255, 0.5);
+    transform: scale(1.1);
+}
+
+
+/* Поле ввода тега (базовое) */
+#addFormTagInput,
+#tagInput {
+    width: 100%;
+    background: transparent;
+    border: none;
+    color: var(--dark-main-text-color);
+    font-size: 13px;
+    outline: none;
+    padding: 6px 0 4px 0;
+    margin: 0;
+    box-sizing: border-box;
+}
+
+#addFormTagInput::placeholder,
+#tagInput::placeholder {
+    color: rgba(255, 255, 255, 0.4);
+    font-size: 12px;
+    font-style: italic;
+}
+
+/* ========== СТИЛИ ДЛЯ ФОРМЫ ДОБАВЛЕНИЯ (addForm) ========== */
+
+#addForm .tags-input-wrapper {
+    padding: 10px 12px;
+}
+
+#addForm .tags-list {
+    gap: 8px;
+    margin-bottom: 10px;
+    min-height: 32px;
+}
+
+#addForm .tags-list:not(:empty) {
+    padding-bottom: 10px;
+    margin-bottom: 10px;
+}
+
+#addForm .tag {
+    padding: 5px 12px;
+    height: 28px;
+    max-width: 150px;
+    font-size: 12px;
+}
+
+#modalTagsList .tag-remove {
+    background: rgba(255, 255, 255, 0.2);
+    width: 18px;
+    height: 18px;
+}
+
+/* В форме добавления */
+#addForm .tag-remove {
+    width: 20px;
+    height: 20px;
+    font-size: 14px;
+}
+
+#addFormTagInput {
+    padding: 8px 0 4px 0;
+}
+
+/* ========== ПОДСКАЗКИ ТЕГОВ ========== */
+
+/* Базовые подсказки */
+.tag-suggestions {
+    position: absolute;
+    background: #2d2d2d;
+    border: 1px solid #4a9eff;
+    border-radius: 10px;
+    max-height: 200px;
+    overflow-y: auto;
+    z-index: 101;
+    min-width: 180px;
+    width: auto;
+    max-width: 280px;
+    box-shadow: 0 6px 16px rgba(0, 0, 0, 0.4);
+}
+
+.tag-suggestion {
+    padding: 8px 14px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #e0e0e0;
+    transition: all 0.1s ease;
+    border-bottom: 1px solid #3a3a3a;
+}
+
+.tag-suggestion:last-child {
+    border-bottom: none;
+}
+
+.tag-suggestion:hover {
+    background: #0078d4;
+    color: white;
+    padding-left: 18px;
+}
+
+/* Подсказки для формы добавления */
+#addFormTagSuggestions {
+    position: fixed !important;
+    background: #2d2d2d;
+    border: 1px solid #4a9eff;
+    border-radius: 10px;
+    max-height: 200px;
+    max-width: 280px;
+    overflow-y: auto;
+    z-index: 10001 !important;
+    box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+}
+
+#addFormTagSuggestions .tag-suggestion {
+    padding: 10px 14px;
+    cursor: pointer;
+    font-size: 13px;
+    color: #e0e0e0;
+    border-bottom: 1px solid #3a3a3a;
+}
+
+
+#addFormTagSuggestions .tag-suggestion:hover {
+    background: #0078d4;
+    color: white;
+}
+
+#addFormTagSuggestions .tag-suggestion:last-child {
+    border-bottom: none;
+}
+
+.tag {
+    max-width: 100%;
+    word-break: break-word;
+    white-space: normal;
+}
+
+/* Для модального окна - теги могут быть длиннее */
+#modalTagsList .tag {
+    max-width: calc(100% - 20px);
+    white-space: normal;
+}
+
+.tag[title] {
+    cursor: help;
+}
+/* ========== ТУЛТИПЫ ========== */
+
+.card-tooltip-desc {
+    margin-bottom: 8px;
+    font-size: 12px;
+}
+
+.card-tooltip-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 6px;
+    padding-top: 6px;
+}
+
+.card-tooltip-tag {
+    background: #0078d4;
+    border-radius: 4px;
+    padding: 3px 10px;
+    font-size: 14px;
+    color: white;
+    display: inline-block;
+}
+
+.card-tooltip-tag-more {
+    background: #4a4a4a;
+    border-radius: 4px;
+    padding: 3px 10px;
+    font-size: 14px;
+    color: white;
+    display: inline-block;
+}
+
+/* ========== ПРОЧИЕ ЭЛЕМЕНТЫ ========== */
+
+#editDescTextarea {
+    width: 100%;
+    background: #1e1e1e;
+    border: 1px solid #4a4a4a;
+    border-radius: 8px;
+    color: white;
+    margin-bottom: 12px;
+    font-size: 13px;
+    resize: vertical;
+    box-sizing: border-box;
+}
+
+#editDescTextarea:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px #4a9eff;
+}
+
+.suggestion-tag {
+    color: #4a9eff;
+}
+
+.suggestion-tag::before {
+    content: '#';
+    margin-right: 2px;
+}
+
+/* Подсказка для названия - абсолютное позиционирование */
+.title-suggestion {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: #2d2d2d;
+    border: 1px solid #4a9eff;
+    border-radius: 8px;
+    padding: 8px 12px;
+    margin-top: 4px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 13px;
+    color: #e0e0e0;
+    animation: slideDown 0.2s ease;
+    z-index: 1000;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.title-suggestion:hover {
+    background: #3d3d3d;
+    border-color: #6ab0ff;
+}
+
+.suggestion-title {
+    flex: 1;
+    color: #4a9eff;
+    font-weight: 500;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+@keyframes slideDown {
+    from {
+        opacity: 0;
+        transform: translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ========== ОПОВЕЩЕНИЯ О РЕЛИЗАХ (FLOATING) ========== */
+.release-banner {
+    position: fixed;
+    right: 20px;
+    max-width: 320px;
+    min-width: 320px;
+    z-index: 10000;
+    border-radius: 12px;
+    overflow: hidden;
+    animation: slideInRight 0.3s ease;
+    cursor: pointer;
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
+    transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.3s ease;
+}
+
+.release-banner:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+
+.release-banner-content {
+    display: flex;
+    align-items: center;
+    gap: 15px;
+    padding: 14px 18px;
+    background: linear-gradient(135deg, #1e1e2e 0%, #1a1a2e 100%);
+    border-left: 4px solid;
+}
+
+
+.release-banner-image {
+    width: 56px;
+    height: 56px;
+    border-radius: 10px;
+    object-fit: cover;
+    flex-shrink: 0;
+    background: #2d2d2d;
+}
+
+.release-banner-text {
+    flex: 1;
+    min-width: 0;
+}
+
+.release-banner-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: white;
+    margin-bottom: 5px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.release-banner-message {
+    font-size: 14px;
+    color: rgba(255, 255, 255, 0.75);
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-bottom: 4px;
+}
+
+.release-banner-icon {
+    font-size: 14px;
+}
+
+.release-banner-date {
+    font-size: 12px;
+    color: rgba(255, 255, 255, 0.5);
+}
+
+.release-banner-close {
+    background: rgba(255, 255, 255, 0.15);
+    border: none;
+    color: white;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    cursor: pointer;
+    font-size: 16px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    flex-shrink: 0;
+}
+
+.release-banner-close:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: scale(1.1);
+}
+
+/* Цвета границ */
+.release-banner-released .release-banner-content {
+    border-left-color: #2ecc71;
+}
+
+.release-banner-upcoming_week .release-banner-content {
+    border-left-color: #e67e22;
+}
+
+.release-banner-upcoming_month .release-banner-content {
+    border-left-color: #3498db;
+}
+
+/* Анимация появления */
+@keyframes slideInRight {
+    from {
+        opacity: 0;
+        transform: translateX(100px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0);
+    }
+}
+
+@keyframes slideOutRight {
+    from {
+        opacity: 1;
+        transform: translateX(0);
+    }
+    to {
+        opacity: 0;
+        transform: translateX(100px);
+    }
+}
+
+.release-banner.hiding {
+    animation: slideOutRight 0.3s ease forwards;
+}
+
+.card-tooltip-date {
+    margin-bottom: 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.2);
+    font-size: 16px;
+    color: #4a9eff;
+    font-weight: 500;
 }
