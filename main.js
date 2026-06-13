@@ -436,10 +436,6 @@ function initializeDatabase(db) {
             PRIMARY KEY (card_name, section)
         )
     `);
-    db.exec(`
-    INSERT OR IGNORE INTO app_statistics (info, value, actual_date)
-    VALUES ('last_release_update', '1970-01-01', datetime('now'))
-`);
 }
 
 function saveUserSession(email, uid, idToken, refreshToken) {
@@ -590,10 +586,17 @@ const statements = {
     deleteExpectedRelease: db.prepare('DELETE FROM expected_releases WHERE card_name = ? AND section = ?'),  // ← ЭТОТ ОТСУТСТВОВАЛ
 
     getExpectedReleasesBySection: db.prepare(`
-        SELECT er.*, dc.status 
+        SELECT er.*, dc.status, dc.section 
         FROM expected_releases er
         JOIN data_cards dc ON dc.name = er.card_name AND dc.section = er.section
-        WHERE er.section = ? AND (dc.status = 'Ожидается' OR dc.status = 'В процессе')
+        WHERE er.section = ? 
+        AND (
+            dc.status = 'Ожидается' 
+            OR (
+                dc.status = 'В процессе' 
+                AND (dc.section = 'anime' OR dc.section = 'serials')
+            )
+        )
         ORDER BY date(er.release_date) ASC
     `),
     updateCardNameInExpected: db.prepare(`
@@ -930,7 +933,7 @@ ipcMain.handle('add-data', async (event, section, data) => {
         data.description || ''
     );
 
-    // ← ДОБАВЛЯЕМ ТЭГИ
+    // Добавляем теги
     if (data.tags && Array.isArray(data.tags) && data.tags.length > 0) {
         for (const tag of data.tags) {
             statements.addTagToCard.run(data.name, tag);
@@ -939,17 +942,17 @@ ipcMain.handle('add-data', async (event, section, data) => {
         markTagsDirty();
     }
 
-    if ((data.status === 'Ожидается' || data.status === 'В процессе')) {
-        const releaseDate = await fetchReleaseDateForCard(data.name, section);
-        if (releaseDate) {
-            statements.setExpectedRelease.run(data.name, section, releaseDate, null);
-            markExpectedReleasesDirty();
-        }
+    // Сохраняем дату релиза, если передана
+    if (data.releaseDate) {
+        statements.setExpectedRelease.run(data.name, section, data.releaseDate, null);
+        markExpectedReleasesDirty();
+        console.log(`[AddData] Saved release date for "${data.name}": ${data.releaseDate}`);
     }
 
     markSectionDirty(section);
     const now = new Date().toISOString();
     statements.setStatistic.run('last_firestore_update', now, now);
+
     return result;
 });
 
@@ -1015,23 +1018,18 @@ ipcMain.handle('update-data-status', async (event, section, dataName, status) =>
     const oldStatus = statements.getStatusByNameAndSection.get(dataName, section)?.status;
     const result = statements.updateDataStatus.run(status, dataName, section);
 
-    // Если статус изменился на Ожидается или В процессе — запускаем асинхронно, НЕ ждём
     if ((status === 'Ожидается' || status === 'В процессе') && oldStatus !== status) {
-        // Запускаем в фоне, не блокируя ответ
-        fetchReleaseDateForCard(dataName, section).then(releaseDate => {
-            if (releaseDate) {
-                statements.setExpectedRelease.run(dataName, section, releaseDate, null);
+        // Запускаем в фоне
+        fetchCardData(dataName, section).then(cardData => {
+            if (cardData.releaseDate) {
+                statements.setExpectedRelease.run(dataName, section, cardData.releaseDate, null);
                 markExpectedReleasesDirty();
-                // Уведомляем фронт, что дата обновилась (опционально)
                 if (win) {
-                    win.webContents.send('release-date-updated', { cardName: dataName, section, releaseDate });
+                    win.webContents.send('release-date-updated', { cardName: dataName, section, releaseDate: cardData.releaseDate });
                 }
             }
         }).catch(err => console.error('Failed to fetch release date:', err));
-    }
-    // Если статус изменился с Ожидается/В процессе на другой
-    else if ((oldStatus === 'Ожидается' || oldStatus === 'В процессе') &&
-        status !== 'Ожидается' && status !== 'В процессе') {
+    } else if ((oldStatus === 'Ожидается' || oldStatus === 'В процессе') && status !== 'Ожидается' && status !== 'В процессе') {
         statements.deleteExpectedRelease.run(dataName, section);
         markExpectedReleasesDirty();
     }
@@ -1040,7 +1038,7 @@ ipcMain.handle('update-data-status', async (event, section, dataName, status) =>
     const now = new Date().toISOString();
     statements.setStatistic.run('last_firestore_update', now, now);
 
-    return result; // Возвращаем сразу, не дожидаясь поиска даты
+    return result;
 });
 
 ipcMain.handle('check-duplicates', async (event, section, name) => {
@@ -1951,6 +1949,10 @@ ipcMain.handle('search-yummyani-anime', async (event, title) => {
     return await fetchYummyAniTags(title);
 });
 
+ipcMain.handle('search-filmru-serial', async (event, title) => {
+    return await fetchFilmRuSerialsTags(title);
+});
+
 // ========== кино, сериалы, мультфильы ==========
 async function  fetchKinopoiskMovieTags(movieName) {
     return new Promise(async (resolve) => {
@@ -2777,6 +2779,283 @@ async function fetchLitresBookTags(bookName) {
     });
 }
 
+async function fetchFilmRuSerialsTags(serialName) {
+    return new Promise(async (resolve) => {
+        let hiddenWindow = null;
+        let isResolved = false;
+        let loadTimeout = null;
+        let isLoaded = false;
+
+        const finish = (result) => {
+            if (isResolved) return;
+            isResolved = true;
+            if (loadTimeout) clearTimeout(loadTimeout);
+            if (hiddenWindow && !hiddenWindow.isDestroyed()) {
+                hiddenWindow.close();
+            }
+            resolve(result);
+        };
+
+        try {
+            const cleanName = serialName.split(' ').slice(0, 3).join(' ');
+            const searchUrl = `https://www.film.ru/search/result?text=${encodeURIComponent(cleanName)}&type=all`;
+            console.log(`[FilmRu] Searching: ${searchUrl}`);
+
+            hiddenWindow = new BrowserWindow({
+                show: false,
+                width: 1280,
+                height: 800,
+                webPreferences: {
+                    nodeIntegration: false,
+                    contextIsolation: true,
+                    images: true,
+                    javascript: true
+                }
+            });
+
+            hiddenWindow.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
+                details.requestHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+                details.requestHeaders['Accept-Language'] = 'ru-RU,ru;q=0.9';
+                details.requestHeaders['Accept'] = 'text/html,application/xhtml+xml';
+                callback({ cancel: false, requestHeaders: details.requestHeaders });
+            });
+
+            hiddenWindow.loadURL(searchUrl);
+            console.log(`[FilmRu] Search page loading started`);
+
+            const waitForLoad = new Promise((resolve) => {
+                hiddenWindow.webContents.once('did-finish-load', () => {
+                    console.log(`[FilmRu] Search page finished loading`);
+                    isLoaded = true;
+                    resolve();
+                });
+
+                loadTimeout = setTimeout(() => {
+                    if (!isLoaded) {
+                        console.log(`[FilmRu] Search page timeout (2s), stopping load`);
+                        hiddenWindow.webContents.stop();
+                        isLoaded = true;
+                        resolve();
+                    }
+                }, 2000);
+            });
+
+            await waitForLoad;
+            if (loadTimeout) clearTimeout(loadTimeout);
+            await new Promise(r => setTimeout(r, 1000));
+
+            const serialInfo = await hiddenWindow.webContents.executeJavaScript(`
+                (function() {
+                    const container = document.querySelector('#movies_list');
+                    if (!container) return null;
+                    const links = container.querySelectorAll('a[href*="/serials/"]');
+                    for (const link of links) {
+                        if (link.href && link.href.includes('/serials/')) {
+                            return { url: link.href };
+                        }
+                    }
+                    return null;
+                })();
+            `);
+
+            if (!serialInfo || !serialInfo.url) {
+                console.log('[FilmRu] Serial not found');
+                finish({ tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null });
+                return;
+            }
+
+            console.log(`[FilmRu] Found serial URL: ${serialInfo.url}`);
+
+            isLoaded = false;
+            hiddenWindow.loadURL(serialInfo.url);
+            console.log(`[FilmRu] Serial page loading started`);
+
+            const waitForSerialLoad = new Promise((resolve) => {
+                hiddenWindow.webContents.once('did-finish-load', () => {
+                    console.log(`[FilmRu] Serial page finished loading`);
+                    isLoaded = true;
+                    resolve();
+                });
+
+                loadTimeout = setTimeout(() => {
+                    if (!isLoaded) {
+                        console.log(`[FilmRu] Serial page timeout (2s), stopping load`);
+                        hiddenWindow.webContents.stop();
+                        isLoaded = true;
+                        resolve();
+                    }
+                }, 2000);
+            });
+
+            await waitForSerialLoad;
+            if (loadTimeout) clearTimeout(loadTimeout);
+            await new Promise(r => setTimeout(r, 2000));
+
+            const serialData = await hiddenWindow.webContents.executeJavaScript(`
+                (function() {
+                    // Функция парсинга русских дат
+                    function parseRussianDate(dateText) {
+                        const months = {
+                            'января': '01', 'февраля': '02', 'марта': '03', 'апреля': '04',
+                            'мая': '05', 'июня': '06', 'июля': '07', 'августа': '08',
+                            'сентября': '09', 'октября': '10', 'ноября': '11', 'декабря': '12'
+                        };
+                        
+                        const parts = dateText.split(/\\s+/);
+                        let day = null, monthNum = null, year = null;
+                        
+                        for (const part of parts) {
+                            if (/^\\d{1,2}$/.test(part) && !day) {
+                                day = part.padStart(2, '0');
+                            } else if (/^\\d{4}$/.test(part) && !year) {
+                                year = part;
+                            } else if (months[part] && !monthNum) {
+                                monthNum = months[part];
+                            }
+                        }
+                        
+                        if (day && monthNum && year) {
+                            return year + '-' + monthNum + '-' + day;
+                        }
+                        return null;
+                    }
+                    
+                    // Полное название
+                    let fullTitle = '';
+                    const titleElement = document.querySelector('h1');
+                    if (titleElement) {
+                        fullTitle = titleElement.textContent.trim();
+                        fullTitle = fullTitle.replace(/\\(сериал.*?\\)/, '').trim();
+                    }
+                    
+                    // Обложка
+                    let coverUrl = '';
+                    const posterBlock = document.querySelector('a.wrapper_movies_poster');
+                    if (posterBlock) {
+                        coverUrl = posterBlock.getAttribute('data-src');
+                        if (coverUrl && !coverUrl.startsWith('http')) {
+                            coverUrl = 'https://www.film.ru' + coverUrl;
+                        }
+                        coverUrl = coverUrl.replace('/styles/thumb_260x400/', '/');
+                    }
+                    
+                    // ТЕГИ
+                    const tags = [];
+                    const blockInfo = document.querySelector('.block_info');
+                    if (blockInfo) {
+                        const links = blockInfo.querySelectorAll('a');
+                        links.forEach(link => {
+                            const text = link.textContent.trim();
+                            if (text && text !== '18+' && text.length < 30 && !tags.includes(text)) {
+                                tags.push(text);
+                            }
+                        });
+                    }
+                    
+                    // ДАТА
+                    let releaseDate = null;
+                    const episodesBlock = document.querySelector('.wrapper_movies_soon_episodes.active');
+                    
+                    if (episodesBlock) {
+                        const allDivs = episodesBlock.querySelectorAll('div');
+                        let targetElement = null;
+                        
+                        if (allDivs.length > 0) {
+                            targetElement = allDivs[allDivs.length - 1];
+                        } else {
+                            const firstLink = episodesBlock.querySelector('a');
+                            if (firstLink) {
+                                targetElement = firstLink;
+                            }
+                        }
+                        
+                        if (targetElement) {
+                            const dateSpan = targetElement.querySelector('span:last-child');
+                            if (dateSpan) {
+                                const dateText = dateSpan.textContent.trim();
+                                const parsedDate = parseRussianDate(dateText);
+                                if (parsedDate) {
+                                    releaseDate = parsedDate;
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (!releaseDate) {
+                        const premiereBlock = document.querySelector('.block_table');
+                        if (premiereBlock) {
+                            const rows = premiereBlock.querySelectorAll('div');
+                            for (let i = 0; i < rows.length; i++) {
+                                if (rows[i].textContent.trim() === 'премьера' && rows[i + 1]) {
+                                    const dateText = rows[i + 1].textContent.trim();
+                                    const match = dateText.match(/(\\d{2})\\.(\\d{2})\\.(\\d{4})/);
+                                    if (match) {
+                                        releaseDate = match[3] + '-' + match[2] + '-' + match[1];
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    if (!releaseDate) {
+                        const titleH1 = document.querySelector('h1');
+                        if (titleH1) {
+                            const yearMatch = titleH1.textContent.match(/(\\d{4})/);
+                            if (yearMatch) {
+                                releaseDate = yearMatch[1] + '-01-01';
+                            }
+                        }
+                    }
+                    
+                    return { 
+                        tags: tags.slice(0, 10), 
+                        description: '', 
+                        coverUrl: coverUrl,
+                        fullTitle: fullTitle,
+                        releaseDate: releaseDate
+                    };
+                })();
+            `);
+
+            console.log(`[FilmRu] Found tags for "${serialName}":`, serialData.tags);
+            console.log(`[FilmRu] Full title: ${serialData.fullTitle}`);
+            console.log(`[FilmRu] Cover: ${serialData.coverUrl}`);
+            console.log(`[FilmRu] Release date: ${serialData.releaseDate || 'not found'}`);
+
+            finish(serialData);
+
+        } catch (error) {
+            console.error('[FilmRu] Error:', error);
+            finish({ tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null });
+        }
+    });
+}
+
+async function fetchCardData(cardName, section) {
+    switch (section) {
+        case 'anime':
+            const animeResult = await fetchYummyAniTags(cardName);
+            return { tags: animeResult?.tags || [], coverUrl: animeResult?.coverUrl || '', fullTitle: animeResult?.fullTitle || '', releaseDate: animeResult?.releaseDate || null };
+        case 'games':
+            const gameResult = await fetchSteamGameTags(cardName);
+            return { tags: gameResult?.tags || [], coverUrl: gameResult?.coverUrl || '', fullTitle: gameResult?.fullTitle || '', releaseDate: gameResult?.releaseDate || null };
+        case 'movies':
+        case 'serials':
+        case 'cartoons':
+            let filmResult = await fetchFilmRuSerialsTags(cardName);
+            if (filmResult == null || filmResult.fullTitle === null || filmResult.fullTitle === '') {
+                filmResult = await fetchKinopoiskMovieTags(cardName);
+            }
+            return { tags: filmResult?.tags || [], coverUrl: filmResult?.coverUrl || '', fullTitle: filmResult?.fullTitle || '', releaseDate: filmResult?.releaseDate || null };
+        case 'books':
+            const bookResult = await fetchLitresBookTags(cardName);
+            return { tags: bookResult?.tags || [], coverUrl: bookResult?.coverUrl || '', fullTitle: bookResult?.fullTitle || '', releaseDate: bookResult?.releaseDate || null };
+        default:
+            return { tags: [], coverUrl: '', fullTitle: '', releaseDate: null };
+    }
+}
+
 async function updateAllReleaseDates() {
     const lastUpdate = statements.getStatistic.get('last_release_update');
     const lastDate = lastUpdate ? new Date(lastUpdate.value) : new Date(0);
@@ -2790,12 +3069,14 @@ async function updateAllReleaseDates() {
 
     const cards = db.prepare(`
         SELECT name, section FROM data_cards 
-        WHERE status = 'Ожидается' OR status = 'В процессе'
+        WHERE ((status = 'Ожидается' OR status = 'В процессе') and section <> 'games')
+        OR status = 'Ожидается' and section = 'games'
     `).all();
 
     for (const card of cards) {
         try {
-            let releaseDate = await fetchReleaseDateForCard(card.name, card.section);
+            let cardData = await fetchCardData(card.name, card.section);
+            let releaseDate = cardData.releaseDate;
             if (releaseDate) {
                 const existing = statements.getExpectedRelease.get(card.name, card.section);
                 if (!existing || existing.release_date !== releaseDate) {
@@ -2822,28 +3103,6 @@ app.whenReady().then(() => {
         updateAllReleaseDates();
     }, 5000);
 });
-
-async function fetchReleaseDateForCard(cardName, section) {
-    // Заглушка — потом заменишь на реальные парсеры
-    switch (section) {
-        case 'anime':
-            const animeResult = await fetchYummyAniTags(cardName);
-            return animeResult?.nextEpisodeDate || animeResult?.releaseDate || null;
-        case 'games':
-            const gameResult = await fetchSteamGameTags(cardName);
-            return gameResult?.releaseDate || null;
-        case 'movies':
-        case 'serials':
-        case 'cartoons':
-            const movieResult = await fetchKinopoiskMovieTags(cardName);
-            return movieResult?.releaseDate || null;
-        case 'books':
-            const bookResult = await fetchLitresBookTags(cardName);
-            return bookResult?.releaseDate || null;
-        default:
-            return null;
-    }
-}
 
 ipcMain.handle('get-section-release-notifications', async (event, section) => {
     const releases = statements.getExpectedReleasesBySection.all(section);
@@ -3010,4 +3269,8 @@ ipcMain.handle('delete-release-date', async (event, cardName, section) => {
 
 ipcMain.handle('get-all-expected-releases', async () => {
     return statements.getAllExpectedReleases.all();
+});
+
+ipcMain.handle('fetch-card-data', async (event, title, section) => {
+    return await fetchCardData(title, section);
 });

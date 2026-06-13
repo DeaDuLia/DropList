@@ -2382,12 +2382,10 @@ select option[value="Ожидается"] { background-color: var(--rating-waiti
 }
 
 /* ========== ОПОВЕЩЕНИЯ О РЕЛИЗАХ (FLOATING) ========== */
-
 .release-banner {
     position: fixed;
-    bottom: 20px;
     right: 20px;
-    max-width: 420px;
+    max-width: 320px;
     min-width: 320px;
     z-index: 10000;
     border-radius: 12px;
@@ -2395,7 +2393,7 @@ select option[value="Ожидается"] { background-color: var(--rating-waiti
     animation: slideInRight 0.3s ease;
     cursor: pointer;
     box-shadow: 0 8px 24px rgba(0, 0, 0, 0.3);
-    transition: transform 0.2s ease, box-shadow 0.2s ease;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.3s ease;
 }
 
 .release-banner:hover {

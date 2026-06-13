@@ -1,6 +1,8 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
+    fetchCardData: (title, section) => ipcRenderer.invoke('fetch-card-data', title, section),
+    searchFilmRuSerial: (title) => ipcRenderer.invoke('search-filmru-serial', title),
     getAllExpectedReleases: () => ipcRenderer.invoke('get-all-expected-releases'),
     deleteReleaseDate: (cardName, section) => ipcRenderer.invoke('delete-release-date', cardName, section),
     saveReleaseDate: (cardName, section, releaseDate) => ipcRenderer.invoke('save-release-date', cardName, section, releaseDate),

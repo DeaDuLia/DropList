@@ -85,19 +85,72 @@ window.addEventListener('resize', () => {
 });
 
 async function checkSectionReleaseNotifications(section) {
+    // Если сменился раздел — очищаем очередь и закрываем все активные баннеры
+    if (currentSectionForNotifications !== null && currentSectionForNotifications !== section) {
+        clearAllNotifications();
+    }
+
+    currentSectionForNotifications = section;
+
     const result = await window.electronAPI.getSectionReleaseNotifications(section);
 
     if (result.success && result.notifications.length > 0) {
-        // Показываем самое ближайшее
-        const first = result.notifications[0];
-        showReleaseNotification(first);
+        // Добавляем в очередь и показываем стеком
+        addNotificationsToStack(result.notifications);
 
-        // Отмечаем как показанное
-        await window.electronAPI.markReleaseNotificationShown(first.cardName, first.section);
+        // Отмечаем все как показанные
+        for (const notif of result.notifications) {
+            await window.electronAPI.markReleaseNotificationShown(notif.cardName, notif.section);
+        }
     }
 }
 
-async function showReleaseNotification(notification) {
+function clearAllNotifications() {
+    // Очищаем очередь
+    notificationQueue = [];
+    // Закрываем все активные баннеры
+    for (const banner of activeBanners) {
+        if (banner && banner.parentNode) {
+
+            banner.remove();
+        }
+    }
+    activeBanners = [];
+}
+
+function addNotificationsToStack(notifications) {
+    // Добавляем новые уведомления в конец очереди
+    notificationQueue.push(...notifications);
+
+    // Показываем все уведомления из очереди (стеком)
+    showAllStackedNotifications();
+}
+
+function showAllStackedNotifications() {
+    // Сортируем уведомления по дате (ближайшие сверху или снизу? пусть снизу новые)
+    // Или оставляем как есть
+
+    for (let i = 0; i < notificationQueue.length; i++) {
+        const notification = notificationQueue[i];
+        // Откладываем показ, чтобы баннеры не появились одновременно с одинаковой позицией
+        setTimeout(() => {
+            // Проверяем, не сменился ли раздел
+            if (currentSectionForNotifications !== notification.section) return;
+
+            showReleaseNotification(notification, i);
+        }, i * 500);
+    }
+
+}
+
+let notificationQueue = [];
+let activeBanners = []; // Массив активных баннеров
+let currentSectionForNotifications = null; // Запоминаем раздел, для которого показываем уведомления
+
+
+
+
+async function showReleaseNotification(notification, index) {
     // Получаем URL обложки карточки из allSectionData
     let coverUrl = '';
     const cardData = window.allSectionData?.find(c => c.name === notification.cardName);
@@ -128,6 +181,11 @@ async function showReleaseNotification(notification) {
     banner.className = `release-banner ${notification.isReleased ? 'release-banner-released' :
         (notification.daysLeft <= 7 ? 'release-banner-upcoming_week' : 'release-banner-upcoming_month')}`;
 
+    // Вычисляем позицию снизу (каждый следующий выше предыдущего)
+    const bannerHeight = 120;
+    const bottomOffset = (activeBanners.length * (bannerHeight));
+    banner.style.bottom = bottomOffset + 'px';
+
     banner.innerHTML = `
         <div class="release-banner-content">
             ${coverUrl ?
@@ -137,8 +195,7 @@ async function showReleaseNotification(notification) {
             <div class="release-banner-text">
                 <div class="release-banner-title">${escapeHtml(notification.cardName)}</div>
                 <div class="release-banner-message">
-                    
-                    <span>${notification.message.replace(notification.cardName, '').trim()}</span>
+                    <span>${notification.message}</span>
                 </div>
                 <div class="release-banner-date">${formattedDate}</div>
             </div>
@@ -148,10 +205,38 @@ async function showReleaseNotification(notification) {
 
     document.body.appendChild(banner);
 
+    // Добавляем в массив активных баннеров
+    activeBanners.push(banner);
+
     const closeBtn = banner.querySelector('.release-banner-close');
+
+    // Функция пересчёта позиций оставшихся баннеров
+    const repositionBanners = () => {
+        for (let i = 0; i < activeBanners.length; i++) {
+            const b = activeBanners[i];
+            if (b && b.style) {
+                b.style.bottom = ((i * (bannerHeight))) + 'px';
+            }
+        }
+    };
+
+    // Функция закрытия баннера
+    const closeBanner = () => {
+        // Удаляем из массива активных баннеров
+        const idx = activeBanners.indexOf(banner);
+        if (idx !== -1) activeBanners.splice(idx, 1);
+
+        if (banner.parentNode) {
+            hideBanner(banner);
+        }
+
+        // Пересчитываем позиции оставшихся баннеров
+        repositionBanners();
+    };
+
     closeBtn.onclick = (e) => {
         e.stopPropagation();
-        hideBanner(banner);
+        closeBanner();
     };
 
     // Клик по баннеру (кроме кнопки закрытия)
@@ -185,22 +270,12 @@ async function showReleaseNotification(notification) {
         // Вызываем поиск
         filterCards(notification.cardName);
 
-        // Скрываем баннер
-        hideBanner(banner);
+        // Закрываем баннер
+        closeBanner();
     };
-
-    // Авто-скрытие через 8 секунд
-    const timeoutId = setTimeout(() => {
-        if (banner.parentNode) hideBanner(banner);
-    }, 8000);
-
-    banner.dataset.timeoutId = timeoutId;
 }
 
 function hideBanner(banner) {
-    if (banner.dataset.timeoutId) {
-        clearTimeout(parseInt(banner.dataset.timeoutId));
-    }
     banner.classList.add('hiding');
     setTimeout(() => {
         if (banner.parentNode) banner.remove();
@@ -241,26 +316,22 @@ async function autoSearchOnInput(title, section) {
 
     console.log(`[AutoSearch] Searching for: ${title}`);
 
-    // Сохраняем оригинальные значения для восстановления
     const originalTagPlaceholder = 'Добавить теги (нажмите Enter или запятую)';
     const originalCoverPlaceholder = 'Ссылка на обложку';
 
     try {
-        // Меняем placeholder у тегов
         const tagInput = document.getElementById('addFormTagInput');
         if (tagInput) {
             tagInput.placeholder = '🔍 Поиск тегов...';
             tagInput.disabled = true;
         }
 
-        // Меняем placeholder у обложки
         const icoInput = document.getElementById('icoInput');
         if (icoInput) {
             icoInput.placeholder = '🔍 Поиск обложки...';
             icoInput.disabled = true;
         }
 
-        // Меняем обложку в превью на заглушку "поиск"
         updatePreview(title, null, null, null);
         const previewCard = document.getElementById('previewCard');
         if (previewCard) {
@@ -270,10 +341,19 @@ async function autoSearchOnInput(title, section) {
             }
         }
 
-        // Ищем теги и обложку
-        const tags = await autoFetchTags(title, section);
+        // Получаем теги и дату
+        const result = await autoFetchTags(title, section);
+        const tags = result.tags || [];      // ← массив тегов
+        const releaseDate = result.releaseDate; // ← дата
 
-        if (tags && tags.length > 0 && window.getAddFormTags) {
+        // Сохраняем дату в dataset формы
+        const nameInput = document.getElementById('nameInput');
+        if (nameInput && releaseDate) {
+            nameInput.dataset.fetchedReleaseDate = releaseDate;
+        }
+
+        // Добавляем теги в форму
+        if (tags.length > 0 && window.getAddFormTags) {
             if (window.clearAddFormTags) {
                 window.clearAddFormTags();
             }
@@ -293,7 +373,6 @@ async function autoSearchOnInput(title, section) {
     } catch (error) {
         console.error('[AutoSearch] Error:', error);
     } finally {
-        // Восстанавливаем всё, что меняли
         const tagInput = document.getElementById('addFormTagInput');
         if (tagInput) {
             tagInput.placeholder = originalTagPlaceholder;
@@ -306,7 +385,6 @@ async function autoSearchOnInput(title, section) {
             icoInput.disabled = false;
         }
 
-        // Восстанавливаем прозрачность обложки
         const previewCard = document.getElementById('previewCard');
         if (previewCard) {
             const icon = previewCard.querySelector('.game-icon');
@@ -315,7 +393,6 @@ async function autoSearchOnInput(title, section) {
             }
         }
 
-        // Обновляем превью с текущими значениями
         const nameInput = document.getElementById('nameInput');
         const icoInputValue = document.getElementById('icoInput')?.value || '';
         const ratingSelect = document.getElementById('ratingSelect');
@@ -1136,7 +1213,8 @@ document.addEventListener('keydown', (e) => {
 
 document.querySelectorAll('.nav-item').forEach(item => {
     item.addEventListener('click', async function() {
-
+        clearAllNotifications();
+        currentSectionForNotifications = null;
         // Удаляем активный класс у всех элементов
         document.querySelectorAll('.nav-item').forEach(navItem => {
             navItem.classList.remove('active');
@@ -1901,128 +1979,6 @@ async function initCardSection() {
     setupPreviewUpdate();
     updateStats();
     setupEditDescriptionButtons();
-
-    const testBtn = document.createElement('button');
-    testBtn.textContent = '🧪 Тест релизов';
-    testBtn.style.cssText = 'position:fixed; bottom:10px; right:10px; z-index:9999; background:#6c5ce7; color:white; border:none; border-radius:20px; padding:8px 16px; cursor:pointer; font-size:12px; opacity:0.5;';
-    testBtn.onclick = () => runReleaseTests();
-    document.body.appendChild(testBtn);
-}
-
-async function runReleaseTests() {
-    console.clear();
-    console.log('🧪 ===== ТЕСТИРОВАНИЕ EXPECTED_RELEASES ===== 🧪');
-
-    const section = document.querySelector('.nav-item.active')?.dataset.section || 'games';
-
-    // ===== ТЕСТ 1: Создание карточки со статусом "Ожидается" =====
-    console.log('\n📝 ТЕСТ 1: Создание карточки со статусом "Ожидается"');
-    const testCardName = `Моана`;
-
-    const testCard = {
-        name: testCardName,
-        icoUrl: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT2GRJCyWk7oNVLU4LXBSBayCHmGb1EdxKNIQ&s',
-        rating: '0',
-        status: 'Ожидается',
-        description: 'Тестовая карточка для проверки релизов',
-        tags: ['тест', 'релиз']
-    };
-
-    await window.electronAPI.addData(section, testCard);
-    console.log('✅ Карточка создана:', testCardName);
-
-    // Ждём 2 секунды (чтобы успел сходить за датой)
-    await new Promise(r => setTimeout(r, 2000));
-
-    // Проверяем, появилась ли запись в expected_releases
-    const result = await window.electronAPI.getSectionReleaseNotifications(section);
-    const ourRelease = result.notifications.find(n => n.cardName === testCardName);
-
-    if (ourRelease) {
-        console.log('✅ Запись в expected_releases создана:', ourRelease);
-    } else {
-        console.log('❌ Запись НЕ создана!');
-    }
-
-    // ===== ТЕСТ 2: Проверка уведомления =====
-    console.log('\n🔔 ТЕСТ 2: Проверка уведомления');
-    await checkSectionReleaseNotifications(section);
-    console.log('✅ Уведомление должно было появиться');
-
-    // ===== ТЕСТ 3: Изменение статуса с "Ожидается" на другой =====
-    console.log('\n🔄 ТЕСТ 3: Изменение статуса на "Завершено"');
-    await window.electronAPI.updateDataStatus(section, testCardName, 'Завершено');
-    await new Promise(r => setTimeout(r, 500));
-
-    // Проверяем, что запись удалилась
-    const resultAfterChange = await window.electronAPI.getSectionReleaseNotifications(section);
-    const stillExists = resultAfterChange.notifications.find(n => n.cardName === testCardName);
-
-    if (!stillExists) {
-        console.log('✅ Запись удалена после смены статуса');
-    } else {
-        console.log('❌ Запись осталась!');
-    }
-
-    // ===== ТЕСТ 4: Статус "В процессе" =====
-    console.log('\n🔄 ТЕСТ 4: Статус "В процессе"');
-    await window.electronAPI.updateDataStatus(section, testCardName, 'В процессе');
-    await new Promise(r => setTimeout(r, 2000));
-
-    const resultInProgress = await window.electronAPI.getSectionReleaseNotifications(section);
-    const inProgressRelease = resultInProgress.notifications.find(n => n.cardName === testCardName);
-
-    if (inProgressRelease) {
-        console.log('✅ Запись создана для статуса "В процессе":', inProgressRelease);
-    } else {
-        console.log('❌ Запись НЕ создана для "В процессе"');
-    }
-
-    // ===== ТЕСТ 5: Удаление карточки =====
-    console.log('\n🗑️ ТЕСТ 5: Удаление карточки');
-    await window.electronAPI.deleteData(section, testCardName);
-    await new Promise(r => setTimeout(r, 500));
-
-    const resultAfterDelete = await window.electronAPI.getSectionReleaseNotifications(section);
-    const deletedStillExists = resultAfterDelete.notifications.find(n => n.cardName === testCardName);
-
-    if (!deletedStillExists) {
-        console.log('✅ Запись удалена после удаления карточки');
-    } else {
-        console.log('❌ Запись осталась после удаления!');
-    }
-
-    // ===== ТЕСТ 6: Проверка last_notification_date (откат 6 часов) =====
-    console.log('\n⏰ ТЕСТ 6: Проверка отката уведомлений');
-    // Создаём новую карточку
-    const testCard2 = {
-        name: `Одиссея `,
-        icoUrl: 'https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT2GRJCyWk7oNVLU4LXBSBayCHmGb1EdxKNIQ&s',
-        rating: '0',
-        status: 'Ожидается',
-        description: 'Для проверки отката',
-        tags: []
-    };
-    await window.electronAPI.addData(section, testCard2);
-    await new Promise(r => setTimeout(r, 2000));
-
-    // Первое уведомление
-    await checkSectionReleaseNotifications(section);
-    console.log('✅ Первое уведомление показано');
-
-    // Проверяем, что last_notification_date установился
-    const firstCheck = await window.electronAPI.getSectionReleaseNotifications(section);
-    const firstNotif = firstCheck.notifications.find(n => n.cardName === testCard2.name);
-    console.log('📊 Статус после первого уведомления:', firstNotif ? 'ещё есть в очереди (не должно быть)' : 'нет в очереди (должно быть так)');
-
-    // Имитируем повторный вход в категорию (без реальной задержки 6 часов)
-    // Для теста можно временно уменьшить проверку в коде с 6 часов на 5 секунд
-    console.log('⚠️ Для проверки отката нужно либо подождать 6 часов, либо временно изменить в коде 6 часов на 5 секунд');
-
-
-    console.log('\n🧪 ===== ТЕСТИРОВАНИЕ ЗАВЕРШЕНО ===== 🧪');
-    console.log('📝 Проверь консоль Electron (main process) на наличие ошибок');
-    console.log('📝 Проверь таблицу expected_releases через DB Browser for SQLite');
 }
 
 function setupChangeImageButtons() {
@@ -2463,7 +2419,7 @@ async function addNewData(section) {
     const ratingSelect = document.getElementById('ratingSelect');
     const statusSelect = document.getElementById('statusSelect');
 
-    // Получаем теги из формы
+    const fetchedReleaseDate = nameInput?.dataset.fetchedReleaseDate || null;
     const tags = window.getAddFormTags ? window.getAddFormTags() : [];
 
     const cardData = {
@@ -2472,7 +2428,8 @@ async function addNewData(section) {
         rating: ratingSelect.value,
         status: statusSelect.value,
         description: '',
-        tags: tags
+        tags: tags,
+        releaseDate: fetchedReleaseDate
     };
 
     if (!cardData.name) {
@@ -2503,7 +2460,9 @@ async function addNewData(section) {
 
         // Добавляем новую карточку с тегами
         await window.electronAPI.addData(section, cardData);
-
+        if (nameInput) {
+            delete nameInput.dataset.fetchedReleaseDate;
+        }
         // Перезагружаем данные и рендерим раздел заново
         let data = await window.electronAPI.getData(section);
         await renderSection(section, data, true, false, false, true);
@@ -3314,26 +3273,8 @@ function updatePreview(name, icoUrl, rating, status) {
 
 async function autoFetchTags(title, section) {
     showLoadingPreview(title);
-    let result;
-    switch (section) {
-        case 'movies':
-        case 'serials':
-        case 'cartoons':
-            result = await window.electronAPI.searchKinopoiskMovie(title);
-            break
-        case 'anime':
-            result = await window.electronAPI.searchYummyAniAnime(title);
-            break;
-        case 'games':
-            result = await window.electronAPI.fetchSteamTags(title);
-            break;
-        case 'books':
-            result = await window.electronAPI.searchLitresBook(title);
-            break;
-        default:
-            result = [];
-            break;
-    }
+    let result = await window.electronAPI.fetchCardData(title, section);
+    hideLoadingPreview();
     hideLoadingPreview();
     if (result && result.coverUrl) {
         const icoInput = document.getElementById('icoInput');
@@ -3343,11 +3284,8 @@ async function autoFetchTags(title, section) {
     if (result && result.fullTitle && result.fullTitle !== title.toLowerCase()) {
         showTitleSuggestion(result.fullTitle);
     }
-    if (result && result.releaseDate) {
-        await window.electronAPI.saveReleaseDate(title, section, result.releaseDate);
-    }
 
-    return result?.tags || [];
+    return { tags: result?.tags || [], releaseDate: result?.releaseDate || null };
 }
 
 function showTitleSuggestion(fullTitle) {
@@ -3427,7 +3365,13 @@ function setupAddButton() {
                         const section = document.querySelector('.nav-item.active')?.dataset.section;
 
                         // Один вызов — получаем и теги, и обложку
-                        const tags = await autoFetchTags(text, section);
+                        const result = await autoFetchTags(text, section);
+                        const tags = result.tags || [];
+                        const releaseDate = result.releaseDate;
+
+                        if (releaseDate) {
+                            nameInput.dataset.fetchedReleaseDate = releaseDate;
+                        }
 
                         if (tags && tags.length > 0 && window.getAddFormTags) {
                             const currentTags = window.getAddFormTags();
