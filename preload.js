@@ -1,6 +1,23 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
+    fetchCardData: (title, section) => ipcRenderer.invoke('fetch-card-data', title, section),
+    searchFilmRuSerial: (title) => ipcRenderer.invoke('search-filmru-serial', title),
+    getAllExpectedReleases: () => ipcRenderer.invoke('get-all-expected-releases'),
+    deleteReleaseDate: (cardName, section) => ipcRenderer.invoke('delete-release-date', cardName, section),
+    saveReleaseDate: (cardName, section, releaseDate) => ipcRenderer.invoke('save-release-date', cardName, section, releaseDate),
+    getSectionReleaseNotifications: (section) => ipcRenderer.invoke('get-section-release-notifications', section),
+    markReleaseNotificationShown: (cardName, section) => ipcRenderer.invoke('mark-release-notification-shown', cardName, section),
+    searchYummyAniAnime: (title) => ipcRenderer.invoke('search-yummyani-anime', title),
+    searchKinopoiskMovie: (title) => ipcRenderer.invoke('search-kinopoisk-movie', title),
+    searchLitresBook: (title) => ipcRenderer.invoke('search-litres-book', title),
+    fetchSteamTags: (title) => ipcRenderer.invoke('fetch-steam-tags', title),
+    searchTagsWeb: (title, section) => ipcRenderer.invoke('search-tags-web', title, section),
+    getAllTags: () => ipcRenderer.invoke('get-all-tags'),
+    searchTags: (query) => ipcRenderer.invoke('search-tags', query),
+    getCardTags: (section, cardName) => ipcRenderer.invoke('get-card-tags', section, cardName),
+    updateCardTags: (section, cardName, tags) => ipcRenderer.invoke('update-card-tags', section, cardName, tags),
+
     authSignIn: (email, password) => ipcRenderer.invoke('auth-sign-in', email, password),
     authSignUp: (email, password) => ipcRenderer.invoke('auth-sign-up', email, password),
     authSignOut: () => ipcRenderer.invoke('auth-sign-out'),

@@ -12,6 +12,12 @@ let addFormOverlay = null;
 let tooltipElement = null;
 let tooltipTimeout = null;
 
+let titleSuggestionTimeout = null;
+let searchTimeout = null;
+let lastValue = '';
+let lastChangeTime = 0;
+
+
 // Кнопки шапки
 const exportBtn = document.getElementById('exportBtn');
 const importBtn = document.getElementById('importBtn');
@@ -32,7 +38,8 @@ let allItemsLoaded = false;
 
 let currentFilters = {
     searchQuery: '',
-    statusFilter: 'Все'
+    statusFilter: 'Все',
+    isTag: false
 };
 
 let currentUser = null;
@@ -77,6 +84,372 @@ window.addEventListener('resize', () => {
     if (itemsPerPage > itemsPerPagePred) { loadMoreItems(); }
 });
 
+async function checkSectionReleaseNotifications(section) {
+    // Если сменился раздел — очищаем очередь и закрываем все активные баннеры
+    if (currentSectionForNotifications !== null && currentSectionForNotifications !== section) {
+        clearAllNotifications();
+    }
+
+    currentSectionForNotifications = section;
+
+    const result = await window.electronAPI.getSectionReleaseNotifications(section);
+
+    if (result.success && result.notifications.length > 0) {
+        // Добавляем в очередь и показываем стеком
+        addNotificationsToStack(result.notifications);
+
+        // Отмечаем все как показанные
+        for (const notif of result.notifications) {
+            await window.electronAPI.markReleaseNotificationShown(notif.cardName, notif.section);
+        }
+    }
+}
+
+function clearAllNotifications() {
+    // Очищаем очередь
+    notificationQueue = [];
+    // Закрываем все активные баннеры
+    for (const banner of activeBanners) {
+        if (banner && banner.parentNode) {
+
+            banner.remove();
+        }
+    }
+    activeBanners = [];
+}
+
+function addNotificationsToStack(notifications) {
+    // Добавляем новые уведомления в конец очереди
+    notificationQueue.push(...notifications);
+
+    // Показываем все уведомления из очереди (стеком)
+    showAllStackedNotifications();
+}
+
+function showAllStackedNotifications() {
+    // Сортируем уведомления по дате (ближайшие сверху или снизу? пусть снизу новые)
+    // Или оставляем как есть
+
+    for (let i = 0; i < notificationQueue.length; i++) {
+        const notification = notificationQueue[i];
+        // Откладываем показ, чтобы баннеры не появились одновременно с одинаковой позицией
+        setTimeout(() => {
+            // Проверяем, не сменился ли раздел
+            if (currentSectionForNotifications !== notification.section) return;
+
+            showReleaseNotification(notification, i);
+        }, i * 500);
+    }
+
+}
+
+let notificationQueue = [];
+let activeBanners = []; // Массив активных баннеров
+let currentSectionForNotifications = null; // Запоминаем раздел, для которого показываем уведомления
+
+
+
+
+async function showReleaseNotification(notification, index) {
+    // Получаем URL обложки карточки из allSectionData
+    let coverUrl = '';
+    const cardData = window.allSectionData?.find(c => c.name === notification.cardName);
+    if (cardData && cardData.icoUrl && cardData.icoUrl.trim()) {
+        coverUrl = cardData.icoUrl;
+    }
+
+    // Если не нашли в allSectionData, пробуем найти в DOM
+    if (!coverUrl) {
+        const cardElement = document.querySelector(`.data-card[data-name="${notification.cardName}"]`);
+        if (cardElement) {
+            const icon = cardElement.querySelector('.game-icon');
+            if (icon && icon.src && !icon.src.includes('apptor.studio')) {
+                coverUrl = icon.src;
+            }
+        }
+    }
+
+    // Форматируем дату
+    const releaseDate = new Date(notification.releaseDate);
+    const formattedDate = releaseDate.toLocaleDateString('ru-RU', {
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric'
+    });
+
+    const banner = document.createElement('div');
+    banner.className = `release-banner ${notification.isReleased ? 'release-banner-released' :
+        (notification.daysLeft <= 7 ? 'release-banner-upcoming_week' : 'release-banner-upcoming_month')}`;
+
+    // Вычисляем позицию снизу (каждый следующий выше предыдущего)
+    const bannerHeight = 120;
+    const bottomOffset = (activeBanners.length * (bannerHeight));
+    banner.style.bottom = bottomOffset + 'px';
+
+    banner.innerHTML = `
+        <div class="release-banner-content">
+            ${coverUrl ?
+        `<img src="${coverUrl}" class="release-banner-image" alt="${escapeHtml(notification.cardName)}" onerror="this.src='https://apptor.studio/assets/cache/images/600-856x600-629.png'">` :
+        `<div class="release-banner-image" style="background: linear-gradient(135deg, #0078d4, #106ebe); display: flex; align-items: center; justify-content: center; font-size: 20px;">${notification.isReleased ? '🎉' : '📅'}</div>`
+    }
+            <div class="release-banner-text">
+                <div class="release-banner-title">${escapeHtml(notification.cardName)}</div>
+                <div class="release-banner-message">
+                    <span>${notification.message}</span>
+                </div>
+                <div class="release-banner-date">${formattedDate}</div>
+            </div>
+            <button class="release-banner-close">×</button>
+        </div>
+    `;
+
+    document.body.appendChild(banner);
+
+    // Добавляем в массив активных баннеров
+    activeBanners.push(banner);
+
+    const closeBtn = banner.querySelector('.release-banner-close');
+
+    // Функция пересчёта позиций оставшихся баннеров
+    const repositionBanners = () => {
+        for (let i = 0; i < activeBanners.length; i++) {
+            const b = activeBanners[i];
+            if (b && b.style) {
+                b.style.bottom = ((i * (bannerHeight))) + 'px';
+            }
+        }
+    };
+
+    // Функция закрытия баннера
+    const closeBanner = () => {
+        // Удаляем из массива активных баннеров
+        const idx = activeBanners.indexOf(banner);
+        if (idx !== -1) activeBanners.splice(idx, 1);
+
+        if (banner.parentNode) {
+            hideBanner(banner);
+        }
+
+        // Пересчитываем позиции оставшихся баннеров
+        repositionBanners();
+    };
+
+    closeBtn.onclick = (e) => {
+        e.stopPropagation();
+        closeBanner();
+    };
+
+    // Клик по баннеру (кроме кнопки закрытия)
+    banner.onclick = async (e) => {
+        if (e.target === closeBtn || closeBtn.contains(e.target)) return;
+
+        // Сбрасываем фильтры на "Все"
+        currentFilters.statusFilter = 'Все';
+        document.querySelectorAll('.filter-button').forEach(btn => {
+            btn.classList.remove('active');
+            if (btn.dataset.status === 'Все') {
+                btn.classList.add('active');
+            }
+        });
+
+        // Сбрасываем сортировку на "по дате"
+        currentFilters.sortBy = 'date';
+        document.querySelectorAll('.sort-button').forEach(btn => {
+            btn.classList.remove('active');
+            if (btn.dataset.sort === 'date') {
+                btn.classList.add('active');
+            }
+        });
+
+        // Вставляем название в поиск
+        const searchInput = document.getElementById('searchInput');
+        if (searchInput) {
+            searchInput.value = notification.cardName;
+        }
+
+        // Вызываем поиск
+        filterCards(notification.cardName);
+
+        // Закрываем баннер
+        closeBanner();
+    };
+}
+
+function hideBanner(banner) {
+    banner.classList.add('hiding');
+    setTimeout(() => {
+        if (banner.parentNode) banner.remove();
+    }, 300);
+}
+
+function getAdaptiveDelay(currentValue) {
+    const now = Date.now();
+    const timeSinceLastChange = lastChangeTime ? now - lastChangeTime : 0;
+    const addedChars = currentValue.length - lastValue.length;
+
+    // Если это первый ввод
+    if (!lastValue) return 1500;
+
+    // Вычисляем скорость ввода (символов в секунду)
+    const speed = addedChars / (timeSinceLastChange / 1000);
+
+    console.log(`[AutoSearch] Speed: ${speed.toFixed(1)} chars/sec, added: ${addedChars}, time: ${timeSinceLastChange}ms`);
+
+    // Адаптивная логика
+    if (speed > 10) {
+        // Печатает очень быстро (>10 символов/сек) → видимо копирует название
+        return 800;
+    } else if (speed > 5) {
+        // Печатает быстро (5-10 символов/сек)
+        return 1000;
+    } else if (speed > 2) {
+        // Печатает медленно (2-5 символов/сек)
+        return 1500;
+    } else {
+        // Печатает очень медленно или пауза
+        return 2000;
+    }
+}
+
+async function autoSearchOnInput(title, section) {
+    if (!title || title.trim() === '') return;
+
+    console.log(`[AutoSearch] Searching for: ${title}`);
+
+    const originalTagPlaceholder = 'Добавить теги (нажмите Enter или запятую)';
+    const originalCoverPlaceholder = 'Ссылка на обложку';
+
+    try {
+        const tagInput = document.getElementById('addFormTagInput');
+        if (tagInput) {
+            tagInput.placeholder = '🔍 Поиск тегов...';
+            tagInput.disabled = true;
+        }
+
+        const icoInput = document.getElementById('icoInput');
+        if (icoInput) {
+            icoInput.placeholder = '🔍 Поиск обложки...';
+            icoInput.disabled = true;
+        }
+
+        updatePreview(title, null, null, null);
+        const previewCard = document.getElementById('previewCard');
+        if (previewCard) {
+            const icon = previewCard.querySelector('.game-icon');
+            if (icon) {
+                icon.style.opacity = '0.5';
+            }
+        }
+
+        // Получаем теги и дату
+        const result = await autoFetchTags(title, section);
+        const tags = result.tags || [];      // ← массив тегов
+        const releaseDate = result.releaseDate; // ← дата
+
+        // Сохраняем дату в dataset формы
+        const nameInput = document.getElementById('nameInput');
+        if (nameInput && releaseDate) {
+            nameInput.dataset.fetchedReleaseDate = releaseDate;
+        }
+
+        // Добавляем теги в форму
+        if (tags.length > 0 && window.getAddFormTags) {
+            if (window.clearAddFormTags) {
+                window.clearAddFormTags();
+            }
+
+            for (const tag of tags) {
+                const tagInputEl = document.getElementById('addFormTagInput');
+                if (tagInputEl) {
+                    tagInputEl.value = tag;
+                    const enterEvent = new KeyboardEvent('keydown', { key: 'Enter' });
+                    tagInputEl.dispatchEvent(enterEvent);
+                }
+            }
+
+            console.log(`[AutoSearch] Added ${tags.length} tags`);
+        }
+
+    } catch (error) {
+        console.error('[AutoSearch] Error:', error);
+    } finally {
+        const tagInput = document.getElementById('addFormTagInput');
+        if (tagInput) {
+            tagInput.placeholder = originalTagPlaceholder;
+            tagInput.disabled = false;
+        }
+
+        const icoInput = document.getElementById('icoInput');
+        if (icoInput) {
+            icoInput.placeholder = originalCoverPlaceholder;
+            icoInput.disabled = false;
+        }
+
+        const previewCard = document.getElementById('previewCard');
+        if (previewCard) {
+            const icon = previewCard.querySelector('.game-icon');
+            if (icon) {
+                icon.style.opacity = '1';
+            }
+        }
+
+        const nameInput = document.getElementById('nameInput');
+        const icoInputValue = document.getElementById('icoInput')?.value || '';
+        const ratingSelect = document.getElementById('ratingSelect');
+        const statusSelect = document.getElementById('statusSelect');
+        updatePreview(
+            nameInput?.value || 'Название',
+            icoInputValue,
+            ratingSelect?.value || '0',
+            statusSelect?.value || 'Уточнить'
+        );
+    }
+}
+
+function setupAutoSearchOnNameInput() {
+    const nameInput = document.getElementById('nameInput');
+    if (!nameInput) return;
+
+    nameInput.addEventListener('input', (e) => {
+        const currentValue = e.target.value.trim();
+        const section = document.querySelector('.nav-item.active')?.dataset.section;
+        const now = Date.now();
+
+        // Сохраняем предыдущее значение и время
+        if (searchTimeout) clearTimeout(searchTimeout);
+
+        // Вычисляем задержку на основе скорости
+        const delay = getAdaptiveDelay(currentValue);
+        console.log(`[AutoSearch] Delay: ${delay}ms (value: "${currentValue}")`);
+
+        // Обновляем для следующего раза
+        lastValue = currentValue;
+        lastChangeTime = now;
+
+        searchTimeout = setTimeout(() => {
+            autoSearchOnInput(currentValue, section);
+        }, delay);
+    });
+}
+
+function showLoadingPreview() {
+    const icon = document.querySelector('#previewCard .game-icon');
+    if (icon && !icon.dataset.originalSrc) {
+        icon.dataset.originalSrc = icon.src;
+        icon.src = 'assets/images/search-loading.gif';  // локальная гифка
+    }
+}
+
+
+// Скрываем заглушку загрузки
+function hideLoadingPreview() {
+    const icon = document.querySelector('#previewCard .game-icon');
+    if (icon && icon.dataset.originalSrc) {
+        icon.src = icon.dataset.originalSrc;
+        delete icon.dataset.originalSrc;
+    }
+}
+
 function updateStats() {
     const data = window.filteredData || window.allSectionData || [];
     const total = data.length;
@@ -96,6 +469,8 @@ function updateStats() {
 }
 
 
+
+
 function createTooltip() {
     if (!tooltipElement) {
         tooltipElement = document.createElement('div');
@@ -105,9 +480,56 @@ function createTooltip() {
     return tooltipElement;
 }
 
-function showTooltip(text, x, y) {
+function showTooltip(description, tags, releaseDate, x, y) {
     const tooltip = createTooltip();
-    tooltip.textContent = text || 'Нет заметок';
+
+    let dateHtml = '';
+    if (releaseDate && releaseDate !== 'undefined' && releaseDate !== 'null') {
+        try {
+            const formattedDate = new Date(releaseDate).toLocaleDateString('ru-RU', {
+                day: 'numeric',
+                month: 'long',
+                year: 'numeric'
+            });
+            dateHtml = `<div class="card-tooltip-date">📅 Дата релиза: ${formattedDate}</div>`;
+        } catch(e) {
+            console.error('Date parsing error:', e);
+        }
+    }
+
+    let tagsHtml = '';
+    if (tags && tags.length > 0) {
+        const maxVisible = 6;
+        const visibleTags = tags.slice(0, maxVisible);
+        const remainingCount = tags.length - maxVisible;
+
+        tagsHtml = `
+            <div class="card-tooltip-tags">
+                ${visibleTags.map(tag => `<span class="card-tooltip-tag">#${escapeHtml(tag)}</span>`).join('')}
+                ${remainingCount > 0 ? `<span class="card-tooltip-tag-more">+${remainingCount}</span>` : ''}
+            </div>
+        `;
+    }
+
+    let descHtml = '';
+    if (description && description.trim()) {
+        descHtml = `<div class="card-tooltip-desc">${escapeHtml(description)}</div>`;
+    }
+
+    // Если ничего нет — скрываем
+    if (!descHtml && !tags.length && !releaseDate) {
+        tooltip.style.display = 'none';
+        return;
+    }
+
+    // Определяем класс: если есть описание — показываем сразу, если только теги — с задержкой
+    let tooltipClass = 'card-tooltip';
+    if (!descHtml && tags.length > 0) {
+        tooltipClass += ' card-tooltip-delayed';
+    }
+
+    tooltip.className = tooltipClass;
+    tooltip.innerHTML = dateHtml + descHtml + tagsHtml;
     tooltip.style.display = 'block';
     tooltip.style.left = (x + 15) + 'px';
     tooltip.style.top = (y + 15) + 'px';
@@ -116,6 +538,10 @@ function showTooltip(text, x, y) {
 function hideTooltip() {
     if (tooltipElement) {
         tooltipElement.style.display = 'none';
+    }
+    if (tooltipTimeout) {
+        clearTimeout(tooltipTimeout);
+        tooltipTimeout = null;
     }
 }
 
@@ -142,15 +568,48 @@ function setupEditDescriptionButtons() {
             const itemName = btn.dataset.name;
             const card = document.querySelector(`.data-card[data-name="${itemName}"]`);
             const currentDesc = card?.dataset.description || '';
+            const currentTags = JSON.parse(card?.dataset.tags || '[]');
+            const currentReleaseDate = card?.dataset.releaseDate || '';
 
-            // Твоя стилизованная модалка
+            // Форматируем дату для отображения
+            const formattedDate = currentReleaseDate ?
+                new Date(currentReleaseDate).toLocaleDateString('ru-RU', {
+                    day: 'numeric',
+                    month: 'long',
+                    year: 'numeric'
+                }) : '';
+
             const modal = document.createElement('div');
             modal.className = 'modal';
             modal.style.display = 'block';
             modal.innerHTML = `
-                <div class="modal-content" style="max-width: 400px;">
-                    <h3>Редактировать заметку</h3>
-                    <textarea id="editDescTextarea" rows="4" style="width: 100%; background: #1e1e1e; border: 1px solid #4a4a4a; border-radius: 8px; color: white; padding: 8px; margin: 10px 0; font-size: 13px;">${escapeHtml(currentDesc)}</textarea>
+                <div class="modal-content" style="max-width: 450px; position: relative;">
+                    <h3>Редактировать</h3>
+                    
+                    <!-- Поле для даты релиза -->
+                    <label style="font-size: 12px; opacity: 0.7; margin-bottom: 4px;">Дата релиза</label>
+                    <input type="date" id="editReleaseDate" value="${currentReleaseDate}" style="width: 100%; background: #1e1e1e; border: 1px solid #4a4a4a; border-radius: 8px; color: white; padding: 8px; margin-bottom: 12px;">
+                    ${currentReleaseDate ? `<p style="font-size: 11px; opacity: 0.5; margin-top: -8px; margin-bottom: 12px;">Сейчас: ${formattedDate}</p>` : '<p style="font-size: 11px; opacity: 0.5; margin-top: -8px; margin-bottom: 12px;">Оставьте пустым, если нет даты релиза</p>'}
+                    
+                    <!-- Поле для заметки -->
+                    <label style="font-size: 12px; opacity: 0.7; margin-bottom: 4px;">Заметка</label>
+                    <textarea id="editDescTextarea" rows="3" style="width: 100%; background: #1e1e1e; border: 1px solid #4a4a4a; border-radius: 8px; color: white; padding: 8px; margin-bottom: 12px; font-size: 13px; resize: vertical;">${escapeHtml(currentDesc)}</textarea>
+                    
+                    <!-- Поле для тегов -->
+                    <label style="font-size: 12px; opacity: 0.7; margin-bottom: 4px;">Теги (через запятую или Enter)</label>
+                    <div class="tags-input-wrapper">
+                        <div class="tags-list" id="modalTagsList">
+                            ${currentTags.map(tag => `
+                                <span class="tag" data-tag="${escapeHtml(tag)}">
+                                    ${escapeHtml(tag)}
+                                    <button type="button" class="tag-remove" data-tag="${escapeHtml(tag)}">×</button>
+                                </span>
+                            `).join('')}
+                        </div>
+                        <input type="text" id="tagInput" maxlength="50" placeholder="Например: хоррор, комедия, шедевр" autocomplete="off">
+                    </div>
+                    <div id="tagSuggestions" class="tag-suggestions" style="display: none;"></div>
+                    
                     <div style="display: flex; gap: 10px; margin-top: 10px;">
                         <button class="modal-button cancel-btn" style="flex: 1;">Отмена</button>
                         <button class="modal-button confirm-btn" style="flex: 1;">Сохранить</button>
@@ -159,23 +618,203 @@ function setupEditDescriptionButtons() {
             `;
 
             document.body.appendChild(modal);
+
             const textarea = modal.querySelector('#editDescTextarea');
+            const releaseDateInput = modal.querySelector('#editReleaseDate');
+            const tagInput = modal.querySelector('#tagInput');
+            const tagsList = modal.querySelector('#modalTagsList');
+            const suggestionsDiv = modal.querySelector('#tagSuggestions');
+            let tags = [...currentTags];
+
+            // Функция позиционирования подсказок
+            function positionSuggestions() {
+                const rect = tagInput.getBoundingClientRect();
+                const modalRect = modal.querySelector('.modal-content').getBoundingClientRect();
+
+                suggestionsDiv.style.position = 'absolute';
+                suggestionsDiv.style.top = (rect.bottom - modalRect.top) + 'px';
+                suggestionsDiv.style.left = (rect.left - modalRect.left) + 'px';
+            }
+
+            // Функция обновления отображения тегов
+            function renderTags() {
+                tagsList.innerHTML = tags.map(tag => `
+                    <span class="tag" data-tag="${escapeHtml(tag)}">
+                        ${escapeHtml(tag.length > 30 ? tag.substring(0, 27) + '...' : tag)}
+                        <button type="button" class="tag-remove" data-tag="${escapeHtml(tag)}">×</button>
+                    </span>
+                `).join('');
+
+                tagsList.querySelectorAll('.tag-remove').forEach(btn => {
+                    btn.addEventListener('click', (e) => {
+                        e.stopPropagation();
+                        const tagToRemove = btn.dataset.tag;
+                        tags = tags.filter(t => t !== tagToRemove);
+                        renderTags();
+                    });
+                });
+            }
+
+            // Добавление тега
+            function addTag(tagName) {
+                tagName = tagName.toLowerCase().trim();
+                if (!tagName) return;
+                if (tagName.includes(',')) {
+                    tagName.split(',').forEach(t => addTag(t));
+                    return;
+                }
+                if (tagName.length > 50) {
+                    showError('Тег слишком длинный (максимум 50 символов)');
+                    return;
+                }
+                if (tags.includes(tagName)) return;
+                tags.push(tagName);
+                renderTags();
+                tagInput.value = '';
+                hideSuggestions();
+            }
+
+            // Показ подсказок
+            async function showSuggestions(query) {
+                if (query.length < 2) {
+                    hideSuggestions();
+                    return;
+                }
+                query = query.toLowerCase();
+
+                const matches = await window.electronAPI.searchTags(query);
+                const lowerTags = tags.map(t => t.toLowerCase());
+                const availableTags = matches
+                    .filter(t => !lowerTags.includes(t.toLowerCase()))
+                    .slice(0, 5);
+                if (availableTags.length === 0) {
+                    hideSuggestions();
+                    return;
+                }
+
+                suggestionsDiv.innerHTML = availableTags.map(tag => `
+                    <div class="tag-suggestion" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</div>
+                `).join('');
+
+                positionSuggestions();
+                suggestionsDiv.style.display = 'block';
+
+                suggestionsDiv.querySelectorAll('.tag-suggestion').forEach(sug => {
+                    sug.addEventListener('click', () => {
+                        addTag(sug.dataset.tag);
+                        tagInput.focus();
+                    });
+                });
+            }
+
+            function hideSuggestions() {
+                suggestionsDiv.style.display = 'none';
+            }
+
+            // Обработчики событий для поля ввода тегов
+            tagInput.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && tagInput.value.trim()) {
+                    e.preventDefault();
+                    addTag(tagInput.value);
+                } else if (e.key === 'Backspace' && !tagInput.value && tags.length > 0) {
+                    tags.pop();
+                    renderTags();
+                } else if (e.key === ',' && tagInput.value.trim()) {
+                    e.preventDefault();
+                    addTag(tagInput.value);
+                }
+            });
+
+            tagInput.addEventListener('input', () => {
+                const value = tagInput.value;
+                if (value.endsWith(',')) {
+                    addTag(value.slice(0, -1));
+                } else {
+                    showSuggestions(value);
+                }
+            });
+
+            tagInput.addEventListener('focus', positionSuggestions);
+            window.addEventListener('resize', positionSuggestions);
+
+            // Закрытие подсказок при клике вне
+            document.addEventListener('click', function closeSuggestions(e) {
+                if (!suggestionsDiv.contains(e.target) && e.target !== tagInput) {
+                    hideSuggestions();
+                    document.removeEventListener('click', closeSuggestions);
+                }
+            });
+
+            // Инициализация
+            renderTags();
             textarea.focus();
 
+            // Обработчики кнопок модалки
             modal.querySelector('.cancel-btn').onclick = () => {
                 document.body.removeChild(modal);
             };
 
             modal.querySelector('.confirm-btn').onclick = async () => {
                 const newDescription = textarea.value.trim();
+                const newReleaseDate = releaseDateInput.value;
                 const section = document.querySelector('.nav-item.active')?.dataset.section;
 
                 await window.electronAPI.updateDataDescription(section, itemName, newDescription);
+                await window.electronAPI.updateCardTags(section, itemName, tags);
+
+                // Сохраняем дату релиза
+                if (newReleaseDate) {
+                    await window.electronAPI.saveReleaseDate(itemName, section, newReleaseDate);
+                    const item = window.allSectionData?.find(i => i.name === itemName);
+                    if (item) item.releaseDate = newReleaseDate;
+                } else if (currentReleaseDate) {
+                    await window.electronAPI.deleteReleaseDate(itemName, section);
+                    const item = window.allSectionData?.find(i => i.name === itemName);
+                    if (item) delete item.releaseDate;
+                }
+
+                // Обновляем DOM
                 if (card) {
                     card.dataset.description = newDescription;
+                    card.dataset.tags = JSON.stringify(tags);
+                    if (newReleaseDate) {
+                        card.dataset.releaseDate = newReleaseDate;
+                    } else {
+                        card.dataset.releaseDate = '';
+                    }
                 }
+
+                // Обновляем данные в массивах
+                const allItem = window.allSectionData?.find(item => item.name === itemName);
+                if (allItem) {
+                    allItem.description = newDescription;
+                    allItem.tags = tags;
+                    if (newReleaseDate) {
+                        allItem.releaseDate = newReleaseDate;
+                    } else {
+                        delete allItem.releaseDate;
+                    }
+                }
+
+                const filteredItem = window.filteredData?.find(item => item.name === itemName);
+                if (filteredItem) {
+                    filteredItem.description = newDescription;
+                    filteredItem.tags = tags;
+                    if (newReleaseDate) {
+                        filteredItem.releaseDate = newReleaseDate;
+                    } else {
+                        delete filteredItem.releaseDate;
+                    }
+                }
+
                 document.body.removeChild(modal);
             };
+
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) {
+                    document.body.removeChild(modal);
+                }
+            });
         });
     });
 }
@@ -574,7 +1213,8 @@ document.addEventListener('keydown', (e) => {
 
 document.querySelectorAll('.nav-item').forEach(item => {
     item.addEventListener('click', async function() {
-
+        clearAllNotifications();
+        currentSectionForNotifications = null;
         // Удаляем активный класс у всех элементов
         document.querySelectorAll('.nav-item').forEach(navItem => {
             navItem.classList.remove('active');
@@ -863,6 +1503,20 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
         allItemsLoaded = false;
     }
 
+    const allReleases = await window.electronAPI.getAllExpectedReleases();
+    const releasesMap = new Map();
+    allReleases.forEach(r => {
+        if (r.section === section) {
+            releasesMap.set(r.card_name, r.release_date);
+        }
+    });
+
+    data = data.map(item => ({
+        ...item,
+        tags: item.tags ? item.tags.split(',') : [],
+        releaseDate: releasesMap.get(item.name) || null
+    }));
+
     window.allSectionData = data;
 
     if (preserveFilters) {
@@ -935,14 +1589,26 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
     // Добавляем обработчик прокрутки для бесконечной загрузки
     contentWrapper.addEventListener('scroll', handleScroll);
     setupContentWrapperScroll();
+    await checkSectionReleaseNotifications(section);
 }
 
-function filterData(data, searchQuery, statusFilter) {
+function filterData(data, searchQuery, statusFilter, isTag = false) {
     const queryLower = (searchQuery || '').toLowerCase();
     return data.filter(item => {
-        const nameMatches = !queryLower || item.name.toLowerCase().includes(queryLower);
+        // Поиск по названию
+        const nameMatches = isTag
+            ? false
+            : !queryLower || item.name.toLowerCase().includes(queryLower);
+        // Поиск по тегам
+        let tagMatches = false;
+        if (queryLower && item.tags && item.tags.length) {
+            tagMatches = item.tags.some(tag => tag.toLowerCase().includes(queryLower));
+        }
+
+        const matchesSearch = !queryLower || nameMatches || tagMatches;
         const statusMatches = statusFilter === 'Все' || item.status === statusFilter;
-        return nameMatches && statusMatches;
+
+        return matchesSearch && statusMatches;
     });
 }
 
@@ -1086,22 +1752,46 @@ function setupSearchInput() {
             return;
         }
 
-        const matches = window.allSectionData.filter(item =>
+        // Собираем совпадения по названиям
+        const nameMatches = window.allSectionData.filter(item =>
             item.name.toLowerCase().includes(queryLower)
-        ).slice(0, 5);
+        ).slice(0, 3);
 
-        if (matches.length > 0) {
-            searchSuggestions.innerHTML = matches.map(item => `
-            <div class="suggestion-item">${item.name}</div>
-        `).join('');
-            searchSuggestions.style.display = 'block';
+        // Собираем совпадения по тегам
+        const tagMatches = [];
+        const uniqueTags = new Set();
 
-            // 👇 Устанавливаем ширину подсказок равной ширине searchInput
-            const searchInputRect = searchInput.getBoundingClientRect();
-            searchSuggestions.style.width = searchInputRect.width + 'px';
-        } else {
+        window.allSectionData.forEach(item => {
+            if (item.tags && item.tags.length) {
+                item.tags.forEach(tag => {
+                    if (tag.toLowerCase().includes(queryLower) && !uniqueTags.has(tag)) {
+                        uniqueTags.add(tag);
+                        tagMatches.push({ type: 'tag', value: tag });
+                    }
+                });
+            }
+        });
+
+        // Объединяем и показываем
+        const suggestions = [
+            ...nameMatches.map(item => ({ type: 'name', value: item.name })),
+            ...tagMatches.slice(0, 3)
+        ].slice(0, 6);
+
+        if (suggestions.length === 0) {
             searchSuggestions.style.display = 'none';
+            return;
         }
+
+        searchSuggestions.innerHTML = suggestions.map(s => `
+        <div class="suggestion-item ${s.type === 'tag' ? 'suggestion-tag' : ''}" data-value="${escapeHtml(s.value)}" data-type="${s.type}">
+            ${escapeHtml(s.value)}
+        </div>
+    `).join('');
+
+        searchSuggestions.style.display = 'block';
+        const searchInputRect = searchInput.getBoundingClientRect();
+        searchSuggestions.style.width = searchInputRect.width + 'px';
     }
 
     const clearSearchBtn = document.getElementById('clearSearchBtn');
@@ -1127,14 +1817,15 @@ function setupSearchInput() {
         updateSuggestions(e.target.value);
     });
 
-    // Обработчик клика по подсказке
     searchSuggestions.addEventListener('click', (e) => {
-        if (e.target.classList.contains('suggestion-item')) {
-            searchInput.value = e.target.textContent;
+        const suggestion = e.target.closest('.suggestion-item');
+        if (suggestion) {
+            searchInput.value = suggestion.dataset.value;
+            const isTag = suggestion.dataset.type === 'tag';
             searchSuggestions.style.display = 'none';
+            // Сбрасываем фильтр статуса на "Все"
             if (currentFilters.statusFilter !== 'Все') {
                 currentFilters.statusFilter = 'Все';
-                // Обновляем активную кнопку фильтра
                 document.querySelectorAll('.filter-button').forEach(btn => {
                     btn.classList.remove('active');
                     if (btn.dataset.status === 'Все') {
@@ -1142,7 +1833,7 @@ function setupSearchInput() {
                     }
                 });
             }
-            filterCards(e.target.textContent);
+            filterCards(suggestion.dataset.value, isTag);
         }
     });
 
@@ -1214,7 +1905,7 @@ function sortData(data, sortBy) {
     });
 }
 
-function filterCards(query = '') {
+function filterCards(query = '', isTag = false) {
     const statusFilter = currentFilters.statusFilter || 'Все';
     const clearSearchBtn = document.getElementById('clearSearchBtn');
     const selectedSort = currentFilters.sortBy || 'date';
@@ -1231,7 +1922,7 @@ function filterCards(query = '') {
     }
 
     // Сначала фильтруем, затем сортируем
-    const filtered = filterData(window.allSectionData, query, statusFilter);
+    const filtered = filterData(window.allSectionData, query, statusFilter, isTag);
     window.filteredData = sortData(filtered, selectedSort);
 
     // Сбрасываем пагинацию и перерисовываем
@@ -1274,6 +1965,9 @@ async function initCardSection() {
 
     // Настраиваем кнопку добавления
     setupAddButton();
+    setupAddFormTags();
+    setupAutoSearchOnNameInput();
+
 
     setupDeleteButtons();
     setupEditableFields();
@@ -1285,8 +1979,6 @@ async function initCardSection() {
     setupPreviewUpdate();
     updateStats();
     setupEditDescriptionButtons();
-
-
 }
 
 function setupChangeImageButtons() {
@@ -1308,20 +2000,25 @@ function setupChangeCategoryButtons() {
             const icoUrl = btn.getAttribute('datatype');
             const status = btn.dataset.status;
             const rating = btn.dataset.rating;
+
+
+            const card = document.querySelector(`.data-card[data-name="${itemName}"]`);
+            const description = card?.dataset.description || '';
+
             const section = document.querySelector('.nav-item.active')?.dataset.section;
-            showCategoryChangeModal(section, itemName, icoUrl, status, rating);
+            showCategoryChangeModal(section, itemName, icoUrl, status, rating, description);
         });
     });
 }
 
-function showCategoryChangeModal(oldSection, itemName, icoUrl, status, rating) {
+function showCategoryChangeModal(oldSection, itemName, icoUrl, status, rating, oldDesc) {
     const modal = document.createElement('div');
     modal.className = 'modal';
     modal.style.display = 'block';
 
     modal.innerHTML = `
         <div class="modal-content" style="max-width: 300px;">
-            <h3 data-section="${oldSection}" data-rating="${rating}" data-status="${status}" datatype="${icoUrl}">${itemName}</h3>
+            <h3>${escapeHtml(itemName)}</h3>
             <p>Выберите новую категорию</p>
             <select id="categorySelect" class="edit-select">
                 <option value="games">Игры</option>
@@ -1345,16 +2042,17 @@ function showCategoryChangeModal(oldSection, itemName, icoUrl, status, rating) {
     });
 
     modal.querySelector('.confirm-btn').addEventListener('click', async () => {
-        const oldCat = modal.querySelector('h3').getAttribute('data-section');
+        const oldCat = oldSection;
         const newCat = modal.querySelector('#categorySelect').value;
-        const name = modal.querySelector('h3').innerText;
-        const status = modal.querySelector('h3').getAttribute('data-status');
-        const rating = modal.querySelector('h3').getAttribute('data-rating');
-        const icoUrl = modal.querySelector('h3').getAttribute('datatype');
+        const name = itemName;
+        const description = oldDesc || '';
+
+        console.log('📝 Saving description:', description);
 
         try {
             const hasDuplicates = await window.electronAPI.checkDuplicates(newCat, name);
             const isDuplicate = (oldCat !== newCat && hasDuplicates);
+
             if (isDuplicate) {
                 const confirmReplace = await showConfirmModal(
                     'Элемент уже существует',
@@ -1364,24 +2062,27 @@ function showCategoryChangeModal(oldSection, itemName, icoUrl, status, rating) {
                 );
 
                 if (!confirmReplace) {
-                    isAddingGame = false;
                     return;
                 }
             }
+
             if (oldCat === newCat) {
-                isAddingGame = false;
                 document.body.removeChild(modal);
                 return;
             }
+
             const data = {
                 name: name,
                 oldStatus: status,
                 oldRating: rating,
                 oldIcoUrl: icoUrl,
                 oldCategory: oldCat,
-                newCategory: newCat
+                newCategory: newCat,
+                oldDescription: description
             };
+
             await window.electronAPI.moveDataToCategory(data);
+
             const card = document.querySelector(`.data-card[data-name="${name}"]`);
             if (card) {
                 card.remove();
@@ -1389,7 +2090,6 @@ function showCategoryChangeModal(oldSection, itemName, icoUrl, status, rating) {
                 if (oldSectionIndex !== -1) {
                     window.allSectionData.splice(oldSectionIndex, 1);
                 }
-
                 const oldFilteredIndex = window.filteredData.findIndex(item => item.name === name);
                 if (oldFilteredIndex !== -1) {
                     window.filteredData.splice(oldFilteredIndex, 1);
@@ -1397,6 +2097,7 @@ function showCategoryChangeModal(oldSection, itemName, icoUrl, status, rating) {
             }
             document.body.removeChild(modal);
         } catch (error) {
+            console.error(error);
             await showError('Не удалось сменить категорию');
         }
     });
@@ -1447,25 +2148,33 @@ function getAddFormHTML(addMoreChecked = false, visible = '') {
                 </div>
                 <div class="form-fields">
                     <div class="form-group">
-                        <div class="icon-input-container">
-                            <input id="nameInput" placeholder="Название" autocomplete="off">
-                        </div>
+                        <input id="nameInput" placeholder="Название" autocomplete="off" style="width: 100%;">
                     </div>
-                    <div class="form-group">
-                        <div class="icon-input-container" style="display: flex; gap: 8px;">
-                            <input id="icoInput" placeholder="Ссылка на обложку" autocomplete="off" style="display: none;">
+                    
+                    <!-- Поле для тегов - теперь на всю ширину -->
+                    <div class="form-group" style="display: block; width: 100%;">
+                        <div class="tags-input-wrapper">
+                            <div class="tags-list" id="addFormTagsList">
+                                <!-- Теги будут добавляться сюда -->
+                            </div>
+                            <input type="text" id="addFormTagInput" maxlength="50" placeholder="Добавить теги (нажмите Enter или запятую)" autocomplete="off">
                         </div>
+                        <div id="addFormTagSuggestions" class="tag-suggestions"></div>
                     </div>
+                    
                     <div class="form-group">
-                        <select id="ratingSelect">
+                        <input id="icoInput" placeholder="Ссылка на обложку" autocomplete="off" style="display: none; width: 100%;">
+                    </div>
+                    <div class="form-group" style="display: flex; gap: 10px;">
+                        <select id="ratingSelect" style="flex: 1;">
                             <option value="0">Выберите рейтинг</option>
                         </select>
-                        <select id="statusSelect">
+                        <select id="statusSelect" style="flex: 1;">
                             <option value="Уточнить">Выберите статус</option>
                         </select>
                     </div>
-                    <div class="form-group add-more-container">
-                        <button id="addBtn" class="add-button-compact">
+                    <div class="form-group">
+                        <button id="addBtn" class="add-button-compact" style="width: 100%; background: #0078d4; border: none; border-radius: 8px; padding: 10px; color: white; font-weight: 500; cursor: pointer; transition: all 0.2s;">
                             Добавить
                         </button>
                     </div>
@@ -1473,6 +2182,168 @@ function getAddFormHTML(addMoreChecked = false, visible = '') {
             </div>
         </div>
     `;
+}
+
+function setupAddFormTags() {
+    let tagInput = document.getElementById('addFormTagInput');
+    const tagsList = document.getElementById('addFormTagsList');
+    const suggestionsDiv = document.getElementById('addFormTagSuggestions');
+    let tags = [];
+
+    if (!tagInput) return;
+
+    if (suggestionsDiv) {
+        suggestionsDiv.style.display = 'none';
+    }
+
+    function positionSuggestions() {
+        const rect = tagInput.getBoundingClientRect();
+        if (rect.width === 0 || rect.height === 0) return;
+
+        suggestionsDiv.style.position = 'fixed';
+        suggestionsDiv.style.top = (rect.bottom + 5) + 'px';
+        suggestionsDiv.style.left = rect.left + 'px';
+        suggestionsDiv.style.width = rect.width + 'px';
+        suggestionsDiv.style.minWidth = rect.width + 'px';
+        suggestionsDiv.style.maxWidth = rect.width + 'px';
+        suggestionsDiv.style.zIndex = '10001';
+    }
+
+    function renderTags() {
+        tagsList.innerHTML = tags.map(tag => `
+            <span class="tag" data-tag="${escapeHtml(tag)}">
+                ${escapeHtml(tag)}
+                <button type="button" class="tag-remove" data-tag="${escapeHtml(tag)}">×</button>
+            </span>
+        `).join('');
+
+        tagsList.querySelectorAll('.tag-remove').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const tagToRemove = btn.dataset.tag;
+                tags = tags.filter(t => t !== tagToRemove);
+                renderTags();
+            });
+        });
+    }
+
+    async function showSuggestions(query) {
+        if (query.length < 2) {
+            hideSuggestions();
+            return;
+        }
+
+        const queryLower = query.toLowerCase();
+        const matches = await window.electronAPI.searchTags(queryLower);
+        const lowerTags = tags.map(t => t.toLowerCase());
+        const availableTags = matches
+            .filter(t => !lowerTags.includes(t.toLowerCase()))
+            .slice(0, 5);
+
+        if (availableTags.length === 0) {
+            hideSuggestions();
+            return;
+        }
+
+        suggestionsDiv.innerHTML = availableTags.map(tag => `
+            <div class="tag-suggestion" data-tag="${escapeHtml(tag)}">${escapeHtml(tag)}</div>
+        `).join('');
+
+        setTimeout(() => {
+            positionSuggestions();
+            suggestionsDiv.style.display = 'block';
+        }, 10);
+
+        suggestionsDiv.querySelectorAll('.tag-suggestion').forEach(sug => {
+            sug.addEventListener('click', () => {
+                addTag(sug.dataset.tag);
+                newTagInput.value = '';
+            });
+        });
+    }
+
+    function hideSuggestions() {
+        suggestionsDiv.style.display = 'none';
+    }
+
+    function addTag(tagName) {
+        tagName = tagName.toLowerCase().trim();
+        if (!tagName) return;
+
+        if (tagName.includes(',')) {
+            const parts = tagName.split(',').map(p => p.trim()).filter(p => p);
+            parts.forEach(part => addTag(part));
+            return;
+        }
+
+        if (tags.includes(tagName)) return;
+        tags.push(tagName);
+        renderTags();
+
+        tagInput.value = '';
+
+        hideSuggestions();
+        tagInput.focus();
+    }
+
+    let newTagInput = tagInput.cloneNode(true);
+    tagInput.parentNode.replaceChild(newTagInput, tagInput);
+
+    // Используем newTagInput для обработчиков
+    newTagInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' && newTagInput.value.trim()) {
+
+            e.preventDefault();
+            addTag(newTagInput.value);
+            newTagInput.value = '';
+        } else if (e.key === 'Backspace' && !newTagInput.value && tags.length > 0) {
+
+            e.preventDefault();
+            tags.pop();
+            renderTags();
+            newTagInput.value = '';
+        } else if (e.key === ',' && newTagInput.value.trim()) {
+
+            e.preventDefault();
+            addTag(newTagInput.value);
+            newTagInput.value = '';
+        }
+    });
+
+    newTagInput.addEventListener('input', (e) => {
+        const value = e.target.value;
+        if (value.endsWith(',')) {
+            addTag(value.slice(0, -1));
+        } else {
+            showSuggestions(value);
+        }
+    });
+
+    newTagInput.addEventListener('focus', () => {
+        if (newTagInput.value.length >= 2) {
+            showSuggestions(newTagInput.value);
+        }
+    });
+
+    window.addEventListener('resize', () => {
+        if (suggestionsDiv.style.display === 'block') {
+            positionSuggestions();
+        }
+    });
+
+    document.addEventListener('click', function closeSuggestions(e) {
+        if (!suggestionsDiv.contains(e.target) && e.target !== newTagInput) {
+            hideSuggestions();
+        }
+    });
+
+    window.getAddFormTags = () => tags;
+    window.clearAddFormTags = () => {
+        tags = [];
+        renderTags();
+        tagInput.value = '';
+        hideSuggestions();
+    };
 }
 
 function escapeHtml(str) {
@@ -1487,47 +2358,57 @@ function escapeHtml(str) {
 
 function renderCardList(cards) {
     return cards.map(card => `
-            <div class="data-card" data-name="${escapeHtml(card.name)}" data-description="${escapeHtml(card.description || '')}" style="display: block;">
-                <div class="card-hover-icon">
-                    <img src="assets/icons/search-web.svg" alt="🔍">
-                </div>
-                <div class="card-buttons">
-                    <button class="card-btn edit-desc-btn" data-name="${escapeHtml(card.name)}">
-                        <img src="assets/icons/note.svg" alt="📝" class="button-icon-no-text">
-                        <span class="btn-text">Заметки</span>
-                    </button>
-                    <button class="card-btn change-image-btn" data-name="${escapeHtml(card.name)}">
-                        <img src="assets/icons/changeImage.svg" alt="🖼️" class="button-icon-no-text">
-                        <span class="btn-text">Обложка</span>
-                    </button>
-                    <button class="card-btn change-category-btn" data-name="${escapeHtml(card.name)}" data-status="${card.status}" data-rating="${card.rating}" datatype="${card.icoUrl}">
-                        <img src="assets/icons/changeCategory.svg" alt="⇄" class="button-icon-no-text">
-                        <span class="btn-text">Переместить</span>
-                    </button>
-                    <button class="card-btn delete-btn" data-name="${escapeHtml(card.name)}">
-                        <img src="assets/icons/delete.svg" alt="🗑️" class="button-icon-no-text">
-                    </button>
-                </div>
-                ${getCardIconHTML(card)}
-                <div class="data-info">
-                    <h3 class="data-title">${escapeHtml(card.name)}</h3>
-                    <div class="data-ratings-container">
-                        <span class="card-rating rating-value editable-field"
-                              data-rating="${card.rating}"
-                              data-name="${escapeHtml(card.name)}"
-                              title="Редактировать">
-                            ${card.rating || '0'}
-                        </span>
-                        <span class="card-status status-value editable-field"
-                              data-status="${card.status}"
-                              data-name="${escapeHtml(card.name)}"
-                              title="Редактировать">
-                            ${card.status || 'Уточнить'}
-                        </span>
-                    </div>
+        <div class="data-card" 
+             data-name="${escapeHtml(card.name)}" 
+             data-description="${escapeHtml(card.description || '')}" 
+             data-tags='${JSON.stringify(card.tags || [])}'
+             data-release-date="${card.releaseDate || ''}"
+             style="display: block;">
+            <div class="card-hover-icon">
+                <img src="assets/icons/search-web.svg" alt="🔍">
+            </div>
+            <div class="card-buttons">
+                <button class="card-btn edit-desc-btn" data-name="${escapeHtml(card.name)}">
+                    <img src="assets/icons/note.svg" alt="📝" class="button-icon-no-text">
+                    <span class="btn-text">Заметки</span>
+                </button>
+                <button class="card-btn change-image-btn" data-name="${escapeHtml(card.name)}">
+                    <img src="assets/icons/changeImage.svg" alt="🖼️" class="button-icon-no-text">
+                    <span class="btn-text">Обложка</span>
+                </button>
+                <button class="card-btn change-category-btn" 
+                    data-name="${escapeHtml(card.name)}" 
+                    data-status="${card.status}" 
+                    data-rating="${card.rating}" 
+                    datatype="${card.icoUrl}" 
+                    data-description="${escapeHtml(card.description || '')}">
+                    <img src="assets/icons/changeCategory.svg" alt="⇄" class="button-icon-no-text">
+                    <span class="btn-text">Переместить</span>
+                </button>
+                <button class="card-btn delete-btn" data-name="${escapeHtml(card.name)}">
+                    <img src="assets/icons/delete.svg" alt="🗑️" class="button-icon-no-text">
+                </button>
+            </div>
+            ${getCardIconHTML(card)}
+            <div class="data-info">
+                <h3 class="data-title">${escapeHtml(card.name)}</h3>
+                <div class="data-ratings-container">
+                    <span class="card-rating rating-value editable-field"
+                          data-rating="${card.rating}"
+                          data-name="${escapeHtml(card.name)}"
+                          title="Редактировать">
+                        ${card.rating || '0'}
+                    </span>
+                    <span class="card-status status-value editable-field"
+                          data-status="${card.status}"
+                          data-name="${escapeHtml(card.name)}"
+                          title="Редактировать">
+                        ${card.status || 'Уточнить'}
+                    </span>
                 </div>
             </div>
-        `).join('');
+        </div>
+    `).join('');
 }
 
 async function addNewData(section) {
@@ -1538,12 +2419,17 @@ async function addNewData(section) {
     const ratingSelect = document.getElementById('ratingSelect');
     const statusSelect = document.getElementById('statusSelect');
 
+    const fetchedReleaseDate = nameInput?.dataset.fetchedReleaseDate || null;
+    const tags = window.getAddFormTags ? window.getAddFormTags() : [];
+
     const cardData = {
         name: nameInput.value.trim(),
         icoUrl: icoInput.value.trim(),
         rating: ratingSelect.value,
         status: statusSelect.value,
-        description: ''
+        description: '',
+        tags: tags,
+        releaseDate: fetchedReleaseDate
     };
 
     if (!cardData.name) {
@@ -1554,7 +2440,8 @@ async function addNewData(section) {
     }
 
     try {
-        const isDuplicate = await window.electronAPI.checkDuplicates(section, cardData.name)
+        const isDuplicate = await window.electronAPI.checkDuplicates(section, cardData.name);
+
         if (isDuplicate) {
             const confirmReplace = await showConfirmModal(
                 'Элемент уже существует',
@@ -1566,18 +2453,29 @@ async function addNewData(section) {
                 isAddingGame = false;
                 return;
             }
+
+            // При замене — сначала удаляем старую карточку с её тегами
+            await window.electronAPI.deleteData(section, cardData.name);
         }
+
+        // Добавляем новую карточку с тегами
         await window.electronAPI.addData(section, cardData);
-        // Перезагружаем данные и рендерим раздел заново
+        if (nameInput) {
+            delete nameInput.dataset.fetchedReleaseDate;
+        }
         let data = await window.electronAPI.getData(section);
         await renderSection(section, data, true, false, false, true);
-        const searchInput = document.getElementById('searchInput');
-        if (searchInput) {
-            searchInput.value = cardData.name;
-            filterCards(cardData.name);
-        }
+
         let overlay = document.querySelector('.add-form-overlay');
         overlay.classList.remove('visible');
+
+        // Очищаем форму
+        nameInput.value = '';
+        icoInput.value = '';
+        if (window.clearAddFormTags) {
+            window.clearAddFormTags();
+        }
+
     } catch (error) {
         console.error('Ошибка при добавлении:', error);
         await showError(`Ошибка при добавлении: ${error.message}`);
@@ -2143,8 +3041,9 @@ function setupCardClickHandlers() {
 
         card.addEventListener('mouseenter', (e) => {
             const description = card.dataset.description || '';
-            if (description) { showTooltip(description, e.clientX, e.clientY); }
-
+            const tags = JSON.parse(card.dataset.tags || '[]');
+            const releaseDate = card.dataset.releaseDate || null;
+            showTooltip(description, tags, releaseDate, e.clientX, e.clientY);
         });
 
         card.addEventListener('mousemove', (e) => {
@@ -2365,10 +3264,65 @@ function updatePreview(name, icoUrl, rating, status) {
     }
 }
 
+async function autoFetchTags(title, section) {
+    showLoadingPreview(title);
+    let result = await window.electronAPI.fetchCardData(title, section);
+    hideLoadingPreview();
+    if (result && result.coverUrl) {
+        const icoInput = document.getElementById('icoInput');
+        if (icoInput) icoInput.value = result.coverUrl;
+        updatePreview(title, result.coverUrl, null, null);
+    }
+    if (result && result.fullTitle && result.fullTitle !== title.toLowerCase()) {
+        showTitleSuggestion(result.fullTitle);
+    }
+
+    return { tags: result?.tags || [], releaseDate: result?.releaseDate || null };
+}
+
+function showTitleSuggestion(fullTitle) {
+    const nameInput = document.getElementById('nameInput');
+    if (!nameInput) return;
+
+    // Удаляем старую подсказку
+    const oldSuggestion = document.querySelector('.title-suggestion');
+    if (oldSuggestion) {
+        oldSuggestion.remove();
+    }
+
+    // Находим или создаём обертку с relative positioning
+    let wrapper = nameInput.closest('.title-input-wrapper');
+    if (!wrapper) {
+        wrapper = document.createElement('div');
+        wrapper.className = 'title-input-wrapper';
+        wrapper.style.position = 'relative';
+        wrapper.style.width = '100%';
+        nameInput.parentNode.insertBefore(wrapper, nameInput);
+        wrapper.appendChild(nameInput);
+    }
+
+    // Создаём подсказку
+    const suggestion = document.createElement('div');
+    suggestion.className = 'title-suggestion';
+    suggestion.innerHTML = `
+        <span class="suggestion-title">${escapeHtml(fullTitle)}</span>
+    `;
+
+    wrapper.appendChild(suggestion);
+
+    // При клике — заменяем название
+    suggestion.addEventListener('click', () => {
+        nameInput.value = fullTitle;
+        updatePreview(fullTitle, null, null, null);
+        suggestion.remove();
+    });
+}
+
+
+
 function setupAddButton() {
     const toggleBtn = document.getElementById('toggleAddFormBtn');
     const addForm = document.getElementById('addForm');
-
     const overlay = initAddFormOverlay();
 
     function closeAddForm() {
@@ -2377,13 +3331,11 @@ function setupAddButton() {
         toggleBtn.textContent = '+ Добавить';
     }
 
-    // Закрытие по клику на overlay
     overlay.onclick = closeAddForm;
 
     if (toggleBtn && addForm) {
         toggleBtn.onclick = async (e) => {
             e.stopPropagation();
-
             const isVisible = addForm.classList.contains('visible');
 
             if (isVisible) {
@@ -2392,68 +3344,13 @@ function setupAddButton() {
                 addForm.classList.add('visible');
                 overlay.classList.add('visible');
                 toggleBtn.textContent = '− Скрыть';
-
-                try {
-                    const text = await navigator.clipboard.readText();
-                    const nameInput = document.getElementById('nameInput');
-
-                    if (text && nameInput && text !== lastTextFromClipboard && !text.startsWith('http')) {
-                        nameInput.value = text;
-                        lastTextFromClipboard = text;
-                        updatePreview(text, null, null, null);
-                        await autoSearchCover(text);
-                    }
-                    document.getElementById('nameInput')?.focus();
-                } catch (error) {
-                    console.error('Ошибка чтения буфера обмена:', error);
+                const nameInput = document.getElementById('nameInput');
+                if (nameInput) {
+                    nameInput.focus();
+                    nameInput.setSelectionRange(nameInput.value.length, nameInput.value.length);
                 }
             }
         };
-    }
-}
-
-async function autoSearchCover(title) {
-    if (!title || title.trim() === '') return;
-
-    const icoInput = document.getElementById('icoInput');
-    if (icoInput) {
-        icoInput.value = 'Ищем обложку...';
-        icoInput.style.color = '#91c9d6';
-        icoInput.style.borderColor = '#91c9d6';
-        icoInput.disabled = true;
-    }
-
-    try {
-        const section = document.querySelector('.nav-item.active')?.dataset.section;
-        let imageUrl = '';
-
-
-        // Можно использовать разные поиски в зависимости от категории
-        imageUrl = await window.electronAPI.searchImage(title);
-
-        if (imageUrl && icoInput) {
-            icoInput.value = imageUrl;
-            icoInput.disabled = false;
-
-            // Обновляем превью
-            updatePreview(title, imageUrl,
-                document.getElementById('ratingSelect')?.value || '5',
-                document.getElementById('statusSelect')?.value || 'Уточнить');
-        } else {
-            if (icoInput) {
-                icoInput.value = '';
-                icoInput.disabled = false;
-            }
-        }
-        icoInput.style.color = null;
-        icoInput.style.borderColor = null;
-
-    } catch (error) {
-        console.error('Ошибка поиска обложки:', error);
-        if (icoInput) {
-            icoInput.value = '';
-            icoInput.disabled = false;
-        }
     }
 }
 
