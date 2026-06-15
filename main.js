@@ -28,6 +28,72 @@ const firebaseApp = initializeApp(firebaseConfig);
 const auth = getAuth(firebaseApp);
 const db_firestore = getFirestore(firebaseApp);
 
+
+const DEFAULT_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+let activeParsingWindows = new Set();
+function closeAllParsingWindows() {
+    console.log(`[Parsing] Closing ${activeParsingWindows.size} windows`);
+    for (const win of activeParsingWindows) {
+        if (win && !win.isDestroyed()) {
+            try {
+                if (win.webContents && !win.webContents.isDestroyed()) {
+                    win.webContents.stop();
+                    win.webContents.removeAllListeners();
+                    win.webContents.session.clearStorageData({
+                        storages: ['cookies', 'localstorage', 'sessionstorage'],
+                        quotas: ['temporary']
+                    }).catch(e => console.log('Storage clear error:', e));
+                }
+                win.removeAllListeners();
+                win.close();
+            } catch (error) {
+                console.error('[Parsing] Error closing window:', error);
+            }
+        }
+    }
+    activeParsingWindows.clear();
+}
+
+function destroyWindowCompletely(win) {
+    if (!win || win.isDestroyed()) return;
+
+    try {
+        // 1. Останавливаем загрузку
+        if (win.webContents && !win.webContents.isDestroyed()) {
+            win.webContents.stop();
+
+            // 2. Очищаем сессию ПРИНУДИТЕЛЬНО
+            win.webContents.session.clearStorageData({
+                storages: ['cookies', 'localstorage', 'sessionstorage', 'cache']
+            });
+
+            // 3. Сброс HTTP/2 соединений
+            win.webContents.session.closeAllConnections?.(); // Electron 22+
+
+            // 4. Отключаем кеш и keep-alive
+            win.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
+                details.requestHeaders['Connection'] = 'close'; // force close
+                details.requestHeaders['Cache-Control'] = 'no-cache, no-store';
+                callback({ requestHeaders: details.requestHeaders });
+            });
+        }
+
+        // 5. Жёсткое уничтожение
+        win.destroy();
+
+    } catch (error) {
+        console.error('Destroy error:', error);
+    }
+}
+
+// Функция добавления окна в отслеживаемые
+function trackParsingWindow(win) {
+    activeParsingWindows.add(win);
+    win.once('closed', () => {
+        activeParsingWindows.delete(win);
+    });
+}
+
 app.name = 'DropList';
 app.setName('DropList');
 if (process.platform === 'win32') {
@@ -693,6 +759,10 @@ app.whenReady().then(() => {
     setTimeout(() => {
         checkForUpdates(false);
     }, 3000);
+
+    setTimeout(() => {
+        updateAllReleaseDates();
+    }, 5000);
 });
 
 app.on('before-quit', async (event) => {
@@ -890,6 +960,1479 @@ async function getCachedGitHubDownloads() {
         return 0;
     }
 }
+
+async function saveSectionToFirestore(uid, idToken, section, items) {
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/sections/${section}`;
+
+    const body = {
+        fields: {
+            items: {
+                arrayValue: {
+                    values: items.map(item => {
+                        // Преобразуем tags из строки в массив
+                        let tagsArray = [];
+                        if (item.tags) {
+                            if (typeof item.tags === 'string') {
+                                tagsArray = item.tags.split(',').filter(t => t);
+                            } else if (Array.isArray(item.tags)) {
+                                tagsArray = item.tags;
+                            }
+                        }
+
+                        return {
+                            mapValue: {
+                                fields: {
+                                    name: { stringValue: item.name || '' },
+                                    icoUrl: { stringValue: item.icoUrl || '' },
+                                    rating: { stringValue: item.rating || '0' },
+                                    status: { stringValue: item.status || 'Уточнить' },
+                                    description: { stringValue: item.description || '' },
+                                    tags: {
+                                        arrayValue: {
+                                            values: tagsArray.map(tag => ({ stringValue: tag }))
+                                        }
+                                    }
+                                }
+                            }
+                        };
+                    })
+                }
+            },
+            updatedAt: { timestampValue: new Date().toISOString() }
+        }
+    };
+
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+            'Authorization': `Bearer ${idToken}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+
+    console.log(`✅ Section ${section} saved (${items.length} items)`);
+    return true;
+}
+
+async function getSectionFromFirestore(uid, idToken, section) {
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/sections/${section}`;
+
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${idToken}` }
+        });
+
+        if (response.status === 404) return [];
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const data = await response.json();
+        const items = [];
+
+        if (data.fields && data.fields.items && data.fields.items.arrayValue) {
+            const values = data.fields.items.arrayValue.values || [];
+            for (const item of values) {
+                const fields = item.mapValue.fields;
+                // Читаем теги из массива
+                let tags = [];
+                if (fields.tags && fields.tags.arrayValue) {
+                    tags = (fields.tags.arrayValue.values || []).map(v => v.stringValue);
+                }
+
+                items.push({
+                    name: fields.name?.stringValue || '',
+                    icoUrl: fields.icoUrl?.stringValue || '',
+                    rating: fields.rating?.stringValue || '0',
+                    status: fields.status?.stringValue || 'Уточнить',
+                    description: fields.description?.stringValue || '',
+                    tags: tags
+                });
+            }
+        }
+
+        return items;
+    } catch (error) {
+        console.error(`Error getting ${section}:`, error);
+        return null;
+    }
+}
+
+async function updateSyncTime(uid, idToken, timestamp) {
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}?updateMask.fieldPaths=lastSync`;
+
+    const body = {
+        fields: {
+            lastSync: { timestampValue: timestamp }
+        }
+    };
+
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+            'Authorization': `Bearer ${idToken}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+
+    console.log('[+] Sync time updated:', timestamp);
+    return true;
+}
+
+async function getSyncTime(uid, idToken) {
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}`;
+
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${idToken}` }
+        });
+
+        if (response.status === 404) return null;
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const data = await response.json();
+        return data.fields?.lastSync?.timestampValue || null;
+    } catch (error) {
+        console.error('Get sync time error:', error);
+        return null;
+    }
+}
+
+function markSectionDirty(section) {
+    const now = new Date().toISOString();
+    statements.setStatistic.run(`dirty_${section}`, 'true', now);
+}
+
+function markTagsDirty() {
+    const now = new Date().toISOString();
+    statements.setStatistic.run('dirty_tags', 'true', now);
+}
+
+function isTagsDirty() {
+    const dirty = statements.getStatistic.get('dirty_tags');
+    return dirty && dirty.value === 'true';
+}
+
+function clearTagsDirty() {
+    statements.deleteStatistic.run('dirty_tags');
+}
+
+// Проверка, нужно ли синхронизировать раздел
+function isSectionDirty(section) {
+    const dirty = statements.getStatistic.get(`dirty_${section}`);
+    return dirty && dirty.value === 'true';
+}
+
+// Снять флаг "грязный" после синхронизации
+function clearSectionDirty(section) {
+    statements.deleteStatistic.run(`dirty_${section}`);
+}
+
+async function syncDirtySections(uid, idToken) {
+    const freshToken = await getValidToken();
+    if (!freshToken) {
+        console.log('[!] No valid token, skipping sync');
+        return false;
+    }
+
+    const sections = ['games', 'movies', 'cartoons', 'serials', 'anime', 'books'];
+    const dirtySections = sections.filter(section => isSectionDirty(section));
+
+    if (dirtySections.length === 0) {
+        console.log('[i] No dirty sections, skipping sync');
+        return false;
+    }
+
+    console.log(`[i] Syncing dirty sections: ${dirtySections.join(', ')}`);
+
+    for (const section of dirtySections) {
+        const sectionData = statements.getDataBySection.all(section);
+        await saveSectionToFirestore(uid, freshToken, section, sectionData);
+        clearSectionDirty(section);
+    }
+
+    if (isTagsDirty()) {
+        console.log('[i] Syncing tags...');
+        await saveAllTagsToFirestore(uid, freshToken);
+        clearTagsDirty();
+    }
+
+    const dirtyExpectedReleases = statements.isExpectedReleasesDirty.get('dirty_expected_releases');
+    if (dirtyExpectedReleases && dirtyExpectedReleases.value === 'true') {
+        console.log('[i] Syncing expected releases...');
+        await saveExpectedReleasesToFirestore(uid, idToken);
+        clearExpectedReleasesDirty();
+    }
+
+    const now = new Date().toISOString();
+    await updateSyncTime(uid, freshToken, now);
+    statements.setStatistic.run('last_firestore_update', now, now);
+
+    return true;
+}
+
+async function saveAllTagsToFirestore(uid, idToken) {
+    const allTags = statements.getAllTags.all(); // [{name, count}]
+
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/sections/tags`;
+
+    const body = {
+        fields: {
+            items: {
+                arrayValue: {
+                    values: allTags.map(tag => ({
+                        mapValue: {
+                            fields: {
+                                name: { stringValue: tag.name },
+                                count: { integerValue: tag.count }
+                            }
+                        }
+                    }))
+                }
+            },
+            updatedAt: { timestampValue: new Date().toISOString() }
+        }
+    };
+
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+            'Authorization': `Bearer ${idToken}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+
+    console.log(`✅ Tags saved (${allTags.length} tags)`);
+    return true;
+}
+
+async function loadAllTagsFromFirestore(uid, idToken) {
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/sections/tags`;
+
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${idToken}` }
+        });
+
+        if (response.status === 404) return [];
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const data = await response.json();
+        const items = [];
+
+        if (data.fields && data.fields.items && data.fields.items.arrayValue) {
+            const values = data.fields.items.arrayValue.values || [];
+            for (const item of values) {
+                const fields = item.mapValue.fields;
+                items.push({
+                    name: fields.name?.stringValue || '',
+                    count: fields.count?.integerValue || 0
+                });
+            }
+        }
+
+        return items;
+    } catch (error) {
+        console.error('Error loading tags:', error);
+        return null;
+    }
+}
+
+async function refreshAccessToken(refreshToken) {
+    const url = `https://securetoken.googleapis.com/v1/token?key=${firebaseConfig.apiKey}`;
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            grant_type: 'refresh_token',
+            refresh_token: refreshToken
+        })
+    });
+
+    if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`Token refresh failed: ${error}`);
+    }
+
+    const data = await response.json();
+    return {
+        idToken: data.id_token,
+        refreshToken: data.refresh_token, // может прийти новый refresh token
+        expiresIn: data.expires_in
+    };
+}
+
+async function getValidToken() {
+    const storedUser = getStoredUser();
+    if (!storedUser || !storedUser.is_authenticated) {
+        return null;
+    }
+
+    // Пробуем сначала через Firebase SDK (если он активен)
+    try {
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+            const freshToken = await currentUser.getIdToken(true);
+            // Обновляем в БД
+            const stmt = db.prepare(`UPDATE user_session SET id_token = ? WHERE id = 1`);
+            stmt.run(freshToken);
+            console.log('[i] Token refreshed via Firebase SDK');
+            return freshToken;
+        }
+    } catch (error) {
+        console.log('[i] Firebase SDK not available, using REST API');
+    }
+
+    // Если SDK не помог — используем REST API с refresh token
+    if (storedUser.refresh_token) {
+        try {
+            const { idToken, refreshToken } = await refreshAccessToken(storedUser.refresh_token);
+
+            // Обновляем оба токена в БД
+            const stmt = db.prepare(`UPDATE user_session SET id_token = ?, refresh_token = ? WHERE id = 1`);
+            stmt.run(idToken, refreshToken || storedUser.refresh_token);
+
+            console.log('[i] Token refreshed via REST API');
+            return idToken;
+        } catch (error) {
+            console.error('[x] Failed to refresh token:', error);
+            // Токен не обновился — нужно перелогиниваться
+            clearUserSession();
+            if (win) {
+                win.webContents.send('session-expired', true);
+            }
+            return null;
+        }
+    }
+
+    console.log('[!] No refresh token available');
+    return null;
+}
+
+// Универсальная функция для парсинга сайтов
+async function parseSite(name, searchUrl, targetUrlParser, dataParser, needExtraWait = false) {
+    closeAllParsingWindows();
+    let hiddenWindow = createHiddenWindow();
+    let loadTimeout = null;
+
+    const cleanup = () => {
+        if (loadTimeout) clearTimeout(loadTimeout);
+        if (hiddenWindow && !hiddenWindow.isDestroyed()) {
+            destroyWindowCompletely(hiddenWindow);
+        }
+    };
+
+    const waitForPageLoad = () => {
+        return new Promise((resolve) => {
+            loadTimeout = setTimeout(() => {
+                console.log(`[${name}] page timeout, stopping load`);
+                hiddenWindow.webContents.stop();
+                resolve();
+            }, 5000);
+            hiddenWindow.webContents.once('did-finish-load', () => {
+                clearTimeout(loadTimeout);
+                resolve();
+            });
+        });
+    };
+
+    try {
+        trackParsingWindow(hiddenWindow);
+        console.log(`[${name}] Searching: ${searchUrl}`);
+        hiddenWindow.loadURL(searchUrl);
+        if (needExtraWait) { await new Promise(r => setTimeout(r, 2000)); }
+        await waitForPageLoad();
+        let targetUrl = await hiddenWindow.webContents.executeJavaScript(targetUrlParser);
+        if (!targetUrl) {
+            cleanup();
+            console.log(`[${name}] Info Not Found.`);
+            return { tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null };
+        }
+        console.log(`[${name}] Info Found: ${targetUrl}`);
+        hiddenWindow.loadURL(targetUrl);
+        await waitForPageLoad();
+        let result = await hiddenWindow.webContents.executeJavaScript(dataParser);
+        cleanup();
+        return result;
+    } catch (error) {
+        console.error(`[${name}] Error:`, error);
+        cleanup();
+        return { tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null };
+    }
+}
+function createHiddenWindow() {
+    let hiddenWindow = new BrowserWindow({
+        show: false,
+        width: 1280,
+        height: 800,
+        webPreferences: { nodeIntegration: false, contextIsolation: true, images: true },
+
+    });
+
+    hiddenWindow.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
+        details.requestHeaders['User-Agent'] = DEFAULT_USER_AGENT;
+        details.requestHeaders['Accept-Language'] = 'ru-RU,ru;q=0.9';
+        callback({ cancel: false, requestHeaders: details.requestHeaders });
+    });
+    return hiddenWindow;
+}
+
+// ========== кино, сериалы, мультфильы ==========
+async function fetchKinopoiskMovieTags(movieName) {
+    return parseSite(
+        'Kinopoisk',
+        `https://www.kinopoisk.ru/index.php?kp_query=${encodeURIComponent(movieName)}`,
+        `
+            (function() {
+                const mostWanted = document.querySelector('.search_results .element.most_wanted');
+                if (mostWanted) {
+                    const nameLink = mostWanted.querySelector('.name a');
+                    if (nameLink && nameLink.href) {
+                        let cleanUrl = nameLink.href.replace(/\\/sr\\/\\d+/, '');
+                        return cleanUrl;
+                    }
+                }
+                const anyFilmLink = document.querySelector('a[href*="/film/"]');
+                if (anyFilmLink) {
+                    let cleanUrl = anyFilmLink.href.replace(/\\/sr\\/\\d+/, '');
+                    return cleanUrl;
+                }
+                return null;
+            })()
+        `,
+        `
+            (function() {
+                // Полное название фильма
+                let fullTitle = '';
+                const titleElement = document.querySelector('h1[itemprop="name"] span');
+                if (titleElement) {
+                    fullTitle = titleElement.textContent.trim();
+                }
+                if (!fullTitle) {
+                    const titleH1 = document.querySelector('h1[itemprop="name"]');
+                    if (titleH1) {
+                        fullTitle = titleH1.textContent.trim();
+                    }
+                }
+                
+                // Теги (жанры)
+                const tags = [];
+                const genresBlock = document.querySelector('[data-test-id="genres"]');
+                if (genresBlock) {
+                    genresBlock.querySelectorAll('a').forEach(el => {
+                        const text = el.textContent.trim();
+                        if (text && text.length < 30 && !tags.includes(text)) {
+                            tags.push(text);
+                        }
+                    });
+                }
+                
+                if (tags.length === 0) {
+                    const fallbackSelectors = [
+                        '.styles_rowDark__Q3Dh2 a[href*="/genre/"]',
+                        '[class*="genre"] a'
+                    ];
+                    for (const selector of fallbackSelectors) {
+                        const elements = document.querySelectorAll(selector);
+                        elements.forEach(el => {
+                            const text = el.textContent.trim();
+                            if (text && text.length < 30 && !tags.includes(text)) {
+                                tags.push(text);
+                            }
+                        });
+                        if (tags.length) break;
+                    }
+                }
+                
+                // Описание
+                let description = '';
+                const descElement = document.querySelector('[data-test-id="synopsis"]');
+                if (descElement) {
+                    description = descElement.textContent.trim().substring(0, 500);
+                }
+                
+                // Обложка
+                let coverUrl = '';
+                const posterElement = document.querySelector('.film-poster');
+                if (posterElement && posterElement.src) {
+                    coverUrl = posterElement.src;
+                    if (coverUrl.startsWith('//')) coverUrl = 'https:' + coverUrl;
+                }
+                if (!coverUrl) {
+                    const imgElement = document.querySelector('[class*="poster"] img');
+                    if (imgElement && imgElement.src) {
+                        coverUrl = imgElement.src;
+                        if (coverUrl.startsWith('//')) coverUrl = 'https:' + coverUrl;
+                    }
+                }
+                
+                // ДАТА ПРЕМЬЕРЫ
+                let releaseDate = null;
+                const premiereBlock = document.querySelector('[data-test-id="worldPremieres"]');
+                if (premiereBlock) {
+                    const dateLink = premiereBlock.querySelector('a[href*="/dates/"]');
+                    if (dateLink) {
+                        const dateText = dateLink.textContent.trim();
+                        
+                        const months = {
+                            'января': '01', 'февраля': '02', 'марта': '03', 'апреля': '04',
+                            'мая': '05', 'июня': '06', 'июля': '07', 'августа': '08',
+                            'сентября': '09', 'октября': '10', 'ноября': '11', 'декабря': '12'
+                        };
+                        
+                        const parts = dateText.split(/\\s+/);
+                        let day = null, monthNum = null, year = null;
+                        
+                        for (const part of parts) {
+                            if (/^\\d{1,2}$/.test(part) && !day) {
+                                day = part.padStart(2, '0');
+                            } else if (/^\\d{4}$/.test(part) && !year) {
+                                year = part;
+                            } else if (months[part] && !monthNum) {
+                                monthNum = months[part];
+                            }
+                        }
+                        
+                        if (day && monthNum && year) {
+                            releaseDate = year + '-' + monthNum + '-' + day;
+                        }
+                    }
+                }
+                
+                return {
+                    tags: tags.slice(0, 10),
+                    description: description,
+                    coverUrl: coverUrl,
+                    fullTitle: fullTitle,
+                    releaseDate: releaseDate
+                };
+            })()
+        `
+    );
+}
+// ========== +++++АНИМЕ информация ==========
+async function fetchYummyAniTags(animeName) {
+    return parseSite(name = 'YummyAni',
+        searchUrl = `https://old.yummyani.me/search?word=${encodeURIComponent(animeName)}`,
+        targetUrlParser = `
+            (function() {
+                const firstCard = document.querySelector('.grid-container.animes-search .anime-column');
+                if (!firstCard) return null;
+                const link = firstCard.querySelector('a.image-block');
+                return link ? link.href : null;
+            })()
+        `,
+        dataParser = `
+            (function() {
+                let fullTitle = '';
+                const titleElement = document.querySelector('h1[itemprop="name"]');
+                if (titleElement) fullTitle = titleElement.textContent.trim();
+                
+                const tags = [];
+                const genreContainer = document.querySelector('.categories-list.no-comma');
+                if (genreContainer) {
+                    genreContainer.querySelectorAll('ul li a.badge').forEach(el => {
+                        const text = el.textContent.trim();
+                        if (text && !tags.includes(text)) tags.push(text);
+                    });
+                }
+                
+                let coverUrl = '';
+        
+                // Пробуем img с классом bordered-top
+                const coverImg = document.querySelector('img.bordered-top');
+                if (coverImg && coverImg.src) {
+                    coverUrl = coverImg.src;
+                }
+                
+                // Если нет, пробуем data-full
+                if (!coverUrl) {
+                    const fullImg = document.querySelector('[data-full]');
+                    if (fullImg && fullImg.getAttribute('data-full')) {
+                        coverUrl = fullImg.getAttribute('data-full');
+                    }
+                }
+                
+                // Если всё ещё нет, ищем любое изображение в блоке
+                if (!coverUrl) {
+                    const anyImg = document.querySelector('.image-block img, .bordered-top');
+                    if (anyImg && anyImg.src) {
+                        coverUrl = anyImg.src;
+                    }
+                }
+                
+                if (coverUrl && coverUrl.startsWith('//')) coverUrl = 'https:' + coverUrl;
+                
+                let releaseDate = null;
+                const timeCounter = document.querySelector('time-counter');
+                if (timeCounter && timeCounter.getAttribute('data-time')) {
+                    const timestamp = timeCounter.getAttribute('data-time');
+                    if (timestamp) {
+                        const date = new Date(parseInt(timestamp) * 1000);
+                        if (!isNaN(date.getTime())) releaseDate = date.toISOString().split('T')[0];
+                    }
+                }
+                
+                return { tags: tags.slice(0, 12), description: '', coverUrl, fullTitle, releaseDate };
+            })()
+        `);
+}
+
+// ========== +++++ИГРЫ ТЕГИ ==========
+async function fetchSteamGameTags(gameName) {
+    return new Promise(async (resolve) => {
+        let hiddenWindow = null;
+        let isResolved = false;
+        let loadTimeout = null;
+        let isLoaded = false;
+        let currentUrl;
+
+        const finish = (result) => {
+            if (isResolved) return;
+            isResolved = true;
+            if (loadTimeout) clearTimeout(loadTimeout);
+            if (hiddenWindow && !hiddenWindow.isDestroyed()) {
+                hiddenWindow.close();
+            }
+            resolve(result);
+        };
+
+        try {
+            // 1. Поиск игры через storesearch API (только для получения ID)
+            const searchUrl = `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(gameName)}&cc=ru&l=russian`;
+            const searchResponse = await fetch(searchUrl);
+            const searchData = await searchResponse.json();
+
+            if (!searchData.items || searchData.items.length === 0) {
+                console.log(`[Steam] Game not found: ${gameName}`);
+                finish({ tags: [], coverUrl: '', fullTitle: '', releaseDate: null, description: '' });
+                return;
+            }
+            const game = searchData.items[0];
+            const appId = game.id;
+            const fullTitle = game.name;
+
+            console.log(`[Steam] Found ID for "${gameName}": ${appId}`);
+            console.log(`[Steam] Full title: "${fullTitle}"`);
+
+            // 2. Открываем страницу игры и парсим ВСЁ с неё
+            const gameUrl = `https://store.steampowered.com/app/${appId}/?l=russian`;
+
+            hiddenWindow = new BrowserWindow({
+                show: false,
+                width: 1280,
+                height: 800,
+                webPreferences: {
+                    nodeIntegration: false,
+                    contextIsolation: true,
+                    images: true
+                }
+            });
+
+            hiddenWindow.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
+                details.requestHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+                details.requestHeaders['Accept-Language'] = 'ru-RU,ru;q=0.9';
+                callback({ cancel: false, requestHeaders: details.requestHeaders });
+            });
+
+            hiddenWindow.loadURL(gameUrl);
+            console.log(`[Steam] Page loading started`);
+
+            const waitForLoad = new Promise((resolve) => {
+                hiddenWindow.webContents.once('did-finish-load', () => {
+                    console.log(`[Steam] Page finished loading`);
+                    isLoaded = true;
+                    resolve();
+                });
+
+                loadTimeout = setTimeout(() => {
+                    if (!isLoaded) {
+                        console.log(`[Steam] Page timeout (3s), stopping load`);
+                        hiddenWindow.webContents.stop();
+                        isLoaded = true;
+                        resolve();
+                    }
+                }, 3000);
+            });
+
+            await waitForLoad;
+            if (loadTimeout) clearTimeout(loadTimeout);
+
+            currentUrl = hiddenWindow.webContents.getURL();
+            if (!currentUrl || currentUrl === 'about:blank' || currentUrl.includes('error')) {
+                console.log('[Steam] Page not loaded properly, finishing with empty result');
+                finish({ tags: [], coverUrl: '', fullTitle: '', releaseDate: null, description: '' });
+                return;
+            }
+
+            // Парсим ВСЕ данные со страницы
+            const gameData = await hiddenWindow.webContents.executeJavaScript(`
+                (function() {
+                    // Обложка
+                    let coverUrl = '';
+                    const headerImg = document.querySelector('.game_header_image_full');
+                    if (headerImg && headerImg.src) {
+                        coverUrl = headerImg.src;
+                    }
+                    
+                    // Дата релиза
+                    let releaseDate = null;
+                    const releaseDateEl = document.querySelector('.release_date .date');
+                    if (releaseDateEl) {
+                        const dateText = releaseDateEl.textContent.trim();
+                        // Парсим "11 авг. 2022 г."
+                        const months = {
+                            'янв': '01', 'фев': '02', 'мар': '03', 'апр': '04',
+                            'мая': '05', 'май': '05', 'июн': '06', 'июл': '07',
+                            'авг': '08', 'сен': '09', 'окт': '10', 'ноя': '11', 'дек': '12'
+                        };
+                        const match = dateText.match(/(\\d{1,2})\\s+(\\w+)\\.?\\s+(\\d{4})/);
+                        if (match) {
+                            const day = match[1].padStart(2, '0');
+                            const monthName = match[2].toLowerCase().substring(0, 3);
+                            const year = match[3];
+                            const month = months[monthName];
+                            if (month) {
+                                releaseDate = year + '-' + month + '-' + day;
+                            }
+                        }
+                    }
+                    
+                    // Теги (Популярные метки)
+                    const tags = [];
+                    const tagsContainer = document.querySelector('.glance_tags.popular_tags, .popular_tags_ctn');
+                    if (tagsContainer) {
+                        const tagElements = tagsContainer.querySelectorAll('a.app_tag');
+                        for (const el of tagElements) {
+                            const tagText = el.textContent.trim();
+                            if (tagText && tagText !== '+' && el.style.display !== 'none') {
+                                tags.push(tagText);
+                            }
+                        }
+                    }
+                    
+                    // Описание
+                    let description = '';
+                    const descElement = document.querySelector('.game_description_snippet');
+                    if (descElement) {
+                        description = descElement.textContent.trim();
+                    }
+                    
+                    return {
+                        coverUrl: coverUrl,
+                        releaseDate: releaseDate,
+                        tags: tags.slice(0, 12),
+                        description: description,
+                        fullTitle: ''
+                    };
+                })();
+            `);
+
+            console.log(`[Steam] Cover: ${gameData.coverUrl}`);
+            console.log(`[Steam] Release date: ${gameData.releaseDate || 'not found'}`);
+            console.log(`[Steam] Tags:`, gameData.tags);
+            console.log(`[Steam] Description: ${gameData.description.substring(0, 100)}...`);
+
+            finish({
+                tags: gameData.tags,
+                coverUrl: gameData.coverUrl,
+                fullTitle: fullTitle,
+                releaseDate: gameData.releaseDate,
+                description: gameData.description
+            });
+
+        } catch (error) {
+            console.error('[Steam] Error:', error);
+            finish({ tags: [], coverUrl: '', fullTitle: '', releaseDate: null, description: '' });
+        }
+    });
+}
+
+async function fetchKupikodPrice(gameName) {
+    return parseSite(
+        'Kupikod',
+        `https://steam.kupikod.com/ru-ru/games`,
+        // targetUrlParser - имитируем ввод и возвращаем ссылку
+        `
+    (function() {
+        return new Promise((resolve) => {
+            const input = document.querySelector('input[placeholder="Поиск"], input[data-testid="input"]');
+            if (!input) {
+                resolve(null);
+                return;
+            }
+            
+            // Фокус
+            input.focus();
+            
+            // === КЛЮЧЕВОЙ МОМЕНТ ===
+            // Для controlled components в React нужно использовать setter
+            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+                window.HTMLInputElement.prototype, 
+                'value'
+            ).set;
+            
+            // Устанавливаем значение через нативный setter
+            nativeInputValueSetter.call(input, "${gameName.replace(/"/g, '\\"')}");
+            
+            // Триггерим событие input, чтобы React узнал об изменении
+            input.dispatchEvent(new Event('input', { bubbles: true }));
+            
+            // Даём React время на обновление
+            setTimeout(() => {
+                const results = document.querySelectorAll('.main-search__results a.main-search__result-item');
+                if (results.length === 0) {
+                    resolve(null);
+                    return;
+                }
+                
+                const firstResult = results[0];
+                const href = firstResult.getAttribute('href');
+                resolve(href);
+            }, 2000);
+        });
+    })()
+`,
+        // dataParser - парсим цену
+        // dataParser - парсим данные со страницы игры
+        `
+    (function() {
+        // Название
+        let fullTitle = '';
+        const titleEl = document.querySelector('h1.product__title span');
+        if (titleEl) {
+            fullTitle = titleEl.textContent.trim();
+        }
+        
+        // Обложка
+        let coverUrl = '';
+        const coverEl = document.querySelector('img.product__image');
+        if (coverEl && coverEl.src) {
+            coverUrl = coverEl.src;
+        }
+        
+        // Теги
+        const tags = [];
+        const tagsContainer = document.querySelector('.product__tags');
+        if (tagsContainer) {
+            const tagElements = tagsContainer.querySelectorAll('.product__tag');
+            tagElements.forEach(el => {
+                const text = el.textContent.trim();
+                if (text && !tags.includes(text)) {
+                    tags.push(text);
+                }
+            });
+        }
+        
+        // Дата релиза
+        let releaseDate = null;
+        const releaseItem = document.querySelector('[data-test="game-info-release-date"]');
+        if (releaseItem) {
+            const valueEl = releaseItem.querySelector('.game-info__value');
+            if (valueEl) {
+                const dateText = valueEl.textContent.trim();
+                // Парсим дату в формате "17 мая 2021 г."
+                const months = {
+                    'января': '01', 'февраля': '02', 'марта': '03', 'апреля': '04',
+                    'мая': '05', 'июня': '06', 'июля': '07', 'августа': '08',
+                    'сентября': '09', 'октября': '10', 'ноября': '11', 'декабря': '12'
+                };
+                
+                // Убираем "г." в конце
+                const cleanDate = dateText.replace(/\\s*г\\.?\\s*$/, '');
+                const parts = cleanDate.split(/\\s+/);
+                
+                let day = null, monthNum = null, year = null;
+                for (const part of parts) {
+                    if (/^\\d{1,2}$/.test(part) && !day) {
+                        day = part.padStart(2, '0');
+                    } else if (/^\\d{4}$/.test(part) && !year) {
+                        year = part;
+                    } else if (months[part] && !monthNum) {
+                        monthNum = months[part];
+                    }
+                }
+                
+                if (day && monthNum && year) {
+                    releaseDate = year + '-' + monthNum + '-' + day;
+                }
+            }
+        }
+        
+        return { 
+            tags: tags.slice(0, 10),
+            description: '',
+            coverUrl: coverUrl,
+            fullTitle: fullTitle,
+            releaseDate: releaseDate
+        };
+    })()
+`
+    );
+}
+// ========== +++++КНИГИ ТЕГИ ==========
+async function fetchLitresBookTags(bookName) {
+    return parseSite(
+        'Litres',
+        `https://www.litres.ru/search/?q=${encodeURIComponent(bookName)}&languages=ru&art_types=text_book&limit=10`,
+        `
+            (function() {
+                const allLinks = document.querySelectorAll('a[href*="/book/"]');
+                for (const link of allLinks) {
+                    const href = link.href;
+                    if (!href.includes('erid=') && !href.includes('banner') && !href.includes('campaign')) {
+                        return href.startsWith('http') ? href : 'https://www.litres.ru' + href;
+                    }
+                }
+                return null;
+            })()
+        `,
+        `
+            (function() {
+                let fullTitle = '';
+                const titleElement = document.querySelector('h1[itemprop="name"]');
+                if (titleElement) fullTitle = titleElement.textContent.trim();
+                
+                const tags = [];
+                const tagSelectors = [
+                    '.BookGenresAndTags_genresList__rd8vU a',
+                    '[class*="genresList"] a',
+                    'a[href*="/genre/"]',
+                    'a[href*="/tags/"]'
+                ];
+                
+                for (const selector of tagSelectors) {
+                    const elements = document.querySelectorAll(selector);
+                    for (const el of elements) {
+                        const text = el.textContent.trim();
+                        if (text && text !== 'Только на Литрес' && text.length < 40 && !tags.includes(text)) {
+                            tags.push(text);
+                        }
+                    }
+                    if (tags.length) break;
+                }
+                
+                let description = '';
+                const descEl = document.querySelector('.BookDescription_text, [class*="description"] p');
+                if (descEl) description = descEl.textContent.trim().substring(0, 500);
+                
+                let coverUrl = '';
+                const coverEl = document.querySelector('.AdaptiveCover_image__f_21W, .ArtCover_cover__image__ClWcc, [class*="cover"] img');
+                if (coverEl && coverEl.src) coverUrl = coverEl.src;
+                
+                return { 
+                    tags: tags.slice(0, 10), 
+                    description: description, 
+                    coverUrl: coverUrl,
+                    fullTitle: fullTitle,
+                    releaseDate: null
+                };
+            })()
+        `,
+        true
+    );
+}
+
+async function fetchChitaiGorodBook(bookName) {
+    return parseSite(
+        'ChitaiGorod',
+        `https://www.chitai-gorod.ru/search?phrase=${encodeURIComponent(bookName)}`,
+        // targetUrlParser - ищем ссылку на книгу
+        `
+            (function() {
+                const productWrapper = document.querySelector('.product-card__image-wrapper');
+                if (!productWrapper) {
+                    return null;
+                }
+                
+                const link = productWrapper.querySelector('a');
+                return link ? link.href : null;
+            })()
+        `,
+        // dataParser - парсим данные со страницы книги
+        `
+            (function() {
+                // Название (очищаем от возрастного рейтинга)
+                let fullTitle = '';
+                const titleEl = document.querySelector('h1.product-detail-page__title');
+                if (titleEl) {
+                    // Берём текст, но убираем возрастной рейтинг (он в отдельном div)
+                    fullTitle = titleEl.childNodes[0]?.textContent?.trim() || titleEl.textContent.trim();
+                    // Если остался мусор, чистим
+                    fullTitle = fullTitle.replace(/\\d+\\+/, '').trim();
+                }
+                
+                // Обложка - берём из srcset первый URL (самый маленький или большой)
+                let coverUrl = '';
+                const previewDiv = document.querySelector('.product-preview');
+                if (previewDiv) {
+                    const img = previewDiv.querySelector('img');
+                    if (img && img.srcset) {
+                        // srcset содержит URL вида "https://... 1x, https://... 2x"
+                        const urls = img.srcset.split(',');
+                        if (urls.length > 0) {
+                            // Берём первый URL (обычно 1x)
+                            coverUrl = urls[0].trim().split(' ')[0];
+                        }
+                    } else if (img && img.src) {
+                        coverUrl = img.src;
+                    }
+                }
+                
+                // Теги
+                const tags = [];
+                const tagsContainer = document.querySelector('ul.product-tag-list');
+                if (tagsContainer) {
+                    const tagElements = tagsContainer.querySelectorAll('li a.product-tag');
+                    tagElements.forEach(el => {
+                        const text = el.textContent.trim();
+                        if (text && !tags.includes(text)) {
+                            tags.push(text);
+                        }
+                    });
+                }
+                
+                return { 
+                    tags: tags.slice(0, 10),
+                    description: '',
+                    coverUrl: coverUrl,
+                    fullTitle: fullTitle,
+                    releaseDate: null  // на странице нет даты выхода в доступном виде
+                };
+            })()
+        `
+    );
+}
+
+async function fetchFilmRuSerialsTags(serialName) {
+    return parseSite(
+        'FilmRu',
+        `https://www.film.ru/search/result?text=${encodeURIComponent(serialName)}&type=all`,
+        `
+            (function() {
+                const allLinks = document.querySelectorAll('a[href*="/movies/"], a[href*="/serials/"], a[href*="/cartoons/"]');
+                for (const link of allLinks) {
+                    if (link.href && link.querySelector('img')) {
+                        return link.href;
+                    }
+                }
+                const anyImageLink = document.querySelector('a img')?.closest('a');
+                return anyImageLink ? anyImageLink.href : null;
+            })()
+        `,
+        `
+            (function() {
+                function parseRussianDate(dateText) {
+                    const months = {
+                        'января': '01', 'февраля': '02', 'марта': '03', 'апреля': '04',
+                        'мая': '05', 'июня': '06', 'июля': '07', 'августа': '08',
+                        'сентября': '09', 'октября': '10', 'ноября': '11', 'декабря': '12'
+                    };
+                    const parts = dateText.split(/\\s+/);
+                    let day = null, monthNum = null, year = null;
+                    for (const part of parts) {
+                        if (/^\\d{1,2}$/.test(part) && !day) day = part.padStart(2, '0');
+                        else if (/^\\d{4}$/.test(part) && !year) year = part;
+                        else if (months[part] && !monthNum) monthNum = months[part];
+                    }
+                    if (day && monthNum && year) return year + '-' + monthNum + '-' + day;
+                    return null;
+                }
+                
+                let fullTitle = '';
+                const titleElement = document.querySelector('h1');
+                if (titleElement) {
+                    fullTitle = titleElement.textContent.trim();
+                    fullTitle = fullTitle.replace(/\\(сериал.*?\\)/, '').trim();
+                }
+                
+                let coverUrl = '';
+                const posterBlock = document.querySelector('a.wrapper_movies_poster');
+                if (posterBlock) {
+                    coverUrl = posterBlock.getAttribute('data-src');
+                    if (coverUrl && !coverUrl.startsWith('http')) {
+                        coverUrl = 'https://www.film.ru' + coverUrl;
+                    }
+                    coverUrl = coverUrl.replace('/styles/thumb_260x400/', '/');
+                }
+                
+                const tags = [];
+                const blockInfo = document.querySelector('.block_info');
+                if (blockInfo) {
+                    blockInfo.querySelectorAll('a').forEach(link => {
+                        const text = link.textContent.trim();
+                        if (text && text !== '18+' && text.length < 30 && !tags.includes(text)) {
+                            tags.push(text);
+                        }
+                    });
+                }
+                
+                let releaseDate = null;
+                const episodesBlock = document.querySelector('.wrapper_movies_soon_episodes.active');
+                if (episodesBlock) {
+                    const allDivs = episodesBlock.querySelectorAll('div');
+                    let targetElement = allDivs.length > 0 ? allDivs[allDivs.length - 1] : episodesBlock.querySelector('a');
+                    if (targetElement) {
+                        const dateSpan = targetElement.querySelector('span:last-child');
+                        if (dateSpan) {
+                            const parsedDate = parseRussianDate(dateSpan.textContent.trim());
+                            if (parsedDate) releaseDate = parsedDate;
+                        }
+                    }
+                }
+                
+                if (!releaseDate) {
+                    const premiereBlock = document.querySelector('.block_table');
+                    if (premiereBlock) {
+                        const rows = premiereBlock.querySelectorAll('div');
+                        for (let i = 0; i < rows.length; i++) {
+                            if (rows[i].textContent.trim() === 'премьера' && rows[i + 1]) {
+                                const dateText = rows[i + 1].textContent.trim();
+                                const match = dateText.match(/(\\d{2})\\.(\\d{2})\\.(\\d{4})/);
+                                if (match) {
+                                    releaseDate = match[3] + '-' + match[2] + '-' + match[1];
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                }
+                
+                if (!releaseDate) {
+                    const titleH1 = document.querySelector('h1');
+                    if (titleH1) {
+                        const yearMatch = titleH1.textContent.match(/(\\d{4})/);
+                        if (yearMatch) releaseDate = yearMatch[1] + '-01-01';
+                    }
+                }
+                
+                return { 
+                    tags: tags.slice(0, 10), 
+                    description: '', 
+                    coverUrl: coverUrl,
+                    fullTitle: fullTitle,
+                    releaseDate: releaseDate
+                };
+            })()
+        `
+    );
+}
+
+async function fetchCardData(cardName, section) {
+    switch (section) {
+        case 'anime':
+            const animeResult = await fetchYummyAniTags(cardName);
+            return { tags: animeResult?.tags || [], coverUrl: animeResult?.coverUrl || '', fullTitle: animeResult?.fullTitle || '', releaseDate: animeResult?.releaseDate || null };
+        case 'games':
+            let gameResult = await fetchSteamGameTags(cardName);
+            if (gameResult == null || gameResult.tags === null || gameResult.tags.length === 0) {
+                gameResult = await fetchKupikodPrice(cardName);
+            }
+            return { tags: gameResult?.tags || [], coverUrl: gameResult?.coverUrl || '', fullTitle: gameResult?.fullTitle || '', releaseDate: gameResult?.releaseDate || null };
+        case 'movies':
+        case 'serials':
+        case 'cartoons':
+            let filmResult = await fetchFilmRuSerialsTags(cardName);
+            if (filmResult == null || filmResult.tags === null || filmResult.tags.length === 0) {
+                filmResult = await fetchKinopoiskMovieTags(cardName);
+            }
+            return { tags: filmResult?.tags || [], coverUrl: filmResult?.coverUrl || '', fullTitle: filmResult?.fullTitle || '', releaseDate: filmResult?.releaseDate || null };
+        case 'books':
+            let bookResult = await fetchChitaiGorodBook(cardName);
+            if (bookResult == null || bookResult.tags === null || bookResult.tags.length === 0) {
+                bookResult = await fetchLitresBookTags(cardName);
+            }
+            return { tags: bookResult?.tags || [], coverUrl: bookResult?.coverUrl || '', fullTitle: bookResult?.fullTitle || '', releaseDate: bookResult?.releaseDate || null };
+        default:
+            return { tags: [], coverUrl: '', fullTitle: '', releaseDate: null };
+    }
+}
+
+async function updateAllReleaseDates() {
+    const lastUpdate = statements.getStatistic.get('last_release_update');
+    const lastDate = lastUpdate ? new Date(lastUpdate.value) : new Date(0);
+    const now = new Date();
+    const daysDiff = (now - lastDate) / (1000 * 60 * 60 * 24);
+
+    // Раз в 7 дней
+    if (daysDiff < 7) return;
+
+    console.log('[Release] Updating all release dates...');
+
+    const cards = db.prepare(`
+        SELECT name, section FROM data_cards 
+        WHERE ((status = 'Ожидается' OR status = 'В процессе') and section <> 'games')
+        OR status = 'Ожидается' and section = 'games'
+    `).all();
+
+    for (const card of cards) {
+        try {
+            let cardData = await fetchCardData(card.name, card.section);
+            let releaseDate = cardData.releaseDate;
+            if (releaseDate) {
+                const existing = statements.getExpectedRelease.get(card.name, card.section);
+                if (!existing || existing.release_date !== releaseDate) {
+                    statements.setExpectedRelease.run(card.name, card.section, releaseDate, existing?.last_notification_date || null);
+                    console.log(`[Release] Updated: ${card.name} -> ${releaseDate}`);
+                    markExpectedReleasesDirty();
+                }
+            }
+        } catch (error) {
+            console.error(`[Release] Failed to update ${card.name}:`, error);
+        }
+
+        // Задержка между запросами, чтобы не забанили
+        await new Promise(resolve => setTimeout(resolve, 1000));
+    }
+
+    statements.setStatistic.run('last_release_update', now.toISOString(), now.toISOString());
+    console.log('[Release] Update completed');
+}
+
+async function saveExpectedReleasesToFirestore(uid, idToken) {
+    const releases = statements.getAllExpectedReleases.all();
+
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/sections/expected_releases`;
+
+    const body = {
+        fields: {
+            items: {
+                arrayValue: {
+                    values: releases.map(release => ({
+                        mapValue: {
+                            fields: {
+                                card_name: { stringValue: release.card_name },
+                                section: { stringValue: release.section },
+                                release_date: { stringValue: release.release_date },
+                                last_notification_date: { stringValue: release.last_notification_date || '' }
+                            }
+                        }
+                    }))
+                }
+            },
+            updatedAt: { timestampValue: new Date().toISOString() }
+        }
+    };
+
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+            'Authorization': `Bearer ${idToken}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+
+    console.log(`✅ Expected releases saved (${releases.length} items)`);
+    return true;
+}
+
+async function loadExpectedReleasesFromFirestore(uid, idToken) {
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/sections/expected_releases`;
+
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${idToken}` }
+        });
+
+        if (response.status === 404) return [];
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        const data = await response.json();
+        const releases = [];
+
+        if (data.fields && data.fields.items && data.fields.items.arrayValue) {
+            const values = data.fields.items.arrayValue.values || [];
+            for (const item of values) {
+                const fields = item.mapValue.fields;
+                releases.push({
+                    card_name: fields.card_name?.stringValue || '',
+                    section: fields.section?.stringValue || '',
+                    release_date: fields.release_date?.stringValue || '',
+                    last_notification_date: fields.last_notification_date?.stringValue || null
+                });
+            }
+        }
+
+        return releases;
+    } catch (error) {
+        console.error('Error loading expected releases:', error);
+        return null;
+    }
+}
+
+function markExpectedReleasesDirty() {
+    const now = new Date().toISOString();
+    statements.setExpectedReleasesDirty.run(now);
+    console.log('[i] Expected releases marked as dirty');
+}
+
+function clearExpectedReleasesDirty() {
+    statements.deleteStatistic.run('dirty_expected_releases');
+    console.log('[i] Expected releases dirty flag cleared');
+}
+
+// Принудительная синхронизация ВСЕХ разделов
+ipcMain.handle('sync-all-sections-to-cloud', async () => {
+
+
+    const storedUser = getStoredUser();
+    if (!storedUser || !storedUser.is_authenticated || !storedUser.id_token) {
+        return { success: false, error: 'Not authenticated' };
+    }
+
+    const freshToken = await getValidToken();
+    if (!freshToken) {
+        return { success: false, error: 'No valid token' };
+    }
+
+    try {
+        const sections = ['games', 'movies', 'cartoons', 'serials', 'anime', 'books'];
+        for (const section of sections) {
+            const sectionData = statements.getDataBySection.all(section);
+            await saveSectionToFirestore(storedUser.uid, freshToken, section, sectionData);
+        }
+        await saveAllTagsToFirestore();
+        const now = new Date().toISOString();
+        await updateSyncTime(storedUser.uid, freshToken, now);
+
+        console.log('✅ All sections synced to cloud');
+        return { success: true };
+    } catch (error) {
+        console.error('[x] Failed to sync all sections:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+ipcMain.handle('update-data-description', async (event, section, name, description) => {
+    const stmt = db.prepare('UPDATE data_cards SET description = ? WHERE name = ? AND section = ?');
+    const result = stmt.run(description, name, section);
+    markSectionDirty(section);
+    const now = new Date().toISOString();
+    statements.setStatistic.run('last_firestore_update', now, now);
+    return result;
+});
+
+ipcMain.handle('get-all-tags', async () => {
+    return statements.getAllTags.all();
+});
+
+ipcMain.handle('search-tags', async (event, query) => {
+    return statements.searchTags.all(`${query}%`).map(row => row.name);
+});
+
+ipcMain.handle('get-card-tags', async (event, section, cardName) => {
+    return statements.getTagsByCard.all(cardName).map(row => row.tag_name);
+});
+
+ipcMain.handle('update-card-tags', async (event, section, cardName, newTags) => {
+    const oldTags = statements.getTagsByCard.all(cardName).map(row => row.tag_name);
+    const removedTags = oldTags.filter(tag => !newTags.includes(tag));
+    const addedTags = newTags.filter(tag => !oldTags.includes(tag));
+    statements.clearCardTags.run(cardName);
+
+    for (const tag of newTags) {
+        statements.addTagToCard.run(cardName, tag);
+    }
+
+    for (const tag of removedTags) {
+        statements.removeTagCount.run(tag);
+        statements.deleteTagIfZero.run(tag);
+    }
+
+    for (const tag of addedTags) {
+        statements.addOrUpdateTag.run(tag);
+    }
+
+    markSectionDirty(section);
+    markTagsDirty();
+    const now = new Date().toISOString();
+    statements.setStatistic.run('last_firestore_update', now, now);
+
+    return { success: true };
+});
+ipcMain.handle('search-tags-web', async (event, title, section) => {
+    const searchQuery = `${title} ${section === 'games' ? 'game' : section === 'movies' ? 'film' : 'genre'}`;
+
+    // Простой запрос без лишних параметров
+    const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(searchQuery)}&format=json`;
+
+    try {
+        const response = await fetch(url);
+        const data = await response.json();
+
+        const tags = [];
+
+        // Проверяем RelatedTopics
+        if (data.RelatedTopics) {
+            for (const topic of data.RelatedTopics) {
+                if (typeof topic === 'object' && topic.Text) {
+                    // Извлекаем слова до 20 символов
+                    const match = topic.Text.match(/[А-Яа-яA-Za-z]{3,20}/g);
+                    if (match) {
+                        tags.push(...match);
+                    }
+                }
+            }
+        }
+
+        // Убираем дубликаты и ограничиваем
+        const uniqueTags = [...new Set(tags)].slice(0, 8);
+        console.log('Теги:', uniqueTags);
+        return uniqueTags;
+
+    } catch (error) {
+        console.error('Ошибка:', error);
+        return [];
+    }
+});
+
+ipcMain.handle('fetch-steam-tags', async (event, title) => {
+    return await fetchSteamGameTags(title);
+});
+
+ipcMain.handle('search-litres-book', async (event, title) => {
+    return await fetchLitresBookTags(title);
+});
+
+ipcMain.handle('search-kinopoisk-movie', async (event, title) => {
+    return await fetchKinopoiskMovieTags(title);
+});
+
+// ========== ОБРАБОТЧИК IPC ДЛЯ YUMMYANI ==========
+ipcMain.handle('search-yummyani-anime', async (event, title) => {
+    return await fetchYummyAniTags(title);
+});
+
+ipcMain.handle('search-filmru-serial', async (event, title) => {
+    return await fetchFilmRuSerialsTags(title);
+});
 
 ipcMain.handle('get-github-downloads', async () => {
     try {
@@ -1439,1727 +2982,37 @@ ipcMain.handle('get-all-local-data', async () => {
     return getAllLocalData();
 });
 
-async function saveSectionToFirestore(uid, idToken, section, items) {
-    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/sections/${section}`;
+ipcMain.handle('save-release-date', async (event, cardName, section, releaseDate) => {
+    // Проверяем, существует ли карточка и имеет ли она статус "Ожидается" или "В процессе"
+    const card = statements.getStatusByNameAndSection.get(cardName, section);
 
-    const body = {
-        fields: {
-            items: {
-                arrayValue: {
-                    values: items.map(item => {
-                        // Преобразуем tags из строки в массив
-                        let tagsArray = [];
-                        if (item.tags) {
-                            if (typeof item.tags === 'string') {
-                                tagsArray = item.tags.split(',').filter(t => t);
-                            } else if (Array.isArray(item.tags)) {
-                                tagsArray = item.tags;
-                            }
-                        }
-
-                        return {
-                            mapValue: {
-                                fields: {
-                                    name: { stringValue: item.name || '' },
-                                    icoUrl: { stringValue: item.icoUrl || '' },
-                                    rating: { stringValue: item.rating || '0' },
-                                    status: { stringValue: item.status || 'Уточнить' },
-                                    description: { stringValue: item.description || '' },
-                                    tags: {
-                                        arrayValue: {
-                                            values: tagsArray.map(tag => ({ stringValue: tag }))
-                                        }
-                                    }
-                                }
-                            }
-                        };
-                    })
-                }
-            },
-            updatedAt: { timestampValue: new Date().toISOString() }
+    if (card) {
+        // Если статус подходящий — сохраняем/обновляем в expected_releases
+        const existing = statements.getExpectedRelease.get(cardName, section);
+        if (existing) {
+            statements.setExpectedRelease.run(cardName, section, releaseDate, existing.last_notification_date);
+        } else {
+            statements.setExpectedRelease.run(cardName, section, releaseDate, null);
         }
-    };
-
-    const response = await fetch(url, {
-        method: 'PATCH',
-        headers: {
-            'Authorization': `Bearer ${idToken}`,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(body)
-    });
-
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
+        markExpectedReleasesDirty();
+        console.log(`[Release] Saved date for "${cardName}": ${releaseDate}`);
     }
-
-    console.log(`✅ Section ${section} saved (${items.length} items)`);
-    return true;
-}
-
-async function getSectionFromFirestore(uid, idToken, section) {
-    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/sections/${section}`;
-
-    try {
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: { 'Authorization': `Bearer ${idToken}` }
-        });
-
-        if (response.status === 404) return [];
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-        const data = await response.json();
-        const items = [];
-
-        if (data.fields && data.fields.items && data.fields.items.arrayValue) {
-            const values = data.fields.items.arrayValue.values || [];
-            for (const item of values) {
-                const fields = item.mapValue.fields;
-                // Читаем теги из массива
-                let tags = [];
-                if (fields.tags && fields.tags.arrayValue) {
-                    tags = (fields.tags.arrayValue.values || []).map(v => v.stringValue);
-                }
-
-                items.push({
-                    name: fields.name?.stringValue || '',
-                    icoUrl: fields.icoUrl?.stringValue || '',
-                    rating: fields.rating?.stringValue || '0',
-                    status: fields.status?.stringValue || 'Уточнить',
-                    description: fields.description?.stringValue || '',
-                    tags: tags
-                });
-            }
-        }
-
-        return items;
-    } catch (error) {
-        console.error(`Error getting ${section}:`, error);
-        return null;
-    }
-}
-
-async function updateSyncTime(uid, idToken, timestamp) {
-    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}?updateMask.fieldPaths=lastSync`;
-
-    const body = {
-        fields: {
-            lastSync: { timestampValue: timestamp }
-        }
-    };
-
-    const response = await fetch(url, {
-        method: 'PATCH',
-        headers: {
-            'Authorization': `Bearer ${idToken}`,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(body)
-    });
-
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
-    }
-
-    console.log('[+] Sync time updated:', timestamp);
-    return true;
-}
-
-async function getSyncTime(uid, idToken) {
-    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}`;
-
-    try {
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: { 'Authorization': `Bearer ${idToken}` }
-        });
-
-        if (response.status === 404) return null;
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-        const data = await response.json();
-        return data.fields?.lastSync?.timestampValue || null;
-    } catch (error) {
-        console.error('Get sync time error:', error);
-        return null;
-    }
-}
-
-
-// Принудительная синхронизация ВСЕХ разделов
-ipcMain.handle('sync-all-sections-to-cloud', async () => {
-
-
-    const storedUser = getStoredUser();
-    if (!storedUser || !storedUser.is_authenticated || !storedUser.id_token) {
-        return { success: false, error: 'Not authenticated' };
-    }
-
-    const freshToken = await getValidToken();
-    if (!freshToken) {
-        return { success: false, error: 'No valid token' };
-    }
-
-    try {
-        const sections = ['games', 'movies', 'cartoons', 'serials', 'anime', 'books'];
-        for (const section of sections) {
-            const sectionData = statements.getDataBySection.all(section);
-            await saveSectionToFirestore(storedUser.uid, freshToken, section, sectionData);
-        }
-        await saveAllTagsToFirestore();
-        const now = new Date().toISOString();
-        await updateSyncTime(storedUser.uid, freshToken, now);
-
-        console.log('✅ All sections synced to cloud');
-        return { success: true };
-    } catch (error) {
-        console.error('[x] Failed to sync all sections:', error);
-        return { success: false, error: error.message };
-    }
-});
-
-function markSectionDirty(section) {
-    const now = new Date().toISOString();
-    statements.setStatistic.run(`dirty_${section}`, 'true', now);
-}
-
-function markTagsDirty() {
-    const now = new Date().toISOString();
-    statements.setStatistic.run('dirty_tags', 'true', now);
-}
-
-function isTagsDirty() {
-    const dirty = statements.getStatistic.get('dirty_tags');
-    return dirty && dirty.value === 'true';
-}
-
-function clearTagsDirty() {
-    statements.deleteStatistic.run('dirty_tags');
-}
-
-// Проверка, нужно ли синхронизировать раздел
-function isSectionDirty(section) {
-    const dirty = statements.getStatistic.get(`dirty_${section}`);
-    return dirty && dirty.value === 'true';
-}
-
-// Снять флаг "грязный" после синхронизации
-function clearSectionDirty(section) {
-    statements.deleteStatistic.run(`dirty_${section}`);
-}
-
-async function syncDirtySections(uid, idToken) {
-    const freshToken = await getValidToken();
-    if (!freshToken) {
-        console.log('[!] No valid token, skipping sync');
-        return false;
-    }
-
-    const sections = ['games', 'movies', 'cartoons', 'serials', 'anime', 'books'];
-    const dirtySections = sections.filter(section => isSectionDirty(section));
-
-    if (dirtySections.length === 0) {
-        console.log('[i] No dirty sections, skipping sync');
-        return false;
-    }
-
-    console.log(`[i] Syncing dirty sections: ${dirtySections.join(', ')}`);
-
-    for (const section of dirtySections) {
-        const sectionData = statements.getDataBySection.all(section);
-        await saveSectionToFirestore(uid, freshToken, section, sectionData);
-        clearSectionDirty(section);
-    }
-
-    if (isTagsDirty()) {
-        console.log('[i] Syncing tags...');
-        await saveAllTagsToFirestore(uid, freshToken);
-        clearTagsDirty();
-    }
-
-    const dirtyExpectedReleases = statements.isExpectedReleasesDirty.get('dirty_expected_releases');
-    if (dirtyExpectedReleases && dirtyExpectedReleases.value === 'true') {
-        console.log('[i] Syncing expected releases...');
-        await saveExpectedReleasesToFirestore(uid, idToken);
-        clearExpectedReleasesDirty();
-    }
-
-    const now = new Date().toISOString();
-    await updateSyncTime(uid, freshToken, now);
-    statements.setStatistic.run('last_firestore_update', now, now);
-
-    return true;
-}
-
-async function saveAllTagsToFirestore(uid, idToken) {
-    const allTags = statements.getAllTags.all(); // [{name, count}]
-
-    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/sections/tags`;
-
-    const body = {
-        fields: {
-            items: {
-                arrayValue: {
-                    values: allTags.map(tag => ({
-                        mapValue: {
-                            fields: {
-                                name: { stringValue: tag.name },
-                                count: { integerValue: tag.count }
-                            }
-                        }
-                    }))
-                }
-            },
-            updatedAt: { timestampValue: new Date().toISOString() }
-        }
-    };
-
-    const response = await fetch(url, {
-        method: 'PATCH',
-        headers: {
-            'Authorization': `Bearer ${idToken}`,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(body)
-    });
-
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
-    }
-
-    console.log(`✅ Tags saved (${allTags.length} tags)`);
-    return true;
-}
-
-async function loadAllTagsFromFirestore(uid, idToken) {
-    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/sections/tags`;
-
-    try {
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: { 'Authorization': `Bearer ${idToken}` }
-        });
-
-        if (response.status === 404) return [];
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-        const data = await response.json();
-        const items = [];
-
-        if (data.fields && data.fields.items && data.fields.items.arrayValue) {
-            const values = data.fields.items.arrayValue.values || [];
-            for (const item of values) {
-                const fields = item.mapValue.fields;
-                items.push({
-                    name: fields.name?.stringValue || '',
-                    count: fields.count?.integerValue || 0
-                });
-            }
-        }
-
-        return items;
-    } catch (error) {
-        console.error('Error loading tags:', error);
-        return null;
-    }
-}
-
-async function refreshAccessToken(refreshToken) {
-    const url = `https://securetoken.googleapis.com/v1/token?key=${firebaseConfig.apiKey}`;
-
-    const response = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-            grant_type: 'refresh_token',
-            refresh_token: refreshToken
-        })
-    });
-
-    if (!response.ok) {
-        const error = await response.text();
-        throw new Error(`Token refresh failed: ${error}`);
-    }
-
-    const data = await response.json();
-    return {
-        idToken: data.id_token,
-        refreshToken: data.refresh_token, // может прийти новый refresh token
-        expiresIn: data.expires_in
-    };
-}
-
-async function getValidToken() {
-    const storedUser = getStoredUser();
-    if (!storedUser || !storedUser.is_authenticated) {
-        return null;
-    }
-
-    // Пробуем сначала через Firebase SDK (если он активен)
-    try {
-        const currentUser = auth.currentUser;
-        if (currentUser) {
-            const freshToken = await currentUser.getIdToken(true);
-            // Обновляем в БД
-            const stmt = db.prepare(`UPDATE user_session SET id_token = ? WHERE id = 1`);
-            stmt.run(freshToken);
-            console.log('[i] Token refreshed via Firebase SDK');
-            return freshToken;
-        }
-    } catch (error) {
-        console.log('[i] Firebase SDK not available, using REST API');
-    }
-
-    // Если SDK не помог — используем REST API с refresh token
-    if (storedUser.refresh_token) {
-        try {
-            const { idToken, refreshToken } = await refreshAccessToken(storedUser.refresh_token);
-
-            // Обновляем оба токена в БД
-            const stmt = db.prepare(`UPDATE user_session SET id_token = ?, refresh_token = ? WHERE id = 1`);
-            stmt.run(idToken, refreshToken || storedUser.refresh_token);
-
-            console.log('[i] Token refreshed via REST API');
-            return idToken;
-        } catch (error) {
-            console.error('[x] Failed to refresh token:', error);
-            // Токен не обновился — нужно перелогиниваться
-            clearUserSession();
-            if (win) {
-                win.webContents.send('session-expired', true);
-            }
-            return null;
-        }
-    }
-
-    console.log('[!] No refresh token available');
-    return null;
-}
-
-ipcMain.handle('update-data-description', async (event, section, name, description) => {
-    const stmt = db.prepare('UPDATE data_cards SET description = ? WHERE name = ? AND section = ?');
-    const result = stmt.run(description, name, section);
-    markSectionDirty(section);
-    const now = new Date().toISOString();
-    statements.setStatistic.run('last_firestore_update', now, now);
-    return result;
-});
-
-
-ipcMain.handle('get-all-tags', async () => {
-    return statements.getAllTags.all();
-});
-
-ipcMain.handle('search-tags', async (event, query) => {
-    return statements.searchTags.all(`${query}%`).map(row => row.name);
-});
-
-ipcMain.handle('get-card-tags', async (event, section, cardName) => {
-    return statements.getTagsByCard.all(cardName).map(row => row.tag_name);
-});
-
-ipcMain.handle('update-card-tags', async (event, section, cardName, newTags) => {
-    const oldTags = statements.getTagsByCard.all(cardName).map(row => row.tag_name);
-    const removedTags = oldTags.filter(tag => !newTags.includes(tag));
-    const addedTags = newTags.filter(tag => !oldTags.includes(tag));
-    statements.clearCardTags.run(cardName);
-
-    for (const tag of newTags) {
-        statements.addTagToCard.run(cardName, tag);
-    }
-
-    for (const tag of removedTags) {
-        statements.removeTagCount.run(tag);
-        statements.deleteTagIfZero.run(tag);
-    }
-
-    for (const tag of addedTags) {
-        statements.addOrUpdateTag.run(tag);
-    }
-
-    markSectionDirty(section);
-    markTagsDirty();
-    const now = new Date().toISOString();
-    statements.setStatistic.run('last_firestore_update', now, now);
 
     return { success: true };
 });
-ipcMain.handle('search-tags-web', async (event, title, section) => {
-    const searchQuery = `${title} ${section === 'games' ? 'game' : section === 'movies' ? 'film' : 'genre'}`;
 
-    // Простой запрос без лишних параметров
-    const url = `https://api.duckduckgo.com/?q=${encodeURIComponent(searchQuery)}&format=json`;
-
-    try {
-        const response = await fetch(url);
-        const data = await response.json();
-
-        const tags = [];
-
-        // Проверяем RelatedTopics
-        if (data.RelatedTopics) {
-            for (const topic of data.RelatedTopics) {
-                if (typeof topic === 'object' && topic.Text) {
-                    // Извлекаем слова до 20 символов
-                    const match = topic.Text.match(/[А-Яа-яA-Za-z]{3,20}/g);
-                    if (match) {
-                        tags.push(...match);
-                    }
-                }
-            }
-        }
-
-        // Убираем дубликаты и ограничиваем
-        const uniqueTags = [...new Set(tags)].slice(0, 8);
-        console.log('Теги:', uniqueTags);
-        return uniqueTags;
-
-    } catch (error) {
-        console.error('Ошибка:', error);
-        return [];
-    }
+ipcMain.handle('delete-release-date', async (event, cardName, section) => {
+    statements.deleteExpectedRelease.run(cardName, section);
+    markExpectedReleasesDirty();
+    return { success: true };
 });
 
-
-
-
-
-ipcMain.handle('fetch-steam-tags', async (event, title) => {
-    return await fetchSteamGameTags(title);
+ipcMain.handle('get-all-expected-releases', async () => {
+    return statements.getAllExpectedReleases.all();
 });
 
-
-
-ipcMain.handle('search-litres-book', async (event, title) => {
-    return await fetchLitresBookTags(title);
-});
-
-
-
-ipcMain.handle('search-kinopoisk-movie', async (event, title) => {
-    return await fetchKinopoiskMovieTags(title);
-});
-
-// ========== ОБРАБОТЧИК IPC ДЛЯ YUMMYANI ==========
-ipcMain.handle('search-yummyani-anime', async (event, title) => {
-    return await fetchYummyAniTags(title);
-});
-
-ipcMain.handle('search-filmru-serial', async (event, title) => {
-    return await fetchFilmRuSerialsTags(title);
-});
-
-// ========== кино, сериалы, мультфильы ==========
-async function  fetchKinopoiskMovieTags(movieName) {
-    return new Promise(async (resolve) => {
-        let hiddenWindow = null;
-        let isResolved = false;
-        let loadTimeout = null;
-        let isLoaded = false;
-        let currentUrl;
-        const finish = (result) => {
-            if (isResolved) return;
-            isResolved = true;
-            if (loadTimeout) clearTimeout(loadTimeout);
-            if (hiddenWindow && !hiddenWindow.isDestroyed()) {
-                hiddenWindow.close();
-            }
-            resolve(result);
-        };
-
-        try {
-
-            const searchUrl = `https://www.kinopoisk.ru/index.php?kp_query=${encodeURIComponent(movieName)}`;
-
-            console.log(`[Kinopoisk] Searching: ${searchUrl}`);
-
-            hiddenWindow = new BrowserWindow({
-                show: false,
-                width: 1280,
-                height: 800,
-                webPreferences: { nodeIntegration: false, contextIsolation: true }
-            });
-
-            hiddenWindow.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
-                details.requestHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-                details.requestHeaders['Accept-Language'] = 'ru-RU,ru;q=0.9';
-                callback({ cancel: false, requestHeaders: details.requestHeaders });
-            });
-
-            // ========== ПОИСК ССЫЛКИ НА ФИЛЬМ ==========
-            hiddenWindow.loadURL(searchUrl);
-            console.log(`[Kinopoisk] Search page loading started`);
-
-            const waitForSearchLoad = new Promise((resolve) => {
-                hiddenWindow.webContents.once('did-finish-load', () => {
-                    console.log(`[Kinopoisk] Search page finished loading`);
-                    isLoaded = true;
-                    resolve();
-                });
-
-                loadTimeout = setTimeout(() => {
-                    if (!isLoaded) {
-                        console.log(`[Kinopoisk] Search page timeout (2s), stopping load`);
-                        hiddenWindow.webContents.stop();
-                        isLoaded = true;
-                        resolve();
-                    }
-                }, 2000);
-            });
-
-            await waitForSearchLoad;
-            if (loadTimeout) clearTimeout(loadTimeout);
-            currentUrl = hiddenWindow.webContents.getURL();
-            if (!currentUrl || currentUrl === 'about:blank' || currentUrl.includes('error')) {
-                console.log('[Имя_сервиса] Page not loaded properly, finishing with empty result');
-                finish({ tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null });
-                return;
-            }
-            // Ищем ссылку на фильм
-            const movieInfo = await hiddenWindow.webContents.executeJavaScript(`
-                (function() {
-                    const mostWanted = document.querySelector('.search_results .element.most_wanted');
-                    if (mostWanted) {
-                        const nameLink = mostWanted.querySelector('.name a');
-                        if (nameLink && nameLink.href) {
-                            let cleanUrl = nameLink.href.replace(/\\/sr\\/\\d+/, '');
-                            return { url: cleanUrl };
-                        }
-                    }
-                    const anyFilmLink = document.querySelector('a[href*="/film/"]');
-                    if (anyFilmLink) {
-                        let cleanUrl = anyFilmLink.href.replace(/\\/sr\\/\\d+/, '');
-                        return { url: cleanUrl };
-                    }
-                    return null;
-                })();
-            `);
-
-            if (!movieInfo || !movieInfo.url) {
-                console.log('[Kinopoisk] Movie not found');
-                finish({ tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null });
-                return;
-            }
-            movieInfo.url = movieInfo.url.replace('/posters/', '')
-                    .replace('/frames/', '')
-                    .replace('/dates/', '')
-                    .replace('/sr/', '');
-
-            console.log(`[Kinopoisk] Found movie: ${movieInfo.url}`);
-
-            // ========== ПОИСК ТЕГОВ И ДАТЫ НА СТРАНИЦЕ ФИЛЬМА ==========
-            isLoaded = false;
-
-            hiddenWindow.loadURL(movieInfo.url);
-            console.log(`[Kinopoisk] Movie page loading started`);
-
-            const waitForMovieLoad = new Promise((resolve) => {
-                hiddenWindow.webContents.once('did-finish-load', () => {
-                    console.log(`[Kinopoisk] Movie page finished loading`);
-                    isLoaded = true;
-                    resolve();
-                });
-
-                loadTimeout = setTimeout(() => {
-                    if (!isLoaded) {
-                        console.log(`[Kinopoisk] Movie page timeout (2s), stopping load`);
-                        hiddenWindow.webContents.stop();
-                        isLoaded = true;
-                        resolve();
-                    }
-                }, 2000);
-            });
-
-            await waitForMovieLoad;
-            if (loadTimeout) clearTimeout(loadTimeout);
-            currentUrl = hiddenWindow.webContents.getURL();
-            if (!currentUrl || currentUrl === 'about:blank' || currentUrl.includes('error')) {
-                console.log('[Имя_сервиса] Page not loaded properly, finishing with empty result');
-                finish({ tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null });
-                return;
-            }
-            const movieData = await hiddenWindow.webContents.executeJavaScript(`
-                (function() {
-                    // Полное название фильма
-                    let fullTitle = '';
-                    const titleElement = document.querySelector('h1[itemprop="name"] span');
-                    if (titleElement) {
-                        fullTitle = titleElement.textContent.trim();
-                    }
-                    if (!fullTitle) {
-                        const titleH1 = document.querySelector('h1[itemprop="name"]');
-                        if (titleH1) {
-                            fullTitle = titleH1.textContent.trim();
-                        }
-                    }
-                    
-                    // Теги (жанры)
-                    const tags = [];
-                    const genresBlock = document.querySelector('[data-test-id="genres"]');
-                    if (genresBlock) {
-                        const genreLinks = genresBlock.querySelectorAll('a');
-                        genreLinks.forEach(el => {
-                            const text = el.textContent.trim();
-                            if (text && text.length < 30 && !tags.includes(text)) {
-                                tags.push(text);
-                            }
-                        });
-                    }
-                    
-                    if (tags.length === 0) {
-                        const fallbackSelectors = [
-                            '.styles_rowDark__Q3Dh2 a[href*="/genre/"]',
-                            '[class*="genre"] a'
-                        ];
-                        for (const selector of fallbackSelectors) {
-                            const elements = document.querySelectorAll(selector);
-                            elements.forEach(el => {
-                                const text = el.textContent.trim();
-                                if (text && text.length < 30 && !tags.includes(text)) {
-                                    tags.push(text);
-                                }
-                            });
-                            if (tags.length) break;
-                        }
-                    }
-                    
-                    // Описание
-                    let description = '';
-                    const descElement = document.querySelector('[data-test-id="synopsis"]');
-                    if (descElement) {
-                        description = descElement.textContent.trim().substring(0, 500);
-                    }
-                    
-                    // Обложка
-                    let coverUrl = '';
-                    const posterElement = document.querySelector('.film-poster');
-                    if (posterElement && posterElement.src) {
-                        coverUrl = posterElement.src;
-                        if (coverUrl.startsWith('//')) coverUrl = 'https:' + coverUrl;
-                    }
-                    if (!coverUrl) {
-                        const imgElement = document.querySelector('[class*="poster"] img');
-                        if (imgElement && imgElement.src) {
-                            coverUrl = imgElement.src;
-                            if (coverUrl.startsWith('//')) coverUrl = 'https:' + coverUrl;
-                        }
-                    }
-                    
-                    // ДАТА ПРЕМЬЕРЫ
-                    let releaseDate = null;
-                    const premiereBlock = document.querySelector('[data-test-id="worldPremieres"]');
-                    if (premiereBlock) {
-                        const dateLink = premiereBlock.querySelector('a[href*="/dates/"]');
-                        if (dateLink) {
-                            const dateText = dateLink.textContent.trim();
-                            
-                            // Парсим дату в формате "15 июля 2026"
-                            const months = {
-                                'января': '01', 'февраля': '02', 'марта': '03', 'апреля': '04',
-                                'мая': '05', 'июня': '06', 'июля': '07', 'августа': '08',
-                                'сентября': '09', 'октября': '10', 'ноября': '11', 'декабря': '12'
-                            };
-                            
-                            // Разбиваем строку на части
-                            const parts = dateText.split(/\\s+/);
-                            
-                            let day = null;
-                            let monthNum = null;
-                            let year = null;
-                            
-                            for (let i = 0; i < parts.length; i++) {
-                                const part = parts[i];
-                                // Ищем день (число от 1 до 31)
-                                if (/^\\d{1,2}$/.test(part) && !day) {
-                                    day = part.padStart(2, '0');
-                                }
-                                // Ищем год (4 цифры)
-                                else if (/^\\d{4}$/.test(part) && !year) {
-                                    year = part;
-                                }
-                                // Ищем месяц (русское название)
-                                else if (months[part] && !monthNum) {
-                                    monthNum = months[part];
-                                }
-                            }
-                            
-                            if (day && monthNum && year) {
-                                releaseDate = year + '-' + monthNum + '-' + day;
-                            }
-                        }
-                    }
-                    
-                    return {
-                        tags: tags.slice(0, 10),
-                        description: description,
-                        coverUrl: coverUrl,
-                        fullTitle: fullTitle,
-                        releaseDate: releaseDate
-                    };
-                })();
-            `);
-
-            console.log(`[Kinopoisk] Full title: ${movieData.fullTitle}`);
-            console.log(`[Kinopoisk] Found tags for "${movieName}":`, movieData.tags);
-            console.log(`[Kinopoisk] Cover: ${movieData.coverUrl}`);
-            console.log(`[Kinopoisk] Release date: ${movieData.releaseDate || 'not found'}`);
-
-            finish(movieData);
-
-        } catch (error) {
-            console.error('[Kinopoisk] Error:', error);
-            finish({ tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null });
-        }
-    });
-}
-// ========== +++++АНИМЕ ТЕГИ ==========
-async function fetchYummyAniTags(animeName) {
-    return new Promise(async (resolve) => {
-        let hiddenWindow = null;
-        let isResolved = false;
-        let loadTimeout = null;
-        let isLoaded = false;
-        let currentUrl;
-        const finish = (result) => {
-            if (isResolved) return;
-            isResolved = true;
-            if (loadTimeout) clearTimeout(loadTimeout);
-            if (hiddenWindow && !hiddenWindow.isDestroyed()) {
-                hiddenWindow.close();
-            }
-            resolve(result);
-        };
-
-        try {
-            const searchUrl = `https://old.yummyani.me/search?word=${encodeURIComponent(animeName)}`;
-            console.log(`[YummyAni] Searching: ${searchUrl}`);
-
-            hiddenWindow = new BrowserWindow({
-                show: false,
-                width: 480,
-                height: 640,
-                webPreferences: {
-                    nodeIntegration: false,
-                    contextIsolation: true,
-                    images: true
-                }
-            });
-
-            hiddenWindow.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
-                details.requestHeaders['User-Agent'] = 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.0 Mobile/15E148 Safari/604.1';
-                details.requestHeaders['Accept-Language'] = 'ru-RU,ru;q=0.9';
-                callback({ cancel: false, requestHeaders: details.requestHeaders });
-            });
-
-            // ========== ПОИСК ССЫЛКИ ==========
-            hiddenWindow.loadURL(searchUrl);
-            console.log(`[YummyAni] Search page loading started`);
-
-            const waitForLoad = new Promise((resolve) => {
-                hiddenWindow.webContents.once('did-finish-load', () => {
-                    console.log(`[YummyAni] Search page finished loading`);
-                    isLoaded = true;
-                    resolve();
-                });
-
-                loadTimeout = setTimeout(() => {
-                    if (!isLoaded) {
-                        console.log(`[YummyAni] Search page timeout (2s), stopping load`);
-                        hiddenWindow.webContents.stop();
-                        isLoaded = true;
-                        resolve();
-                    }
-                }, 2000);
-            });
-
-            await waitForLoad;
-            if (loadTimeout) clearTimeout(loadTimeout);
-            currentUrl = hiddenWindow.webContents.getURL();
-            if (!currentUrl || currentUrl === 'about:blank' || currentUrl.includes('error')) {
-                console.log('[Имя_сервиса] Page not loaded properly, finishing with empty result');
-                finish({ tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null });
-                return;
-            }
-
-            const animeLink = await hiddenWindow.webContents.executeJavaScript(`
-                (function() {
-                    const firstCard = document.querySelector('.grid-container.animes-search .anime-column');
-                    if (!firstCard) return null;
-                    const link = firstCard.querySelector('a.image-block');
-                    return link ? link.href : null;
-                })();
-            `);
-
-            if (!animeLink) {
-                console.log('[YummyAni] No link found');
-                finish({ tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null });
-                return;
-            }
-
-            console.log(`[YummyAni] Found: ${animeLink}`);
-
-            // ========== ПОИСК ТЕГОВ И ДАТЫ ==========
-            isLoaded = false;
-
-            hiddenWindow.loadURL(animeLink);
-            console.log(`[YummyAni] Anime page loading started`);
-
-            const waitForAnimeLoad = new Promise((resolve) => {
-                hiddenWindow.webContents.once('did-finish-load', () => {
-                    console.log(`[YummyAni] Anime page finished loading`);
-                    isLoaded = true;
-                    resolve();
-                });
-
-                loadTimeout = setTimeout(() => {
-                    if (!isLoaded) {
-                        console.log(`[YummyAni] Anime page timeout (2s), stopping load`);
-                        hiddenWindow.webContents.stop();
-                        isLoaded = true;
-                        resolve();
-                    }
-                }, 2000);
-            });
-
-            await waitForAnimeLoad;
-            if (loadTimeout) clearTimeout(loadTimeout);
-            currentUrl = hiddenWindow.webContents.getURL();
-            if (!currentUrl || currentUrl === 'about:blank' || currentUrl.includes('error')) {
-                console.log('[Имя_сервиса] Page not loaded properly, finishing with empty result');
-                finish({ tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null });
-                return;
-            }
-            const animeData = await hiddenWindow.webContents.executeJavaScript(`
-                (function() {
-                    // Полное название аниме
-                    let fullTitle = '';
-                    const titleElement = document.querySelector('h1[itemprop="name"]');
-                    if (titleElement) {
-                        fullTitle = titleElement.textContent.trim();
-                    }
-                    
-                    // Теги (жанры)
-                    const tags = [];
-                    const genreContainer = document.querySelector('.categories-list.no-comma');
-                    if (genreContainer) {
-                        const tagElements = genreContainer.querySelectorAll('ul li a.badge');
-                        tagElements.forEach(el => {
-                            const text = el.textContent.trim();
-                            if (text && !tags.includes(text)) {
-                                tags.push(text);
-                            }
-                        });
-                    }
-                    
-                    // Описание
-                    let description = '';
-                    const descElement = document.querySelector('.item-description .text');
-                    if (descElement) {
-                        description = descElement.textContent.trim().substring(0, 500);
-                    }
-                    
-                    // Обложка
-                    let coverUrl = '';
-                    const coverElement = document.querySelector('.bordered-top');
-                    if (coverElement && coverElement.src) {
-                        coverUrl = coverElement.src;
-                    }
-                    if (!coverUrl) {
-                        const imgElement = document.querySelector('.image-block img');
-                        if (imgElement && imgElement.src) {
-                            coverUrl = imgElement.src;
-                            if (coverUrl.startsWith('//')) coverUrl = 'https:' + coverUrl;
-                        }
-                    }
-                    
-                    // ДАТА СЛЕДУЮЩЕГО ЭПИЗОДА
-                    let releaseDate = null;
-
-                    // 1. Пробуем получить дату следующего эпизода из time-counter
-                    const timeCounter = document.querySelector('time-counter');
-                    if (timeCounter && timeCounter.getAttribute('data-time')) {
-                        const timestamp = timeCounter.getAttribute('data-time');
-                        if (timestamp) {
-                            const date = new Date(parseInt(timestamp) * 1000);
-                            if (!isNaN(date.getTime())) {
-                                releaseDate = date.toISOString().split('T')[0];
-                            }
-                        }
-                    }
-                    
-                    // 2. Если нет — берём дату премьеры из ссылки /catalog/filter
-                    if (!releaseDate) {
-                        const filterLink = document.querySelector('a[href*="/catalog/filter"]');
-                        if (filterLink) {
-                            const yearText = filterLink.textContent.trim();
-                            
-                            const seasons = {
-                                'зима': '01',
-                                'весна': '04',
-                                'лето': '07',
-                                'осень': '10'
-                            };
-                            
-                            const match = yearText.match(/(зима|весна|лето|осень)\\s+(\\d{4})/i);
-                            if (match) {
-                                const season = match[1].toLowerCase();
-                                const year = match[2];
-                                const month = seasons[season];
-                                if (month) {
-                                    releaseDate = year + '-' + month + '-01';
-                                }
-                            } else {
-                                const yearMatch = yearText.match(/(\\d{4})/);
-                                if (yearMatch) {
-                                    releaseDate = yearMatch[1] + '-01-01';
-                                }
-                            }
-                        }
-                    }
-                    
-                    return { 
-                        tags: tags.slice(0, 12), 
-                        description: description, 
-                        coverUrl: coverUrl,
-                        fullTitle: fullTitle,
-                        releaseDate: releaseDate
-                    };
-                })();
-            `);
-
-            console.log(`[YummyAni] Full title: ${animeData.fullTitle}`);
-            console.log(`[YummyAni] Tags:`, animeData.tags);
-            console.log(`[YummyAni] Release date (next episode): ${animeData.releaseDate || 'not found'}`);
-
-            finish(animeData);
-
-        } catch (error) {
-            console.error('[YummyAni] Error:', error);
-            finish({ tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null });
-        }
-    });
-}
-// ========== +++++ИГРЫ ТЕГИ ==========
-async function fetchSteamGameTags(gameName) {
-    return new Promise(async (resolve) => {
-        let hiddenWindow = null;
-        let isResolved = false;
-        let loadTimeout = null;
-        let isLoaded = false;
-        let currentUrl;
-
-        const finish = (result) => {
-            if (isResolved) return;
-            isResolved = true;
-            if (loadTimeout) clearTimeout(loadTimeout);
-            if (hiddenWindow && !hiddenWindow.isDestroyed()) {
-                hiddenWindow.close();
-            }
-            resolve(result);
-        };
-
-        try {
-            // 1. Поиск игры через storesearch API (только для получения ID)
-            const searchUrl = `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(gameName)}&cc=ru&l=russian`;
-            const searchResponse = await fetch(searchUrl);
-            const searchData = await searchResponse.json();
-
-            if (!searchData.items || searchData.items.length === 0) {
-                console.log(`[Steam] Game not found: ${gameName}`);
-                finish({ tags: [], coverUrl: '', fullTitle: '', releaseDate: null, description: '' });
-                return;
-            }
-            const game = searchData.items[0];
-            const appId = game.id;
-            const fullTitle = game.name;
-
-            console.log(`[Steam] Found ID for "${gameName}": ${appId}`);
-            console.log(`[Steam] Full title: "${fullTitle}"`);
-
-            // 2. Открываем страницу игры и парсим ВСЁ с неё
-            const gameUrl = `https://store.steampowered.com/app/${appId}/?l=russian`;
-
-            hiddenWindow = new BrowserWindow({
-                show: false,
-                width: 1280,
-                height: 800,
-                webPreferences: {
-                    nodeIntegration: false,
-                    contextIsolation: true,
-                    images: true
-                }
-            });
-
-            hiddenWindow.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
-                details.requestHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-                details.requestHeaders['Accept-Language'] = 'ru-RU,ru;q=0.9';
-                callback({ cancel: false, requestHeaders: details.requestHeaders });
-            });
-
-            hiddenWindow.loadURL(gameUrl);
-            console.log(`[Steam] Page loading started`);
-
-            const waitForLoad = new Promise((resolve) => {
-                hiddenWindow.webContents.once('did-finish-load', () => {
-                    console.log(`[Steam] Page finished loading`);
-                    isLoaded = true;
-                    resolve();
-                });
-
-                loadTimeout = setTimeout(() => {
-                    if (!isLoaded) {
-                        console.log(`[Steam] Page timeout (3s), stopping load`);
-                        hiddenWindow.webContents.stop();
-                        isLoaded = true;
-                        resolve();
-                    }
-                }, 3000);
-            });
-
-            await waitForLoad;
-            if (loadTimeout) clearTimeout(loadTimeout);
-
-            currentUrl = hiddenWindow.webContents.getURL();
-            if (!currentUrl || currentUrl === 'about:blank' || currentUrl.includes('error')) {
-                console.log('[Steam] Page not loaded properly, finishing with empty result');
-                finish({ tags: [], coverUrl: '', fullTitle: '', releaseDate: null, description: '' });
-                return;
-            }
-
-            // Парсим ВСЕ данные со страницы
-            const gameData = await hiddenWindow.webContents.executeJavaScript(`
-                (function() {
-                    // Обложка
-                    let coverUrl = '';
-                    const headerImg = document.querySelector('.game_header_image_full');
-                    if (headerImg && headerImg.src) {
-                        coverUrl = headerImg.src;
-                    }
-                    
-                    // Дата релиза
-                    let releaseDate = null;
-                    const releaseDateEl = document.querySelector('.release_date .date');
-                    if (releaseDateEl) {
-                        const dateText = releaseDateEl.textContent.trim();
-                        // Парсим "11 авг. 2022 г."
-                        const months = {
-                            'янв': '01', 'фев': '02', 'мар': '03', 'апр': '04',
-                            'мая': '05', 'май': '05', 'июн': '06', 'июл': '07',
-                            'авг': '08', 'сен': '09', 'окт': '10', 'ноя': '11', 'дек': '12'
-                        };
-                        const match = dateText.match(/(\\d{1,2})\\s+(\\w+)\\.?\\s+(\\d{4})/);
-                        if (match) {
-                            const day = match[1].padStart(2, '0');
-                            const monthName = match[2].toLowerCase().substring(0, 3);
-                            const year = match[3];
-                            const month = months[monthName];
-                            if (month) {
-                                releaseDate = year + '-' + month + '-' + day;
-                            }
-                        }
-                    }
-                    
-                    // Теги (Популярные метки)
-                    const tags = [];
-                    const tagsContainer = document.querySelector('.glance_tags.popular_tags, .popular_tags_ctn');
-                    if (tagsContainer) {
-                        const tagElements = tagsContainer.querySelectorAll('a.app_tag');
-                        for (const el of tagElements) {
-                            const tagText = el.textContent.trim();
-                            if (tagText && tagText !== '+' && el.style.display !== 'none') {
-                                tags.push(tagText);
-                            }
-                        }
-                    }
-                    
-                    // Описание
-                    let description = '';
-                    const descElement = document.querySelector('.game_description_snippet');
-                    if (descElement) {
-                        description = descElement.textContent.trim();
-                    }
-                    
-                    return {
-                        coverUrl: coverUrl,
-                        releaseDate: releaseDate,
-                        tags: tags.slice(0, 12),
-                        description: description,
-                        fullTitle: ''
-                    };
-                })();
-            `);
-
-            console.log(`[Steam] Cover: ${gameData.coverUrl}`);
-            console.log(`[Steam] Release date: ${gameData.releaseDate || 'not found'}`);
-            console.log(`[Steam] Tags:`, gameData.tags);
-            console.log(`[Steam] Description: ${gameData.description.substring(0, 100)}...`);
-
-            finish({
-                tags: gameData.tags,
-                coverUrl: gameData.coverUrl,
-                fullTitle: fullTitle,
-                releaseDate: gameData.releaseDate,
-                description: gameData.description
-            });
-
-        } catch (error) {
-            console.error('[Steam] Error:', error);
-            finish({ tags: [], coverUrl: '', fullTitle: '', releaseDate: null, description: '' });
-        }
-    });
-}
-// ========== +++++КНИГИ ТЕГИ ==========
-async function fetchLitresBookTags(bookName) {
-    return new Promise(async (resolve) => {
-        let hiddenWindow = null;
-        let isResolved = false;
-        let loadTimeout = null;
-        let isLoaded = false;
-        let currentUrl;
-
-        const finish = (result) => {
-            if (isResolved) return;
-            isResolved = true;
-            if (loadTimeout) clearTimeout(loadTimeout);
-            if (hiddenWindow && !hiddenWindow.isDestroyed()) {
-                hiddenWindow.close();
-            }
-            resolve(result);
-        };
-
-        try {
-            const cleanName = bookName.split(' ').slice(0, 3).join(' ');
-            const searchUrl = `https://www.litres.ru/search/?q=${encodeURIComponent(cleanName)}&languages=ru&art_types=text_book&limit=10`;
-            console.log(`[Litres] Searching: ${searchUrl}`);
-
-            hiddenWindow = new BrowserWindow({
-                show: false,
-                width: 480,
-                height: 640,
-                webPreferences: {
-                    nodeIntegration: false,
-                    contextIsolation: true,
-                    images: true,
-                    javascript: true
-                }
-            });
-
-            hiddenWindow.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
-                details.requestHeaders['User-Agent'] = 'Mozilla/5.0 (Linux; Android 11; SM-G973F) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.114 Mobile Safari/537.36';
-                details.requestHeaders['Accept-Language'] = 'ru-RU,ru;q=0.9';
-                details.requestHeaders['Accept'] = 'text/html,application/xhtml+xml';
-                callback({ cancel: false, requestHeaders: details.requestHeaders });
-            });
-
-            // ========== ПОИСК ССЫЛКИ НА КНИГУ ==========
-            hiddenWindow.loadURL(searchUrl);
-            console.log(`[Litres] Search page loading started`);
-
-            const waitForLoad = new Promise((resolve) => {
-                hiddenWindow.webContents.once('did-finish-load', () => {
-                    console.log(`[Litres] Search page finished loading`);
-                    isLoaded = true;
-                    resolve();
-                });
-
-                loadTimeout = setTimeout(() => {
-                    if (!isLoaded) {
-                        console.log(`[Litres] Search page timeout (2s), stopping load`);
-                        hiddenWindow.webContents.stop();
-                        isLoaded = true;
-                        resolve();
-                    }
-                }, 2000);
-            });
-
-            await waitForLoad;
-            if (loadTimeout) clearTimeout(loadTimeout);
-            await new Promise(r => setTimeout(r, 1000));
-
-            currentUrl = hiddenWindow.webContents.getURL();
-            if (!currentUrl || currentUrl === 'about:blank' || currentUrl.includes('error')) {
-                console.log('[Litres] Page not loaded properly, finishing with empty result');
-                finish({ tags: [], description: '', coverUrl: '', fullTitle: '' });
-                return;
-            }
-
-            // Находим ссылку на книгу
-            let bookInfo = null;
-            try {
-                bookInfo = await hiddenWindow.webContents.executeJavaScript(`
-                    (function() {
-                        const allLinks = document.querySelectorAll('a[href*="/book/"]');
-                        
-                        for (const link of allLinks) {
-                            const href = link.href;
-                            if (!href.includes('erid=') && !href.includes('banner') && !href.includes('campaign')) {
-                                const fullUrl = href.startsWith('http') ? href : 'https://www.litres.ru' + href;
-                                return { url: fullUrl };
-                            }
-                        }
-                        
-                        return null;
-                    })();
-                `);
-            } catch (e) {
-                console.log('[Litres] Failed to parse search page:', e.message);
-                finish({ tags: [], description: '', coverUrl: '', fullTitle: '' });
-                return;
-            }
-
-            if (!bookInfo || !bookInfo.url) {
-                console.log('[Litres] Book not found');
-                finish({ tags: [], description: '', coverUrl: '', fullTitle: '' });
-                return;
-            }
-
-            console.log(`[Litres] Found book URL: ${bookInfo.url}`);
-
-            // ========== ПОИСК ТЕГОВ НА СТРАНИЦЕ КНИГИ ==========
-            isLoaded = false;
-
-            hiddenWindow.loadURL(bookInfo.url);
-            console.log(`[Litres] Book page loading started`);
-
-            const waitForBookLoad = new Promise((resolve) => {
-                hiddenWindow.webContents.once('did-finish-load', () => {
-                    console.log(`[Litres] Book page finished loading`);
-                    isLoaded = true;
-                    resolve();
-                });
-
-                loadTimeout = setTimeout(() => {
-                    if (!isLoaded) {
-                        console.log(`[Litres] Book page timeout (2s), stopping load`);
-                        hiddenWindow.webContents.stop();
-                        isLoaded = true;
-                        resolve();
-                    }
-                }, 2000);
-            });
-
-            await waitForBookLoad;
-            if (loadTimeout) clearTimeout(loadTimeout);
-            currentUrl = hiddenWindow.webContents.getURL();
-            if (!currentUrl || currentUrl === 'about:blank' || currentUrl.includes('error')) {
-                console.log('[Litres] Page not loaded properly, finishing with empty result');
-                finish({ tags: [], description: '', coverUrl: '', fullTitle: '' });
-                return;
-            }
-
-
-            // Парсим данные
-            let bookData = null;
-            try {
-                bookData = await hiddenWindow.webContents.executeJavaScript(`
-                    (function() {
-                        // Полное название книги
-                        let fullTitle = '';
-                        const titleElement = document.querySelector('h1[itemprop="name"]');
-                        if (titleElement) {
-                            fullTitle = titleElement.textContent.trim();
-                        }
-                        
-                        const tags = [];
-                        const tagSelectors = [
-                            '.BookGenresAndTags_genresList__rd8vU a',
-                            '[class*="genresList"] a',
-                            'a[href*="/genre/"]',
-                            'a[href*="/tags/"]'
-                        ];
-                        
-                        for (const selector of tagSelectors) {
-                            const elements = document.querySelectorAll(selector);
-                            for (const el of elements) {
-                                const text = el.textContent.trim();
-                                if (text && text !== 'Только на Литрес' && text.length < 40 && !tags.includes(text)) {
-                                    tags.push(text);
-                                }
-                            }
-                            if (tags.length) break;
-                        }
-                        
-                        let description = '';
-                        const descEl = document.querySelector('.BookDescription_text, [class*="description"] p');
-                        if (descEl) description = descEl.textContent.trim().substring(0, 500);
-                        
-                        let coverUrl = '';
-                        const coverEl = document.querySelector('.AdaptiveCover_image__f_21W, .ArtCover_cover__image__ClWcc, [class*="cover"] img');
-                        if (coverEl && coverEl.src) coverUrl = coverEl.src;
-                        
-                        return { 
-                            tags: tags.slice(0, 10), 
-                            description: description, 
-                            coverUrl: coverUrl,
-                            fullTitle: fullTitle
-                        };
-                    })();
-                `);
-            } catch (e) {
-                console.log('[Litres] Failed to parse book page:', e.message);
-                finish({ tags: [], description: '', coverUrl: '', fullTitle: '' });
-                return;
-            }
-
-            console.log(`[Litres] Found tags for "${bookName}":`, bookData.tags);
-            console.log(`[Litres] Full title: ${bookData.fullTitle}`);
-            console.log(`[Litres] Cover: ${bookData.coverUrl}`);
-
-            finish(bookData);
-
-        } catch (error) {
-            console.error('[Litres] Error:', error);
-            finish({ tags: [], description: '', coverUrl: '', fullTitle: '' });
-        }
-    });
-}
-
-async function fetchFilmRuSerialsTags(serialName) {
-    return new Promise(async (resolve) => {
-        let hiddenWindow = null;
-        let isResolved = false;
-        let loadTimeout = null;
-        let isLoaded = false;
-        let currentUrl;
-
-        const finish = (result) => {
-            if (isResolved) return;
-            isResolved = true;
-            if (loadTimeout) clearTimeout(loadTimeout);
-            if (hiddenWindow && !hiddenWindow.isDestroyed()) {
-                hiddenWindow.close();
-            }
-            resolve(result);
-        };
-
-        try {
-            const cleanName = serialName.split(' ').slice(0, 3).join(' ');
-            const searchUrl = `https://www.film.ru/search/result?text=${encodeURIComponent(cleanName)}&type=all`;
-            console.log(`[FilmRu] Searching: ${searchUrl}`);
-
-            hiddenWindow = new BrowserWindow({
-                show: false,
-                width: 1280,
-                height: 800,
-                webPreferences: {
-                    nodeIntegration: false,
-                    contextIsolation: true,
-                    images: true,
-                    javascript: true
-                }
-            });
-
-            hiddenWindow.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
-                details.requestHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
-                details.requestHeaders['Accept-Language'] = 'ru-RU,ru;q=0.9';
-                details.requestHeaders['Accept'] = 'text/html,application/xhtml+xml';
-                callback({ cancel: false, requestHeaders: details.requestHeaders });
-            });
-
-            hiddenWindow.loadURL(searchUrl);
-            console.log(`[FilmRu] Search page loading started`);
-
-            const waitForLoad = new Promise((resolve) => {
-                hiddenWindow.webContents.once('did-finish-load', () => {
-                    console.log(`[FilmRu] Search page finished loading`);
-                    isLoaded = true;
-                    resolve();
-                });
-
-                loadTimeout = setTimeout(() => {
-                    if (!isLoaded) {
-                        console.log(`[FilmRu] Search page timeout (2s), stopping load`);
-                        hiddenWindow.webContents.stop();
-                        isLoaded = true;
-                        resolve();
-                    }
-                }, 2000);
-            });
-
-            await waitForLoad;
-            if (loadTimeout) clearTimeout(loadTimeout);
-            currentUrl = hiddenWindow.webContents.getURL();
-            if (!currentUrl || currentUrl === 'about:blank' || currentUrl.includes('error')) {
-                console.log('[Имя_сервиса] Page not loaded properly, finishing with empty result');
-                finish({ tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null });
-                return;
-            }
-
-            const serialInfo = await hiddenWindow.webContents.executeJavaScript(`
-                (function() {
-                    // Ищем любую ссылку, которая ведёт на фильм, сериал или мультфильм
-                    const allLinks = document.querySelectorAll('a[href*="/movies/"], a[href*="/serials/"], a[href*="/cartoons/"]');
-                    
-                    for (const link of allLinks) {
-                        // Берём первую попавшуюся ссылку с картинкой и названием
-                        if (link.href && link.querySelector('img')) {
-                            return { url: link.href };
-                        }
-                    }
-                    
-                    // Если не нашли, пробуем вообще любую ссылку с картинкой
-                    const anyImageLink = document.querySelector('a img')?.closest('a');
-                    if (anyImageLink && anyImageLink.href) {
-                        return { url: anyImageLink.href };
-                    }
-                    
-                    return null;
-                })();
-            `);
-
-            if (!serialInfo || !serialInfo.url) {
-                console.log('[FilmRu] Serial not found');
-                finish({ tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null });
-                return;
-            }
-
-            console.log(`[FilmRu] Found serial URL: ${serialInfo.url}`);
-
-            isLoaded = false;
-            hiddenWindow.loadURL(serialInfo.url);
-            console.log(`[FilmRu] Serial page loading started`);
-
-            const waitForSerialLoad = new Promise((resolve) => {
-                hiddenWindow.webContents.once('did-finish-load', () => {
-                    console.log(`[FilmRu] Serial page finished loading`);
-                    isLoaded = true;
-                    resolve();
-                });
-
-                loadTimeout = setTimeout(() => {
-                    if (!isLoaded) {
-                        console.log(`[FilmRu] Serial page timeout (2s), stopping load`);
-                        hiddenWindow.webContents.stop();
-                        isLoaded = true;
-                        resolve();
-                    }
-                }, 2000);
-            });
-
-            await waitForSerialLoad;
-            if (loadTimeout) clearTimeout(loadTimeout);
-            currentUrl = hiddenWindow.webContents.getURL();
-            if (!currentUrl || currentUrl === 'about:blank' || currentUrl.includes('error')) {
-                console.log('[Имя_сервиса] Page not loaded properly, finishing with empty result');
-                finish({ tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null });
-                return;
-            }
-
-            const serialData = await hiddenWindow.webContents.executeJavaScript(`
-                (function() {
-                    // Функция парсинга русских дат
-                    function parseRussianDate(dateText) {
-                        const months = {
-                            'января': '01', 'февраля': '02', 'марта': '03', 'апреля': '04',
-                            'мая': '05', 'июня': '06', 'июля': '07', 'августа': '08',
-                            'сентября': '09', 'октября': '10', 'ноября': '11', 'декабря': '12'
-                        };
-                        
-                        const parts = dateText.split(/\\s+/);
-                        let day = null, monthNum = null, year = null;
-                        
-                        for (const part of parts) {
-                            if (/^\\d{1,2}$/.test(part) && !day) {
-                                day = part.padStart(2, '0');
-                            } else if (/^\\d{4}$/.test(part) && !year) {
-                                year = part;
-                            } else if (months[part] && !monthNum) {
-                                monthNum = months[part];
-                            }
-                        }
-                        
-                        if (day && monthNum && year) {
-                            return year + '-' + monthNum + '-' + day;
-                        }
-                        return null;
-                    }
-                    
-                    // Полное название
-                    let fullTitle = '';
-                    const titleElement = document.querySelector('h1');
-                    if (titleElement) {
-                        fullTitle = titleElement.textContent.trim();
-                        fullTitle = fullTitle.replace(/\\(сериал.*?\\)/, '').trim();
-                    }
-                    
-                    // Обложка
-                    let coverUrl = '';
-                    const posterBlock = document.querySelector('a.wrapper_movies_poster');
-                    if (posterBlock) {
-                        coverUrl = posterBlock.getAttribute('data-src');
-                        if (coverUrl && !coverUrl.startsWith('http')) {
-                            coverUrl = 'https://www.film.ru' + coverUrl;
-                        }
-                        coverUrl = coverUrl.replace('/styles/thumb_260x400/', '/');
-                    }
-                    
-                    // ТЕГИ
-                    const tags = [];
-                    const blockInfo = document.querySelector('.block_info');
-                    if (blockInfo) {
-                        const links = blockInfo.querySelectorAll('a');
-                        links.forEach(link => {
-                            const text = link.textContent.trim();
-                            if (text && text !== '18+' && text.length < 30 && !tags.includes(text)) {
-                                tags.push(text);
-                            }
-                        });
-                    }
-                    
-                    // ДАТА
-                    let releaseDate = null;
-                    const episodesBlock = document.querySelector('.wrapper_movies_soon_episodes.active');
-                    
-                    if (episodesBlock) {
-                        const allDivs = episodesBlock.querySelectorAll('div');
-                        let targetElement = null;
-                        
-                        if (allDivs.length > 0) {
-                            targetElement = allDivs[allDivs.length - 1];
-                        } else {
-                            const firstLink = episodesBlock.querySelector('a');
-                            if (firstLink) {
-                                targetElement = firstLink;
-                            }
-                        }
-                        
-                        if (targetElement) {
-                            const dateSpan = targetElement.querySelector('span:last-child');
-                            if (dateSpan) {
-                                const dateText = dateSpan.textContent.trim();
-                                const parsedDate = parseRussianDate(dateText);
-                                if (parsedDate) {
-                                    releaseDate = parsedDate;
-                                }
-                            }
-                        }
-                    }
-                    
-                    if (!releaseDate) {
-                        const premiereBlock = document.querySelector('.block_table');
-                        if (premiereBlock) {
-                            const rows = premiereBlock.querySelectorAll('div');
-                            for (let i = 0; i < rows.length; i++) {
-                                if (rows[i].textContent.trim() === 'премьера' && rows[i + 1]) {
-                                    const dateText = rows[i + 1].textContent.trim();
-                                    const match = dateText.match(/(\\d{2})\\.(\\d{2})\\.(\\d{4})/);
-                                    if (match) {
-                                        releaseDate = match[3] + '-' + match[2] + '-' + match[1];
-                                        break;
-                                    }
-                                }
-                            }
-                        }
-                    }
-                    
-                    if (!releaseDate) {
-                        const titleH1 = document.querySelector('h1');
-                        if (titleH1) {
-                            const yearMatch = titleH1.textContent.match(/(\\d{4})/);
-                            if (yearMatch) {
-                                releaseDate = yearMatch[1] + '-01-01';
-                            }
-                        }
-                    }
-                    
-                    return { 
-                        tags: tags.slice(0, 10), 
-                        description: '', 
-                        coverUrl: coverUrl,
-                        fullTitle: fullTitle,
-                        releaseDate: releaseDate
-                    };
-                })();
-            `);
-
-            console.log(`[FilmRu] Found tags for "${serialName}":`, serialData.tags);
-            console.log(`[FilmRu] Full title: ${serialData.fullTitle}`);
-            console.log(`[FilmRu] Cover: ${serialData.coverUrl}`);
-            console.log(`[FilmRu] Release date: ${serialData.releaseDate || 'not found'}`);
-
-            finish(serialData);
-
-        } catch (error) {
-            console.error('[FilmRu] Error:', error);
-            finish({ tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null });
-        }
-    });
-}
-
-async function fetchCardData(cardName, section) {
-    switch (section) {
-        case 'anime':
-            const animeResult = await fetchYummyAniTags(cardName);
-            return { tags: animeResult?.tags || [], coverUrl: animeResult?.coverUrl || '', fullTitle: animeResult?.fullTitle || '', releaseDate: animeResult?.releaseDate || null };
-        case 'games':
-            const gameResult = await fetchSteamGameTags(cardName);
-            return { tags: gameResult?.tags || [], coverUrl: gameResult?.coverUrl || '', fullTitle: gameResult?.fullTitle || '', releaseDate: gameResult?.releaseDate || null };
-        case 'movies':
-        case 'serials':
-        case 'cartoons':
-            let filmResult = await fetchFilmRuSerialsTags(cardName);
-            if (filmResult == null || filmResult.fullTitle === null || filmResult.fullTitle === '') {
-                filmResult = await fetchKinopoiskMovieTags(cardName);
-            }
-            return { tags: filmResult?.tags || [], coverUrl: filmResult?.coverUrl || '', fullTitle: filmResult?.fullTitle || '', releaseDate: filmResult?.releaseDate || null };
-        case 'books':
-            const bookResult = await fetchLitresBookTags(cardName);
-            return { tags: bookResult?.tags || [], coverUrl: bookResult?.coverUrl || '', fullTitle: bookResult?.fullTitle || '', releaseDate: bookResult?.releaseDate || null };
-        default:
-            return { tags: [], coverUrl: '', fullTitle: '', releaseDate: null };
-    }
-}
-
-async function updateAllReleaseDates() {
-    const lastUpdate = statements.getStatistic.get('last_release_update');
-    const lastDate = lastUpdate ? new Date(lastUpdate.value) : new Date(0);
-    const now = new Date();
-    const daysDiff = (now - lastDate) / (1000 * 60 * 60 * 24);
-
-    // Раз в 7 дней
-    if (daysDiff < 7) return;
-
-    console.log('[Release] Updating all release dates...');
-
-    const cards = db.prepare(`
-        SELECT name, section FROM data_cards 
-        WHERE ((status = 'Ожидается' OR status = 'В процессе') and section <> 'games')
-        OR status = 'Ожидается' and section = 'games'
-    `).all();
-
-    for (const card of cards) {
-        try {
-            let cardData = await fetchCardData(card.name, card.section);
-            let releaseDate = cardData.releaseDate;
-            if (releaseDate) {
-                const existing = statements.getExpectedRelease.get(card.name, card.section);
-                if (!existing || existing.release_date !== releaseDate) {
-                    statements.setExpectedRelease.run(card.name, card.section, releaseDate, existing?.last_notification_date || null);
-                    console.log(`[Release] Updated: ${card.name} -> ${releaseDate}`);
-                    markExpectedReleasesDirty();
-                }
-            }
-        } catch (error) {
-            console.error(`[Release] Failed to update ${card.name}:`, error);
-        }
-
-        // Задержка между запросами, чтобы не забанили
-        await new Promise(resolve => setTimeout(resolve, 1000));
-    }
-
-    statements.setStatistic.run('last_release_update', now.toISOString(), now.toISOString());
-    console.log('[Release] Update completed');
-}
-
-// Вызываем при запуске
-app.whenReady().then(() => {
-    setTimeout(() => {
-        updateAllReleaseDates();
-    }, 5000);
+ipcMain.handle('fetch-card-data', async (event, title, section) => {
+    return await fetchCardData(title, section);
 });
 
 ipcMain.handle('get-section-release-notifications', async (event, section) => {
@@ -3209,126 +3062,4 @@ ipcMain.handle('mark-release-notification-shown', async (event, cardName, sectio
         markExpectedReleasesDirty();
     }
     return { success: true };
-});
-
-async function saveExpectedReleasesToFirestore(uid, idToken) {
-    const releases = statements.getAllExpectedReleases.all();
-
-    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/sections/expected_releases`;
-
-    const body = {
-        fields: {
-            items: {
-                arrayValue: {
-                    values: releases.map(release => ({
-                        mapValue: {
-                            fields: {
-                                card_name: { stringValue: release.card_name },
-                                section: { stringValue: release.section },
-                                release_date: { stringValue: release.release_date },
-                                last_notification_date: { stringValue: release.last_notification_date || '' }
-                            }
-                        }
-                    }))
-                }
-            },
-            updatedAt: { timestampValue: new Date().toISOString() }
-        }
-    };
-
-    const response = await fetch(url, {
-        method: 'PATCH',
-        headers: {
-            'Authorization': `Bearer ${idToken}`,
-            'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(body)
-    });
-
-    if (!response.ok) {
-        const errorText = await response.text();
-        throw new Error(`HTTP ${response.status}: ${errorText}`);
-    }
-
-    console.log(`✅ Expected releases saved (${releases.length} items)`);
-    return true;
-}
-
-async function loadExpectedReleasesFromFirestore(uid, idToken) {
-    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/sections/expected_releases`;
-
-    try {
-        const response = await fetch(url, {
-            method: 'GET',
-            headers: { 'Authorization': `Bearer ${idToken}` }
-        });
-
-        if (response.status === 404) return [];
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
-
-        const data = await response.json();
-        const releases = [];
-
-        if (data.fields && data.fields.items && data.fields.items.arrayValue) {
-            const values = data.fields.items.arrayValue.values || [];
-            for (const item of values) {
-                const fields = item.mapValue.fields;
-                releases.push({
-                    card_name: fields.card_name?.stringValue || '',
-                    section: fields.section?.stringValue || '',
-                    release_date: fields.release_date?.stringValue || '',
-                    last_notification_date: fields.last_notification_date?.stringValue || null
-                });
-            }
-        }
-
-        return releases;
-    } catch (error) {
-        console.error('Error loading expected releases:', error);
-        return null;
-    }
-}
-
-function markExpectedReleasesDirty() {
-    const now = new Date().toISOString();
-    statements.setExpectedReleasesDirty.run(now);
-    console.log('[i] Expected releases marked as dirty');
-}
-
-function clearExpectedReleasesDirty() {
-    statements.deleteStatistic.run('dirty_expected_releases');
-    console.log('[i] Expected releases dirty flag cleared');
-}
-
-ipcMain.handle('save-release-date', async (event, cardName, section, releaseDate) => {
-    // Проверяем, существует ли карточка и имеет ли она статус "Ожидается" или "В процессе"
-    const card = statements.getStatusByNameAndSection.get(cardName, section);
-
-    if (card) {
-        // Если статус подходящий — сохраняем/обновляем в expected_releases
-        const existing = statements.getExpectedRelease.get(cardName, section);
-        if (existing) {
-            statements.setExpectedRelease.run(cardName, section, releaseDate, existing.last_notification_date);
-        } else {
-            statements.setExpectedRelease.run(cardName, section, releaseDate, null);
-        }
-        markExpectedReleasesDirty();
-        console.log(`[Release] Saved date for "${cardName}": ${releaseDate}`);
-    } 
-
-    return { success: true };
-});
-
-ipcMain.handle('delete-release-date', async (event, cardName, section) => {
-    statements.deleteExpectedRelease.run(cardName, section);
-    markExpectedReleasesDirty();
-    return { success: true };
-});
-
-ipcMain.handle('get-all-expected-releases', async () => {
-    return statements.getAllExpectedReleases.all();
-});
-
-ipcMain.handle('fetch-card-data', async (event, title, section) => {
-    return await fetchCardData(title, section);
 });

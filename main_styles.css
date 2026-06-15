@@ -2387,7 +2387,7 @@ select option[value="Ожидается"] { background-color: var(--rating-waiti
     right: 20px;
     max-width: 320px;
     min-width: 320px;
-    z-index: 10000;
+    z-index: 10000;,
     border-radius: 12px;
     overflow: hidden;
     animation: slideInRight 0.3s ease;
@@ -2522,3 +2522,34 @@ select option[value="Ожидается"] { background-color: var(--rating-waiti
     color: #4a9eff;
     font-weight: 500;
 }
+
+.search-tags-online-btn {
+    background: #2c2c2c;
+    border: 1px solid #4a4a4a;
+    border-radius: 8px;
+    cursor: pointer;
+    padding: 6px 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    max-width: 15px;
+}
+
+.search-tags-online-btn:hover:not(:disabled) {
+    background: #3a3a3a;
+    border-color: #6c5ce7;
+}
+
+.search-tags-online-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.search-tags-online-btn img {
+    width: 18px;
+    height: 18px;
+    filter: brightness(0) invert(1);
+}
+
+

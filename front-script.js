@@ -570,6 +570,7 @@ function setupEditDescriptionButtons() {
             const currentDesc = card?.dataset.description || '';
             const currentTags = JSON.parse(card?.dataset.tags || '[]');
             const currentReleaseDate = card?.dataset.releaseDate || '';
+            const section = document.querySelector('.nav-item.active')?.dataset.section;
 
             // Форматируем дату для отображения
             const formattedDate = currentReleaseDate ?
@@ -606,9 +607,20 @@ function setupEditDescriptionButtons() {
                                 </span>
                             `).join('')}
                         </div>
-                        <input type="text" id="tagInput" maxlength="50" placeholder="Например: хоррор, комедия, шедевр" autocomplete="off">
+                        <div style="display: flex; gap: 6px; align-items: center;">
+                            <input type="text" id="tagInput" maxlength="50" placeholder="Например: хоррор, комедия, шедевр" autocomplete="off" style="flex: 1; background: #1e1e1e; border: 1px solid #4a4a4a; border-radius: 8px; color: white; padding: 8px 12px; font-size: 13px;">
+                            <button id="searchTagsOnlineBtn" class="search-tags-online-btn" title="Поиск тегов онлайн" style="background: transparent; border: none; cursor: pointer; padding: 6px; display: flex; align-items: center; justify-content: center; border-radius: 6px;">
+                                <img src="assets/icons/find.svg" alt="🔍" style="width: 18px; height: 18px; filter: brightness(0) invert(1); opacity: 0.6;">
+                            </button>
+                        </div>
                     </div>
                     <div id="tagSuggestions" class="tag-suggestions" style="display: none;"></div>
+                    
+                    <!-- Индикатор загрузки -->
+                    <div id="tagsSearchLoading" style="display: none; margin-top: 8px; text-align: center;">
+                        <div class="loading-spinner" style="width: 20px; height: 20px; margin: 0 auto;"></div>
+                        <p style="font-size: 11px; margin-top: 4px;">Поиск тегов...</p>
+                    </div>
                     
                     <div style="display: flex; gap: 10px; margin-top: 10px;">
                         <button class="modal-button cancel-btn" style="flex: 1;">Отмена</button>
@@ -624,7 +636,10 @@ function setupEditDescriptionButtons() {
             const tagInput = modal.querySelector('#tagInput');
             const tagsList = modal.querySelector('#modalTagsList');
             const suggestionsDiv = modal.querySelector('#tagSuggestions');
+            const searchTagsOnlineBtn = modal.querySelector('#searchTagsOnlineBtn');
+            const tagsSearchLoading = modal.querySelector('#tagsSearchLoading');
             let tags = [...currentTags];
+            let isSearching = false;
 
             // Функция позиционирования подсказок
             function positionSuggestions() {
@@ -674,6 +689,22 @@ function setupEditDescriptionButtons() {
                 hideSuggestions();
             }
 
+            // Добавление нескольких тегов сразу (без дубликатов)
+            function addMultipleTags(newTags) {
+                let addedCount = 0;
+                for (const tag of newTags) {
+                    const cleanTag = tag.toLowerCase().trim();
+                    if (cleanTag && cleanTag.length <= 50 && !tags.includes(cleanTag)) {
+                        tags.push(cleanTag);
+                        addedCount++;
+                    }
+                }
+                if (addedCount > 0) {
+                    renderTags();
+                }
+                return addedCount;
+            }
+
             // Показ подсказок
             async function showSuggestions(query) {
                 if (query.length < 2) {
@@ -711,6 +742,45 @@ function setupEditDescriptionButtons() {
                 suggestionsDiv.style.display = 'none';
             }
 
+            // Поиск тегов онлайн
+            async function searchTagsOnline() {
+                if (isSearching) return;
+
+                const cardName = itemName;
+                const currentSection = section;
+
+                if (!cardName) {
+                    showError('Не удалось определить название');
+                    return;
+                }
+
+                isSearching = true;
+                tagsSearchLoading.style.display = 'block';
+                searchTagsOnlineBtn.disabled = true;
+
+                try {
+                    console.log(`[SearchTagsOnline] Fetching tags for: ${cardName} (${currentSection})`);
+
+                    const result = await window.electronAPI.fetchCardData(cardName, currentSection);
+
+                    if (result && result.tags && result.tags.length > 0) {
+                        const addedCount = addMultipleTags(result.tags);
+                        console.log(`[SearchTagsOnline] Added ${addedCount} new tags`);
+                        // Без модального окна - просто логируем
+                    } else {
+                        console.log('[SearchTagsOnline] No tags found');
+                        // Без модального окна
+                    }
+
+                } catch (error) {
+                    console.error('[SearchTagsOnline] Error:', error);
+                } finally {
+                    isSearching = false;
+                    tagsSearchLoading.style.display = 'none';
+                    searchTagsOnlineBtn.disabled = false;
+                }
+            }
+
             // Обработчики событий для поля ввода тегов
             tagInput.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter' && tagInput.value.trim()) {
@@ -737,6 +807,13 @@ function setupEditDescriptionButtons() {
             tagInput.addEventListener('focus', positionSuggestions);
             window.addEventListener('resize', positionSuggestions);
 
+            // Обработчик кнопки поиска тегов онлайн
+            searchTagsOnlineBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                searchTagsOnline();
+            });
+
             // Закрытие подсказок при клике вне
             document.addEventListener('click', function closeSuggestions(e) {
                 if (!suggestionsDiv.contains(e.target) && e.target !== tagInput) {
@@ -757,7 +834,6 @@ function setupEditDescriptionButtons() {
             modal.querySelector('.confirm-btn').onclick = async () => {
                 const newDescription = textarea.value.trim();
                 const newReleaseDate = releaseDateInput.value;
-                const section = document.querySelector('.nav-item.active')?.dataset.section;
 
                 await window.electronAPI.updateDataDescription(section, itemName, newDescription);
                 await window.electronAPI.updateCardTags(section, itemName, tags);
