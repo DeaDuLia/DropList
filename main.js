@@ -1889,6 +1889,43 @@ async function fetchKupikodPrice(gameName) {
 `
     );
 }
+
+async function fetchKupikodPriceAPI(gameName) {
+    try {
+        const url = `https://search-v2.kupikod.com/search?q=${encodeURIComponent(gameName)}&limit=1`;
+        console.log(`[Kupikod API] Request: ${url}`);
+
+        const response = await fetch(url, {
+            headers: {
+                'User-Agent': DEFAULT_USER_AGENT,
+                'Accept': 'application/json'
+            }
+        });
+
+        const data = await response.json();
+
+        if (data.items && data.items.length > 0) {
+            // Берём первый результат (самый релевантный)
+            const game = data.items[0];
+
+            return {
+                price: game.min_price,
+                oldPrice: game.min_old_price,
+                coverUrl: game.header_image,
+                fullTitle: game.name,
+                releaseDate: game.release_date,
+                link: game.link,
+                isDlc: game.is_dlc
+            };
+        }
+
+        return null;
+
+    } catch (error) {
+        console.error('[Kupikod API] Error:', error);
+        return null;
+    }
+}
 // ========== +++++КНИГИ ТЕГИ ==========
 async function fetchLitresBookTags(bookName) {
     return parseSite(
