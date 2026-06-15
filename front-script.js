@@ -147,7 +147,36 @@ let notificationQueue = [];
 let activeBanners = []; // Массив активных баннеров
 let currentSectionForNotifications = null; // Запоминаем раздел, для которого показываем уведомления
 
+const priceCache = new Map();
+const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 часа
 
+function getCachedPrice(source, itemName) {
+    const key = `${source}:${itemName.toLowerCase()}`;
+    const cached = priceCache.get(key);
+    if (cached && cached.expires > Date.now()) {
+        console.log(`[Cache] Hit: ${key}`);
+        return cached.data;
+    }
+    if (cached) {
+        console.log(`[Cache] Expired: ${key}`);
+        priceCache.delete(key);
+    }
+    return null;
+}
+
+function setCachedPrice(source, itemName, data) {
+    const key = `${source}:${itemName.toLowerCase()}`;
+    priceCache.set(key, {
+        data: data,
+        expires: Date.now() + CACHE_TTL
+    });
+    console.log(`[Cache] Saved: ${key}`);
+}
+
+function clearPriceCache() {
+    priceCache.clear();
+    console.log('[Cache] Cleared');
+}
 
 
 async function showReleaseNotification(notification, index) {
@@ -476,6 +505,7 @@ function createTooltip() {
         tooltipElement = document.createElement('div');
         tooltipElement.className = 'card-tooltip';
         document.body.appendChild(tooltipElement);
+        tooltipElement.style.visibility = 'hidden';
     }
     return tooltipElement;
 }
@@ -498,7 +528,8 @@ function showTooltip(description, tags, releaseDate, x, y) {
     }
 
     let tagsHtml = '';
-    if (tags && tags.length > 0) {
+    const hasTags = tags && tags.length > 0;
+    if (hasTags) {
         const maxVisible = 6;
         const visibleTags = tags.slice(0, maxVisible);
         const remainingCount = tags.length - maxVisible;
@@ -516,20 +547,19 @@ function showTooltip(description, tags, releaseDate, x, y) {
         descHtml = `<div class="card-tooltip-desc">${escapeHtml(description)}</div>`;
     }
 
-    // Если ничего нет — скрываем
-    if (!descHtml && !tags.length && !releaseDate) {
-        tooltip.style.display = 'none';
-        return;
-    }
-
-    // Определяем класс: если есть описание — показываем сразу, если только теги — с задержкой
+    // Определяем класс для задержки (только если нет описания, но есть теги)
     let tooltipClass = 'card-tooltip';
-    if (!descHtml && tags.length > 0) {
+    const hasDescription = description && description.trim();
+
+    if (!hasDescription && hasTags) {
         tooltipClass += ' card-tooltip-delayed';
     }
 
     tooltip.className = tooltipClass;
-    tooltip.innerHTML = dateHtml + descHtml + tagsHtml;
+
+    // Контент
+    tooltip.innerHTML = dateHtml + descHtml + tagsHtml + '<div class="card-tooltip-prices-placeholder"></div>';
+
     tooltip.style.display = 'block';
     tooltip.style.left = (x + 15) + 'px';
     tooltip.style.top = (y + 15) + 'px';
@@ -1290,6 +1320,7 @@ document.addEventListener('keydown', (e) => {
 document.querySelectorAll('.nav-item').forEach(item => {
     item.addEventListener('click', async function() {
         clearAllNotifications();
+        clearPriceCache();
         currentSectionForNotifications = null;
         // Удаляем активный класс у всех элементов
         document.querySelectorAll('.nav-item').forEach(navItem => {
@@ -3110,26 +3141,85 @@ function setupTitleClickHandlers() {
     });
 }
 function setupCardClickHandlers() {
-
-
     document.querySelectorAll('.data-card').forEach(card => {
         card.style.cursor = 'pointer';
 
+        let priceFetchTimer = null;
+        let lastFetchedCard = null;
+
         card.addEventListener('mouseenter', (e) => {
+            const itemName = card.dataset.name;
             const description = card.dataset.description || '';
             const tags = JSON.parse(card.dataset.tags || '[]');
             const releaseDate = card.dataset.releaseDate || null;
+            const section = document.querySelector('.nav-item.active')?.dataset.section;
+
+            if (priceFetchTimer) clearTimeout(priceFetchTimer);
+
+            lastFetchedCard = { itemName, section, description, tags, releaseDate, x: e.clientX, y: e.clientY };
+
+
             showTooltip(description, tags, releaseDate, e.clientX, e.clientY);
+
+            if (section === 'games') {
+                // Проверяем кэш
+                const cachedSteam = getCachedPrice('steam', itemName);
+                const cachedKupikod = getCachedPrice('kupikod', itemName);
+
+                // Если есть в кэше — обновляем тултип (ждём появления)
+                if (cachedSteam || cachedKupikod) {
+                    const checkTooltip = setInterval(() => {
+                        const tooltip = document.querySelector('.card-tooltip');
+                        if (tooltip && tooltip.style.display === 'block') {
+                            clearInterval(checkTooltip);
+                            updateTooltipPrices(cachedSteam, cachedKupikod, tags.length > 0);
+                        }
+                    }, 50);
+                }
+
+                // Загружаем цены, если нет в кэше
+                if (!cachedSteam || !cachedKupikod) {
+                    priceFetchTimer = setTimeout(async () => {
+                        if (lastFetchedCard?.itemName !== itemName) return;
+
+                        const tooltip = document.querySelector('.card-tooltip');
+                        if (tooltip && tooltip.style.display === 'block') {
+                            let priceDiv = tooltip.querySelector('.card-tooltip-prices');
+                            if (!priceDiv) {
+                                priceDiv = document.createElement('div');
+                                priceDiv.className = 'card-tooltip-prices';
+                                tooltip.appendChild(priceDiv);
+                            }
+                            priceDiv.innerHTML = '<div class="price-loading">💰 Загрузка цен...</div>';
+                            tooltip.style.visibility = 'visible';
+                        }
+
+                        const [steamData, kupikodData] = await Promise.all([
+                            !cachedSteam ? window.electronAPI.fetchSteamTagsApi(itemName) : Promise.resolve(null),
+                            !cachedKupikod ? window.electronAPI.searchKupikodPrice(itemName) : Promise.resolve(null)
+                        ]);
+
+                        if (lastFetchedCard?.itemName !== itemName) return;
+
+                        if (steamData) setCachedPrice('steam', itemName, steamData);
+                        if (kupikodData) setCachedPrice('kupikod', itemName, kupikodData);
+
+                        updateTooltipPrices(steamData || cachedSteam, kupikodData || cachedKupikod, tags.length > 0);
+                    }, 0);
+                }
+            }
+        });
+
+        card.addEventListener('mouseleave', () => {
+            if (priceFetchTimer) clearTimeout(priceFetchTimer);
+            lastFetchedCard = null;
+            hideTooltip();
         });
 
         card.addEventListener('mousemove', (e) => {
             if (tooltipElement && tooltipElement.style.display === 'block') {
                 updateTooltipPosition(e.clientX, e.clientY);
             }
-        });
-
-        card.addEventListener('mouseleave', () => {
-            hideTooltip();
         });
 
         card.addEventListener('click', async function(e) {
@@ -3139,9 +3229,8 @@ function setupCardClickHandlers() {
                 e.target.closest('.delete-btn') ||
                 e.target.closest('.data-title') ||
                 e.target.closest('.editable-field')) {
-                return; // Если кликнули на кнопку или редактируемое поле, ничего не делаем
+                return;
             }
-
             const itemName = this.dataset.name;
             if (itemName) {
                 const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(itemName)}`;
@@ -3149,6 +3238,56 @@ function setupCardClickHandlers() {
             }
         });
     });
+}
+
+function updateTooltipPrices(steamData, kupikodData, hasTags = false) {
+    const tooltip = document.querySelector('.card-tooltip');
+    if (!tooltip) return;
+
+    // Удаляем плейсхолдер
+    const placeholder = tooltip.querySelector('.card-tooltip-prices-placeholder');
+    if (placeholder) placeholder.remove();
+
+    // Ищем или создаём контейнер для цен
+    let pricesContainer = tooltip.querySelector('.card-tooltip-prices');
+    if (!pricesContainer) {
+        pricesContainer = document.createElement('div');
+        pricesContainer.className = 'card-tooltip-prices';
+        tooltip.appendChild(pricesContainer);
+    }
+    if (hasTags) {
+        pricesContainer.style.borderTop = '1px solid rgba(255, 255, 255, 0.2)';
+        pricesContainer.style.marginTop = '8px';
+        pricesContainer.style.paddingTop = '8px';
+    }
+
+    // Формируем HTML с ценами
+    let pricesHtml = '';
+    let hasAny = false;
+
+    // Steam
+    if (steamData && steamData.price) {
+        hasAny = true;
+        if (steamData.discount && steamData.discount > 0) {
+            pricesHtml += `<div>🎮 Steam: ${steamData.price} ₽ (скидка ${steamData.discount}%)</div>`;
+        } else {
+            pricesHtml += `<div>🎮 Steam: ${steamData.price} ₽</div>`;
+        }
+    } else if (steamData && steamData.releaseDate && !steamData.price) {
+        hasAny = true;
+        pricesHtml += `<div>🎮 Steam: бесплатно</div>`;
+    }
+
+    // Kupikod
+    if (kupikodData && kupikodData.price) {
+        hasAny = true;
+        pricesHtml += `<div>🛒 Kupikod: ${kupikodData.price} ₽</div>`;
+    }
+
+    if (!hasAny) {
+        pricesHtml = `<div>💰 Цены не найдены</div>`;
+    }
+    pricesContainer.innerHTML = pricesHtml;
 }
 
 randomBtn.addEventListener('click', async () => {

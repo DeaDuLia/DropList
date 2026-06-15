@@ -1,6 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
+    fetchSteamTags: (title) => ipcRenderer.invoke('fetch-steam-tags', title),
+    fetchSteamTagsApi: (title) => ipcRenderer.invoke('fetch-steam-tags-api', title),
+    searchKupikodPrice: (title) => ipcRenderer.invoke('search-kupikod-price', title),
     fetchCardData: (title, section) => ipcRenderer.invoke('fetch-card-data', title, section),
     getAllExpectedReleases: () => ipcRenderer.invoke('get-all-expected-releases'),
     deleteReleaseDate: (cardName, section) => ipcRenderer.invoke('delete-release-date', cardName, section),

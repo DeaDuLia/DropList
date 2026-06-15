@@ -1612,30 +1612,30 @@ async function fetchSteamGameTags(gameName) {
             isResolved = true;
             if (loadTimeout) clearTimeout(loadTimeout);
             if (hiddenWindow && !hiddenWindow.isDestroyed()) {
-                hiddenWindow.close();
+                destroyWindowCompletely(hiddenWindow);
             }
             resolve(result);
         };
 
         try {
-            // 1. Поиск игры через storesearch API (только для получения ID)
+            // 1. Поиск игры через storesearch API
             const searchUrl = `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(gameName)}&cc=ru&l=russian`;
             const searchResponse = await fetch(searchUrl);
             const searchData = await searchResponse.json();
 
             if (!searchData.items || searchData.items.length === 0) {
                 console.log(`[Steam] Game not found: ${gameName}`);
-                finish({ tags: [], coverUrl: '', fullTitle: '', releaseDate: null, description: '' });
+                finish({ tags: [], coverUrl: '', fullTitle: '', releaseDate: null, description: '', price: null });
                 return;
             }
+
             const game = searchData.items[0];
             const appId = game.id;
             const fullTitle = game.name;
 
             console.log(`[Steam] Found ID for "${gameName}": ${appId}`);
-            console.log(`[Steam] Full title: "${fullTitle}"`);
 
-            // 2. Открываем страницу игры и парсим ВСЁ с неё
+            // 2. Открываем страницу игры
             const gameUrl = `https://store.steampowered.com/app/${appId}/?l=russian`;
 
             hiddenWindow = new BrowserWindow({
@@ -1650,7 +1650,7 @@ async function fetchSteamGameTags(gameName) {
             });
 
             hiddenWindow.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
-                details.requestHeaders['User-Agent'] = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+                details.requestHeaders['User-Agent'] = DEFAULT_USER_AGENT;
                 details.requestHeaders['Accept-Language'] = 'ru-RU,ru;q=0.9';
                 callback({ cancel: false, requestHeaders: details.requestHeaders });
             });
@@ -1667,12 +1667,12 @@ async function fetchSteamGameTags(gameName) {
 
                 loadTimeout = setTimeout(() => {
                     if (!isLoaded) {
-                        console.log(`[Steam] Page timeout (3s), stopping load`);
+                        console.log(`[Steam] Page timeout, stopping load`);
                         hiddenWindow.webContents.stop();
                         isLoaded = true;
                         resolve();
                     }
-                }, 3000);
+                }, 5000);
             });
 
             await waitForLoad;
@@ -1680,27 +1680,24 @@ async function fetchSteamGameTags(gameName) {
 
             currentUrl = hiddenWindow.webContents.getURL();
             if (!currentUrl || currentUrl === 'about:blank' || currentUrl.includes('error')) {
-                console.log('[Steam] Page not loaded properly, finishing with empty result');
-                finish({ tags: [], coverUrl: '', fullTitle: '', releaseDate: null, description: '' });
+                console.log('[Steam] Page not loaded properly');
+                finish({ tags: [], coverUrl: '', fullTitle: '', releaseDate: null, description: '', price: null });
                 return;
             }
 
-            // Парсим ВСЕ данные со страницы
+            // Парсим данные со страницы (включая цену)
             const gameData = await hiddenWindow.webContents.executeJavaScript(`
                 (function() {
                     // Обложка
                     let coverUrl = '';
                     const headerImg = document.querySelector('.game_header_image_full');
-                    if (headerImg && headerImg.src) {
-                        coverUrl = headerImg.src;
-                    }
+                    if (headerImg && headerImg.src) coverUrl = headerImg.src;
                     
                     // Дата релиза
                     let releaseDate = null;
                     const releaseDateEl = document.querySelector('.release_date .date');
                     if (releaseDateEl) {
                         const dateText = releaseDateEl.textContent.trim();
-                        // Парсим "11 авг. 2022 г."
                         const months = {
                             'янв': '01', 'фев': '02', 'мар': '03', 'апр': '04',
                             'мая': '05', 'май': '05', 'июн': '06', 'июл': '07',
@@ -1712,58 +1709,102 @@ async function fetchSteamGameTags(gameName) {
                             const monthName = match[2].toLowerCase().substring(0, 3);
                             const year = match[3];
                             const month = months[monthName];
-                            if (month) {
-                                releaseDate = year + '-' + month + '-' + day;
-                            }
+                            if (month) releaseDate = year + '-' + month + '-' + day;
                         }
                     }
                     
-                    // Теги (Популярные метки)
+                    // ========== ЦЕНА ==========
+                    let price = null;
+                    let discount = null;
+                    let oldPrice = null;
+                    
+                    // Пробуем цену со скидкой
+                    const discountPriceEl = document.querySelector('.discount_final_price');
+                    if (discountPriceEl) {
+                        const priceMatch = discountPriceEl.textContent.match(/(\\d+)[\\d\\s]*[\\,\\.]?\\d*/);
+                        if (priceMatch) {
+                            price = priceMatch[1].replace(/\\s/g, '').replace(',', '.');
+                            price = Math.floor(parseFloat(price));
+                        }
+                    }
+                    
+                    // Если нет скидки — обычная цена
+                    if (!price) {
+                        const regularPriceEl = document.querySelector('.game_purchase_price');
+                        if (regularPriceEl) {
+                            const priceMatch = regularPriceEl.textContent.match(/(\\d+)/);
+                            if (priceMatch) price = priceMatch[1];
+                        }
+                    }
+                    
+                    // Если цена в data-атрибуте
+                    if (!price) {
+                        const priceData = document.querySelector('[data-price-final]');
+                        if (priceData) {
+                            price = priceData.getAttribute('data-price-final');
+                            if (price) price = Math.floor(parseInt(price) / 100);
+                        }
+                    }
+                    
+                    // Скидка
+                    const discountEl = document.querySelector('.discount_pct');
+                    if (discountEl) {
+                        const discountMatch = discountEl.textContent.match(/(\\d+)/);
+                        if (discountMatch) discount = discountMatch[1];
+                    }
+                    
+                    // Старая цена
+                    const oldPriceEl = document.querySelector('.discount_original_price');
+                    if (oldPriceEl) {
+                        const oldMatch = oldPriceEl.textContent.match(/(\\d+)/);
+                        if (oldMatch) oldPrice = oldMatch[1];
+                    }
+                    
+                    // Теги
                     const tags = [];
                     const tagsContainer = document.querySelector('.glance_tags.popular_tags, .popular_tags_ctn');
                     if (tagsContainer) {
-                        const tagElements = tagsContainer.querySelectorAll('a.app_tag');
-                        for (const el of tagElements) {
+                        tagsContainer.querySelectorAll('a.app_tag').forEach(el => {
                             const tagText = el.textContent.trim();
                             if (tagText && tagText !== '+' && el.style.display !== 'none') {
                                 tags.push(tagText);
                             }
-                        }
+                        });
                     }
                     
                     // Описание
                     let description = '';
                     const descElement = document.querySelector('.game_description_snippet');
-                    if (descElement) {
-                        description = descElement.textContent.trim();
-                    }
+                    if (descElement) description = descElement.textContent.trim();
                     
                     return {
                         coverUrl: coverUrl,
                         releaseDate: releaseDate,
                         tags: tags.slice(0, 12),
                         description: description,
-                        fullTitle: ''
+                        price: price,
+                        discount: discount,
+                        oldPrice: oldPrice
                     };
                 })();
             `);
 
-            console.log(`[Steam] Cover: ${gameData.coverUrl}`);
-            console.log(`[Steam] Release date: ${gameData.releaseDate || 'not found'}`);
-            console.log(`[Steam] Tags:`, gameData.tags);
-            console.log(`[Steam] Description: ${gameData.description.substring(0, 100)}...`);
+            console.log(`[Steam] Price: ${gameData.price} ₽, Discount: ${gameData.discount}%`);
 
             finish({
                 tags: gameData.tags,
                 coverUrl: gameData.coverUrl,
                 fullTitle: fullTitle,
                 releaseDate: gameData.releaseDate,
-                description: gameData.description
+                description: gameData.description,
+                price: gameData.price,
+                discount: gameData.discount,
+                oldPrice: gameData.oldPrice
             });
 
         } catch (error) {
             console.error('[Steam] Error:', error);
-            finish({ tags: [], coverUrl: '', fullTitle: '', releaseDate: null, description: '' });
+            finish({ tags: [], coverUrl: '', fullTitle: '', releaseDate: null, description: '', price: null });
         }
     });
 }
@@ -1925,6 +1966,89 @@ async function fetchKupikodPriceAPI(gameName) {
         console.error('[Kupikod API] Error:', error);
         return null;
     }
+}
+async function fetchSteamAPIData(gameName) {
+    try {
+        const searchUrl = `https://store.steampowered.com/api/storesearch/?term=${encodeURIComponent(gameName)}&cc=ru&l=russian`;
+        const searchResponse = await fetch(searchUrl);
+        const searchData = await searchResponse.json();
+
+        if (!searchData.items || searchData.items.length === 0) {
+            console.log(`[Steam API] Game not found: ${gameName}`);
+            return null;
+        }
+
+        // ✅ Универсальный выбор основной игры
+        const game = selectMainGame(searchData.items, gameName);
+        const appId = game.id;
+
+        console.log(`[Steam API] Selected: "${game.name}" (ID: ${appId})`);
+
+        // Получаем детали
+        const detailsUrl = `https://store.steampowered.com/api/appdetails?appids=${appId}&cc=ru&l=russian`;
+        const detailsResponse = await fetch(detailsUrl);
+        const detailsData = await detailsResponse.json();
+
+        if (!detailsData[appId] || !detailsData[appId].success) {
+            return null;
+        }
+
+        const data = detailsData[appId].data;
+
+        // Парсим цену
+        let price = null;
+        let discount = null;
+        let oldPrice = null;
+
+        if (data.price_overview) {
+            price = data.price_overview.final_formatted;
+            discount = data.price_overview.discount_percent;
+            if (data.price_overview.initial_formatted && data.price_overview.initial_formatted !== price) {
+                oldPrice = data.price_overview.initial_formatted;
+            }
+        }
+
+        return {
+            fullTitle: data.name,
+            tags: data.genres?.map(g => g.description) || [],
+            description: data.short_description || '',
+            coverUrl: data.header_image || '',
+            releaseDate: data.release_date?.date || null,
+            price: price ? price.replace('руб.', '').trim() : 'недостуно',
+            discount: discount,
+            oldPrice: oldPrice ? oldPrice.replace('руб.', '').trim() : null
+        };
+
+    } catch (error) {
+        console.error('[Steam API] Error:', error);
+        return null;
+    }
+}
+
+function selectMainGame(items, originalGameName) {
+    let game = items.find(item => {
+        // 1. Точное совпадение названия
+        if (item.name.toLowerCase() === originalGameName.toLowerCase()) return true;
+
+        // 2. Не саундтрек и не OST (но пока не проверяем на DLC)
+        if (item.name.toLowerCase().includes('soundtrack') ||
+            item.name.toLowerCase().includes('ost')) return false;
+
+        // 3. Не DLC (нет дефиса с пробелами)
+        if (item.name.includes(' - ')) return false;
+
+        // 4. Есть метаск score
+        if (item.metascore && item.metascore !== '') return true;
+
+        return false;
+    });
+    if (game) return game;
+    // 4. Ищем самый короткий (основная игра обычно короче)
+    game = items.reduce((a, b) => (a.name.length < b.name.length ? a : b));
+    if (game) return game;
+
+    // 5. Последний шанс — первый элемент
+    return items[0];
 }
 // ========== +++++КНИГИ ТЕГИ ==========
 async function fetchLitresBookTags(bookName) {
@@ -2451,6 +2575,10 @@ ipcMain.handle('search-tags-web', async (event, title, section) => {
 
 ipcMain.handle('fetch-steam-tags', async (event, title) => {
     return await fetchSteamGameTags(title);
+});
+
+ipcMain.handle('fetch-steam-tags-api', async (event, title) => {
+    return await fetchSteamAPIData(title);
 });
 
 ipcMain.handle('search-litres-book', async (event, title) => {
@@ -3098,4 +3226,9 @@ ipcMain.handle('mark-release-notification-shown', async (event, cardName, sectio
         markExpectedReleasesDirty();
     }
     return { success: true };
+});
+
+
+ipcMain.handle('search-kupikod-price', async (event, title) => {
+    return await fetchKupikodPriceAPI(title); // используем API версию
 });

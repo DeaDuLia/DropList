@@ -2552,4 +2552,7 @@ select option[value="Ожидается"] { background-color: var(--rating-waiti
     filter: brightness(0) invert(1);
 }
 
+.card-tooltip-prices {
 
+    font-size: 12px;
+}
