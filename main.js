@@ -1775,43 +1775,42 @@ async function fetchKupikodPrice(gameName) {
         // targetUrlParser - имитируем ввод и возвращаем ссылку
         `
     (function() {
-        return new Promise((resolve) => {
-            const input = document.querySelector('input[placeholder="Поиск"], input[data-testid="input"]');
-            if (!input) {
-                resolve(null);
-                return;
-            }
+    return new Promise((resolve) => {
+        const input = document.querySelector('input[placeholder="Поиск"], input[data-testid="input"]');
+        if (!input) {
+            resolve(null);
+            return;
+        }
+        
+        input.focus();
+        
+        const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
+            window.HTMLInputElement.prototype, 
+            'value'
+        ).set;
+        
+        nativeInputValueSetter.call(input, "${gameName.replace(/"/g, '\\"')}");
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        
+        // Ждём появления результатов с проверкой каждые 100ms
+        let attempts = 0;
+        const maxAttempts = 30; // максимум 3 секунды (30 * 100ms)
+        
+        const checkResults = setInterval(() => {
+            attempts++;
+            const results = document.querySelectorAll('.main-search__results a.main-search__result-item');
             
-            // Фокус
-            input.focus();
-            
-            // === КЛЮЧЕВОЙ МОМЕНТ ===
-            // Для controlled components в React нужно использовать setter
-            const nativeInputValueSetter = Object.getOwnPropertyDescriptor(
-                window.HTMLInputElement.prototype, 
-                'value'
-            ).set;
-            
-            // Устанавливаем значение через нативный setter
-            nativeInputValueSetter.call(input, "${gameName.replace(/"/g, '\\"')}");
-            
-            // Триггерим событие input, чтобы React узнал об изменении
-            input.dispatchEvent(new Event('input', { bubbles: true }));
-            
-            // Даём React время на обновление
-            setTimeout(() => {
-                const results = document.querySelectorAll('.main-search__results a.main-search__result-item');
-                if (results.length === 0) {
-                    resolve(null);
-                    return;
-                }
-                
-                const firstResult = results[0];
-                const href = firstResult.getAttribute('href');
+            if (results.length > 0) {
+                clearInterval(checkResults);
+                const href = results[0].getAttribute('href');
                 resolve(href);
-            }, 2000);
-        });
-    })()
+            } else if (attempts >= maxAttempts) {
+                clearInterval(checkResults);
+                resolve(null);
+            }
+        }, 100);
+    });
+})()
 `,
         // dataParser - парсим цену
         // dataParser - парсим данные со страницы игры
