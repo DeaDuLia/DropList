@@ -7,24 +7,11 @@ let activeParsingWindows = new Set();
 
 export const DEFAULT_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
-function closeAllParsingWindows() {
+export function closeAllParsingWindows() {
     console.log(`[Parsing] Closing ${activeParsingWindows.size} windows`);
     for (const win of activeParsingWindows) {
         if (win && !win.isDestroyed()) {
-            try {
-                if (win.webContents && !win.webContents.isDestroyed()) {
-                    win.webContents.stop();
-                    win.webContents.removeAllListeners();
-                    win.webContents.session.clearStorageData({
-                        storages: ['cookies', 'localstorage', 'sessionstorage'],
-                        quotas: ['temporary']
-                    }).catch(e => console.log('Storage clear error:', e));
-                }
-                win.removeAllListeners();
-                win.close();
-            } catch (error) {
-                console.error('[Parsing] Error closing window:', error);
-            }
+            destroyWindowCompletely(win);
         }
     }
     activeParsingWindows.clear();
@@ -84,8 +71,10 @@ export async function parseSite(name, searchUrl, targetUrlParser, dataParser, ne
     const waitForPageLoad = () => {
         return new Promise((resolve) => {
             loadTimeout = setTimeout(() => {
-                console.log(`[${name}] page timeout, stopping load`);
-                hiddenWindow.webContents.stop();
+                if (hiddenWindow && !hiddenWindow.isDestroyed()) {
+                    console.log(`[${name}] page timeout, stopping load`);
+                    hiddenWindow.webContents.stop();
+                }
                 resolve();
             }, 5000);
             hiddenWindow.webContents.once('did-finish-load', () => {
@@ -101,6 +90,9 @@ export async function parseSite(name, searchUrl, targetUrlParser, dataParser, ne
         hiddenWindow.loadURL(searchUrl);
         if (needExtraWait) { await new Promise(r => setTimeout(r, 2000)); }
         await waitForPageLoad();
+        if (!hiddenWindow || hiddenWindow.isDestroyed()) {
+            return { tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null };
+        }
         let targetUrl = await hiddenWindow.webContents.executeJavaScript(targetUrlParser);
 
         if (!targetUrl) {
@@ -111,6 +103,9 @@ export async function parseSite(name, searchUrl, targetUrlParser, dataParser, ne
         console.log(`[${name}] Info Found: ${targetUrl}`);
         hiddenWindow.loadURL(targetUrl);
         await waitForPageLoad();
+        if (!hiddenWindow || hiddenWindow.isDestroyed()) {
+            return { tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null };
+        }
         let result = await hiddenWindow.webContents.executeJavaScript(dataParser);
         cleanup();
         return result;

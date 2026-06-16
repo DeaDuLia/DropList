@@ -69,9 +69,11 @@ export async function fetchSteamGameTags(gameName) {
 
                 loadTimeout = setTimeout(() => {
                     if (!isLoaded) {
-                        console.log(`[Steam] Page timeout, stopping load`);
-                        hiddenWindow.webContents.stop();
-                        isLoaded = true;
+                        if (hiddenWindow && !hiddenWindow.isDestroyed()) {
+                            console.log(`[Steam] Page timeout, stopping load`);
+                            hiddenWindow.webContents.stop();
+                            isLoaded = true;
+                        }
                         resolve();
                     }
                 }, 5000);
@@ -79,14 +81,18 @@ export async function fetchSteamGameTags(gameName) {
 
             await waitForLoad;
             if (loadTimeout) clearTimeout(loadTimeout);
-
+            if (!hiddenWindow || hiddenWindow.isDestroyed()) {
+                return { tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null };
+            }
             currentUrl = hiddenWindow.webContents.getURL();
             if (!currentUrl || currentUrl === 'about:blank' || currentUrl.includes('error')) {
                 console.log('[Steam] Page not loaded properly');
                 finish({ tags: [], coverUrl: '', fullTitle: '', releaseDate: null, description: '', price: null });
                 return;
             }
-
+            if (!hiddenWindow || hiddenWindow.isDestroyed()) {
+                return { tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null };
+            }
             // Парсим данные со страницы (включая цену)
             const gameData = await hiddenWindow.webContents.executeJavaScript(`
                 (function() {

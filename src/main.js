@@ -11,7 +11,7 @@ const LocalDatabase = require('./database/local-database');
 const {fetchSteamAPIData, fetchSteamGameTags, fetchKupikodPriceAPI} = require("./service/search/game-search.js");
 const {fetchLitresBookTags, fetchLitresBookAPIData, fetchChitaiGorodBook} = require("./service/search/book-search.js");
 const {fetchKinopoiskMovieTags, fetchFilmRuSerialsTags} = require("./service/search/movie-search.js");
-const {fetchCardData, updateAllReleaseDates} = require("./service/search/data-search");
+const {fetchCardData, updateAllReleaseDates, closeAllParsingWindows} = require("./service/search/data-search");
 const {getStoredUser, clearUserSession, clearTagsDirty, clearExpectedReleasesDirty, markSectionDirty, markTagsDirty,
     markExpectedReleasesDirty, saveUserSession
 } = require("./database/local-database");
@@ -543,7 +543,6 @@ async function applySyncChoice(uid, idToken, choice, localData, remoteData) {
 }
 
 ipcMain.handle('sync-all-sections-to-cloud', async () => {
-
 
     const storedUser = getStoredUser();
     if (!storedUser || !storedUser.is_authenticated || !storedUser.idToken) {
@@ -1321,4 +1320,8 @@ ipcMain.handle('search-kupikod-price', async (event, title) => {
 
 ipcMain.handle('search-chitai-gorod-book', async (event, title) => {
     return await fetchChitaiGorodBook(title);
+});
+
+ipcMain.handle('stop-info-searching', async () => {
+    closeAllParsingWindows();
 });

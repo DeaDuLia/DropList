@@ -569,6 +569,7 @@ function showTooltip(description, tags, releaseDate, x, y) {
 function hideTooltip() {
     if (tooltipElement) {
         tooltipElement.style.display = 'none';
+        window.electronAPI.stopInfoSearching();
     }
     if (tooltipTimeout) {
         clearTimeout(tooltipTimeout);
@@ -3635,8 +3636,6 @@ function showTitleSuggestion(fullTitle) {
         suggestion.remove();
     });
 }
-
-
 
 function setupAddButton() {
     const toggleBtn = document.getElementById('toggleAddFormBtn');
