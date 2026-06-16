@@ -8,12 +8,10 @@ const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
 const { initializeApp } = require('firebase/app');
 const { getAuth, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } = require('firebase/auth');
-const { getFirestore, doc, setDoc, getDoc } = require('firebase/firestore');
 
 const userDataPath = app.getPath('userData');
 const dbPath = path.join(userDataPath, 'database.db');
 autoUpdater.logger = log;
-autoUpdater.logger.transports.file.level = 'info';
 
 const firebaseConfig = {
     apiKey: "AIzaSyALdaI9VkFIkN_gTTJKohahnAcdZqCxgRQ",
@@ -26,7 +24,6 @@ const firebaseConfig = {
 
 const firebaseApp = initializeApp(firebaseConfig);
 const auth = getAuth(firebaseApp);
-const db_firestore = getFirestore(firebaseApp);
 
 
 const DEFAULT_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
@@ -148,7 +145,7 @@ function saveAllLocalData(allData) {
     transaction();
 }
 
-async function syncUserData(uid, idToken, email) {
+async function syncUserData(uid, idToken) {
     try {
         const localLastSync = statements.getStatistic.get('last_firestore_update');
         const localSyncTime = localLastSync ? localLastSync.value : null;
@@ -201,14 +198,13 @@ async function syncUserData(uid, idToken, email) {
     }
 }
 
-// Применить выбор пользователя
+
 async function applySyncChoice(uid, idToken, choice, localData, remoteData) {
     try {
         const freshToken = await getValidToken();
         if (!freshToken) {
             return { success: false, error: 'No valid token' };
         }
-        const now = new Date().toISOString();
 
         if (choice === 'local') {
             // Сохраняем все локальные разделы в Firestore
@@ -726,7 +722,7 @@ async function createWindow() {
         const freshToken = await getValidToken();
         if (freshToken) {
             console.log('[i] Token valid on startup');
-            syncUserData(storedUser.uid, freshToken, storedUser.email).then(syncResult => {
+            syncUserData(storedUser.uid, freshToken).then(syncResult => {
                 if (win && syncResult.needChoice) {
                     win.webContents.send('sync-required', syncResult);
                 }
@@ -1030,7 +1026,10 @@ async function getSectionFromFirestore(uid, idToken, section) {
         });
 
         if (response.status === 404) return [];
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (!response.ok) {
+            console.log(`HTTP ${response.status}`)
+            return null;
+        }
 
         const data = await response.json();
         const items = [];
@@ -1100,7 +1099,10 @@ async function getSyncTime(uid, idToken) {
         });
 
         if (response.status === 404) return null;
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (!response.ok) {
+            console.log(`HTTP ${response.status}`)
+            return null;
+        }
 
         const data = await response.json();
         return data.fields?.lastSync?.timestampValue || null;
@@ -1234,7 +1236,10 @@ async function loadAllTagsFromFirestore(uid, idToken) {
         });
 
         if (response.status === 404) return [];
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (!response.ok) {
+            console.log(`HTTP ${response.status}`)
+            return null;
+        }
 
         const data = await response.json();
         const items = [];
@@ -1978,9 +1983,7 @@ async function fetchSteamAPIData(gameName) {
             console.log(`[Steam API] Game not found: ${gameName}`);
             return null;
         }
-
-        // ✅ Универсальный выбор основной игры
-        const game = selectMainGame(searchData.items, gameName);
+        const game = searchData.items[0];
         const appId = game.id;
 
         console.log(`[Steam API] Selected: "${game.name}" (ID: ${appId})`);
@@ -2015,7 +2018,7 @@ async function fetchSteamAPIData(gameName) {
             description: data.short_description || '',
             coverUrl: data.header_image || '',
             releaseDate: data.release_date?.date || null,
-            price: price ? price.replace('руб.', '').trim() : 'недостуно',
+            price: price ? price.replace('руб.', '').trim() : null,
             discount: discount,
             oldPrice: oldPrice ? oldPrice.replace('руб.', '').trim() : null
         };
@@ -2024,32 +2027,6 @@ async function fetchSteamAPIData(gameName) {
         console.error('[Steam API] Error:', error);
         return null;
     }
-}
-
-function selectMainGame(items, originalGameName) {
-    let game = items.find(item => {
-        // 1. Точное совпадение названия
-        if (item.name.toLowerCase() === originalGameName.toLowerCase()) return true;
-
-        // 2. Не саундтрек и не OST (но пока не проверяем на DLC)
-        if (item.name.toLowerCase().includes('soundtrack') ||
-            item.name.toLowerCase().includes('ost')) return false;
-
-        // 3. Не DLC (нет дефиса с пробелами)
-        if (item.name.includes(' - ')) return false;
-
-        // 4. Есть метаск score
-        if (item.metascore && item.metascore !== '') return true;
-
-        return false;
-    });
-    if (game) return game;
-    // 4. Ищем самый короткий (основная игра обычно короче)
-    game = items.reduce((a, b) => (a.name.length < b.name.length ? a : b));
-    if (game) return game;
-
-    // 5. Последний шанс — первый элемент
-    return items[0];
 }
 // ========== +++++КНИГИ ТЕГИ ==========
 async function fetchLitresBookTags(bookName) {
@@ -2496,7 +2473,10 @@ async function loadExpectedReleasesFromFirestore(uid, idToken) {
         });
 
         if (response.status === 404) return [];
-        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        if (!response.ok) {
+            console.log(`HTTP ${response.status}`);
+            return null;
+        }
 
         const data = await response.json();
         const releases = [];
@@ -3137,7 +3117,7 @@ ipcMain.handle('auth-sign-in', async (event, email, password) => {
         saveUserSession(user.email, user.uid, idToken, refreshToken);
 
         // Запускаем синхронизацию в фоне
-        syncUserData(user.uid, idToken, user.email).then(syncResult => {
+        syncUserData(user.uid, idToken).then(syncResult => {
             if (win && syncResult.needChoice) {
                 win.webContents.send('sync-required', syncResult);
             }
@@ -3146,7 +3126,7 @@ ipcMain.handle('auth-sign-in', async (event, email, password) => {
         return { success: true, email: user.email, uid: user.uid };
     } catch (error) {
         console.error('[x] Sign in error:', error);
-        let errorMessage = 'Ошибка входа';
+        let errorMessage;
         switch (error.code) {
             case 'auth/invalid-email': errorMessage = 'Неверный формат email'; break;
             case 'auth/user-not-found': errorMessage = 'Пользователь не найден'; break;
@@ -3167,7 +3147,7 @@ ipcMain.handle('auth-sign-up', async (event, email, password) => {
 
         saveUserSession(user.email, user.uid, idToken, refreshToken);
 
-        syncUserData(user.uid, idToken, user.email).then(syncResult => {
+        syncUserData(user.uid, idToken).then(syncResult => {
             if (win && syncResult.needChoice) {
                 win.webContents.send('sync-required', syncResult);
             }
@@ -3176,7 +3156,7 @@ ipcMain.handle('auth-sign-up', async (event, email, password) => {
         return { success: true, email: user.email, uid: user.uid };
     } catch (error) {
         console.error('[x] Registration error:', error);
-        let errorMessage = 'Ошибка регистрации';
+        let errorMessage;
         switch (error.code) {
             case 'auth/invalid-email': errorMessage = 'Неверный формат email'; break;
             case 'auth/email-already-in-use': errorMessage = 'Email уже используется'; break;
