@@ -1739,6 +1739,7 @@ function handleScroll() {
     }, 100);
 }
 
+
 function cleanupSection() {
     // Закрываем все выпадающие списки
     closeAllDropdowns();
