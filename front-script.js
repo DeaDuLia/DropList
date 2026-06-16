@@ -147,7 +147,36 @@ let notificationQueue = [];
 let activeBanners = []; // Массив активных баннеров
 let currentSectionForNotifications = null; // Запоминаем раздел, для которого показываем уведомления
 
+const priceCache = new Map();
+const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 часа
 
+function getCachedPrice(source, itemName) {
+    const key = `${source}:${itemName.toLowerCase()}`;
+    const cached = priceCache.get(key);
+    if (cached && cached.expires > Date.now()) {
+        console.log(`[Cache] Hit: ${key}`);
+        return cached.data;
+    }
+    if (cached) {
+        console.log(`[Cache] Expired: ${key}`);
+        priceCache.delete(key);
+    }
+    return null;
+}
+
+function setCachedPrice(source, itemName, data) {
+    const key = `${source}:${itemName.toLowerCase()}`;
+    priceCache.set(key, {
+        data: data,
+        expires: Date.now() + CACHE_TTL
+    });
+    console.log(`[Cache] Saved: ${key}`);
+}
+
+function clearPriceCache() {
+    priceCache.clear();
+    console.log('[Cache] Cleared');
+}
 
 
 async function showReleaseNotification(notification, index) {
@@ -476,6 +505,7 @@ function createTooltip() {
         tooltipElement = document.createElement('div');
         tooltipElement.className = 'card-tooltip';
         document.body.appendChild(tooltipElement);
+        tooltipElement.style.visibility = 'hidden';
     }
     return tooltipElement;
 }
@@ -498,7 +528,8 @@ function showTooltip(description, tags, releaseDate, x, y) {
     }
 
     let tagsHtml = '';
-    if (tags && tags.length > 0) {
+    const hasTags = tags && tags.length > 0;
+    if (hasTags) {
         const maxVisible = 6;
         const visibleTags = tags.slice(0, maxVisible);
         const remainingCount = tags.length - maxVisible;
@@ -516,20 +547,19 @@ function showTooltip(description, tags, releaseDate, x, y) {
         descHtml = `<div class="card-tooltip-desc">${escapeHtml(description)}</div>`;
     }
 
-    // Если ничего нет — скрываем
-    if (!descHtml && !tags.length && !releaseDate) {
-        tooltip.style.display = 'none';
-        return;
-    }
-
-    // Определяем класс: если есть описание — показываем сразу, если только теги — с задержкой
+    // Определяем класс для задержки (только если нет описания, но есть теги)
     let tooltipClass = 'card-tooltip';
-    if (!descHtml && tags.length > 0) {
+    const hasDescription = description && description.trim();
+
+    if (!hasDescription && hasTags) {
         tooltipClass += ' card-tooltip-delayed';
     }
 
     tooltip.className = tooltipClass;
-    tooltip.innerHTML = dateHtml + descHtml + tagsHtml;
+
+    // Контент
+    tooltip.innerHTML = dateHtml + descHtml + tagsHtml + '<div class="card-tooltip-prices-placeholder"></div>';
+
     tooltip.style.display = 'block';
     tooltip.style.left = (x + 15) + 'px';
     tooltip.style.top = (y + 15) + 'px';
@@ -570,6 +600,7 @@ function setupEditDescriptionButtons() {
             const currentDesc = card?.dataset.description || '';
             const currentTags = JSON.parse(card?.dataset.tags || '[]');
             const currentReleaseDate = card?.dataset.releaseDate || '';
+            const section = document.querySelector('.nav-item.active')?.dataset.section;
 
             // Форматируем дату для отображения
             const formattedDate = currentReleaseDate ?
@@ -606,9 +637,20 @@ function setupEditDescriptionButtons() {
                                 </span>
                             `).join('')}
                         </div>
-                        <input type="text" id="tagInput" maxlength="50" placeholder="Например: хоррор, комедия, шедевр" autocomplete="off">
+                        <div style="display: flex; gap: 6px; align-items: center;">
+                            <input type="text" id="tagInput" maxlength="50" placeholder="Например: хоррор, комедия, шедевр" autocomplete="off" style="flex: 1; background: #1e1e1e; border: 1px solid #4a4a4a; border-radius: 8px; color: white; padding: 8px 12px; font-size: 13px;">
+                            <button id="searchTagsOnlineBtn" class="search-tags-online-btn" title="Поиск тегов онлайн" style="background: transparent; border: none; cursor: pointer; padding: 6px; display: flex; align-items: center; justify-content: center; border-radius: 6px;">
+                                <img src="assets/icons/find.svg" alt="🔍" style="width: 18px; height: 18px; filter: brightness(0) invert(1); opacity: 0.6;">
+                            </button>
+                        </div>
                     </div>
                     <div id="tagSuggestions" class="tag-suggestions" style="display: none;"></div>
+                    
+                    <!-- Индикатор загрузки -->
+                    <div id="tagsSearchLoading" style="display: none; margin-top: 8px; text-align: center;">
+                        <div class="loading-spinner" style="width: 20px; height: 20px; margin: 0 auto;"></div>
+                        <p style="font-size: 11px; margin-top: 4px;">Поиск тегов...</p>
+                    </div>
                     
                     <div style="display: flex; gap: 10px; margin-top: 10px;">
                         <button class="modal-button cancel-btn" style="flex: 1;">Отмена</button>
@@ -624,7 +666,10 @@ function setupEditDescriptionButtons() {
             const tagInput = modal.querySelector('#tagInput');
             const tagsList = modal.querySelector('#modalTagsList');
             const suggestionsDiv = modal.querySelector('#tagSuggestions');
+            const searchTagsOnlineBtn = modal.querySelector('#searchTagsOnlineBtn');
+            const tagsSearchLoading = modal.querySelector('#tagsSearchLoading');
             let tags = [...currentTags];
+            let isSearching = false;
 
             // Функция позиционирования подсказок
             function positionSuggestions() {
@@ -674,6 +719,22 @@ function setupEditDescriptionButtons() {
                 hideSuggestions();
             }
 
+            // Добавление нескольких тегов сразу (без дубликатов)
+            function addMultipleTags(newTags) {
+                let addedCount = 0;
+                for (const tag of newTags) {
+                    const cleanTag = tag.toLowerCase().trim();
+                    if (cleanTag && cleanTag.length <= 50 && !tags.includes(cleanTag)) {
+                        tags.push(cleanTag);
+                        addedCount++;
+                    }
+                }
+                if (addedCount > 0) {
+                    renderTags();
+                }
+                return addedCount;
+            }
+
             // Показ подсказок
             async function showSuggestions(query) {
                 if (query.length < 2) {
@@ -711,6 +772,45 @@ function setupEditDescriptionButtons() {
                 suggestionsDiv.style.display = 'none';
             }
 
+            // Поиск тегов онлайн
+            async function searchTagsOnline() {
+                if (isSearching) return;
+
+                const cardName = itemName;
+                const currentSection = section;
+
+                if (!cardName) {
+                    showError('Не удалось определить название');
+                    return;
+                }
+
+                isSearching = true;
+                tagsSearchLoading.style.display = 'block';
+                searchTagsOnlineBtn.disabled = true;
+
+                try {
+                    console.log(`[SearchTagsOnline] Fetching tags for: ${cardName} (${currentSection})`);
+
+                    const result = await window.electronAPI.fetchCardData(cardName, currentSection);
+
+                    if (result && result.tags && result.tags.length > 0) {
+                        const addedCount = addMultipleTags(result.tags);
+                        console.log(`[SearchTagsOnline] Added ${addedCount} new tags`);
+                        // Без модального окна - просто логируем
+                    } else {
+                        console.log('[SearchTagsOnline] No tags found');
+                        // Без модального окна
+                    }
+
+                } catch (error) {
+                    console.error('[SearchTagsOnline] Error:', error);
+                } finally {
+                    isSearching = false;
+                    tagsSearchLoading.style.display = 'none';
+                    searchTagsOnlineBtn.disabled = false;
+                }
+            }
+
             // Обработчики событий для поля ввода тегов
             tagInput.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter' && tagInput.value.trim()) {
@@ -737,6 +837,13 @@ function setupEditDescriptionButtons() {
             tagInput.addEventListener('focus', positionSuggestions);
             window.addEventListener('resize', positionSuggestions);
 
+            // Обработчик кнопки поиска тегов онлайн
+            searchTagsOnlineBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                searchTagsOnline();
+            });
+
             // Закрытие подсказок при клике вне
             document.addEventListener('click', function closeSuggestions(e) {
                 if (!suggestionsDiv.contains(e.target) && e.target !== tagInput) {
@@ -757,7 +864,6 @@ function setupEditDescriptionButtons() {
             modal.querySelector('.confirm-btn').onclick = async () => {
                 const newDescription = textarea.value.trim();
                 const newReleaseDate = releaseDateInput.value;
-                const section = document.querySelector('.nav-item.active')?.dataset.section;
 
                 await window.electronAPI.updateDataDescription(section, itemName, newDescription);
                 await window.electronAPI.updateCardTags(section, itemName, tags);
@@ -1214,6 +1320,7 @@ document.addEventListener('keydown', (e) => {
 document.querySelectorAll('.nav-item').forEach(item => {
     item.addEventListener('click', async function() {
         clearAllNotifications();
+        clearPriceCache();
         currentSectionForNotifications = null;
         // Удаляем активный класс у всех элементов
         document.querySelectorAll('.nav-item').forEach(navItem => {
@@ -1631,6 +1738,7 @@ function handleScroll() {
         }
     }, 100);
 }
+
 
 function cleanupSection() {
     // Закрываем все выпадающие списки
@@ -3034,26 +3142,129 @@ function setupTitleClickHandlers() {
     });
 }
 function setupCardClickHandlers() {
-
-
     document.querySelectorAll('.data-card').forEach(card => {
         card.style.cursor = 'pointer';
 
+        let priceFetchTimer = null;
+        let lastFetchedCard = null;
+
         card.addEventListener('mouseenter', (e) => {
+            const itemName = card.dataset.name;
             const description = card.dataset.description || '';
             const tags = JSON.parse(card.dataset.tags || '[]');
             const releaseDate = card.dataset.releaseDate || null;
+            const section = document.querySelector('.nav-item.active')?.dataset.section;
+
+            if (priceFetchTimer) clearTimeout(priceFetchTimer);
+
+            lastFetchedCard = { itemName, section, description, tags, releaseDate, x: e.clientX, y: e.clientY };
+
             showTooltip(description, tags, releaseDate, e.clientX, e.clientY);
+
+            // ========== ИГРЫ ==========
+            if (section === 'games') {
+                const cachedSteam = getCachedPrice('steam', itemName);
+                const cachedKupikod = getCachedPrice('kupikod', itemName);
+
+                if (cachedSteam || cachedKupikod) {
+                    const checkTooltip = setInterval(() => {
+                        const tooltip = document.querySelector('.card-tooltip');
+                        if (tooltip && tooltip.style.display === 'block') {
+                            clearInterval(checkTooltip);
+                            updateTooltipPrices(cachedSteam, cachedKupikod, tags.length > 0);
+                        }
+                    }, 50);
+                }
+
+                if (!cachedSteam || !cachedKupikod) {
+                    priceFetchTimer = setTimeout(async () => {
+                        if (lastFetchedCard?.itemName !== itemName) return;
+
+                        const tooltip = document.querySelector('.card-tooltip');
+                        if (tooltip && tooltip.style.display === 'block') {
+                            let priceDiv = tooltip.querySelector('.card-tooltip-prices');
+                            if (!priceDiv) {
+                                priceDiv = document.createElement('div');
+                                priceDiv.className = 'card-tooltip-prices';
+                                tooltip.appendChild(priceDiv);
+                            }
+                            priceDiv.innerHTML = '<div class="price-loading">💰 Загрузка цен...</div>';
+                            tooltip.style.visibility = 'visible';
+                        }
+
+                        const [steamData, kupikodData] = await Promise.all([
+                            !cachedSteam ? window.electronAPI.fetchSteamTagsApi(itemName) : Promise.resolve(null),
+                            !cachedKupikod ? window.electronAPI.searchKupikodPrice(itemName) : Promise.resolve(null)
+                        ]);
+
+                        if (lastFetchedCard?.itemName !== itemName) return;
+
+                        if (steamData) setCachedPrice('steam', itemName, steamData);
+                        if (kupikodData) setCachedPrice('kupikod', itemName, kupikodData);
+
+                        updateTooltipPrices(steamData || cachedSteam, kupikodData || cachedKupikod, tags.length > 0);
+                    }, 0);
+                }
+            }
+
+            // ========== КНИГИ ==========
+            if (section === 'books') {
+                const cachedChitai = getCachedPrice('chitai', itemName);
+                const cachedLitres = getCachedPrice('litres', itemName);
+
+
+                if (cachedChitai || cachedLitres) {
+                    const checkTooltip = setInterval(() => {
+                        const tooltip = document.querySelector('.card-tooltip');
+                        if (tooltip && tooltip.style.display === 'block') {
+                            clearInterval(checkTooltip);
+                            updateBookTooltipPrices(cachedChitai, cachedLitres,tags.length > 0);
+                        }
+                    }, 50);
+                }
+
+                if (!cachedChitai || !cachedLitres) {
+                    priceFetchTimer = setTimeout(async () => {
+                        if (lastFetchedCard?.itemName !== itemName) return;
+
+                        const tooltip = document.querySelector('.card-tooltip');
+                        if (tooltip && tooltip.style.display === 'block') {
+                            let priceDiv = tooltip.querySelector('.card-tooltip-prices');
+                            if (!priceDiv) {
+                                priceDiv = document.createElement('div');
+                                priceDiv.className = 'card-tooltip-prices';
+                                tooltip.appendChild(priceDiv);
+                            }
+                            priceDiv.innerHTML = '<div class="price-loading">💰 Загрузка цен...</div>';
+                            tooltip.style.visibility = 'visible';
+                        }
+
+                        const [chitaiData, litresData ] = await Promise.all([
+                            !cachedChitai ? window.electronAPI.searchChitaiGorodBook(itemName) : Promise.resolve(null),
+                            !cachedLitres ? window.electronAPI.searchLitresBookAPI(itemName) : Promise.resolve(null),
+                        ]);
+
+                        if (lastFetchedCard?.itemName !== itemName) return;
+
+                        if (chitaiData) setCachedPrice('chitai', itemName, chitaiData);
+                        if (litresData) setCachedPrice('litres', itemName, litresData);
+
+                        updateBookTooltipPrices(chitaiData || cachedChitai, litresData || cachedLitres, tags.length > 0);
+                    }, 0);
+                }
+            }
+        });
+
+        card.addEventListener('mouseleave', () => {
+            if (priceFetchTimer) clearTimeout(priceFetchTimer);
+            lastFetchedCard = null;
+            hideTooltip();
         });
 
         card.addEventListener('mousemove', (e) => {
             if (tooltipElement && tooltipElement.style.display === 'block') {
                 updateTooltipPosition(e.clientX, e.clientY);
             }
-        });
-
-        card.addEventListener('mouseleave', () => {
-            hideTooltip();
         });
 
         card.addEventListener('click', async function(e) {
@@ -3063,9 +3274,8 @@ function setupCardClickHandlers() {
                 e.target.closest('.delete-btn') ||
                 e.target.closest('.data-title') ||
                 e.target.closest('.editable-field')) {
-                return; // Если кликнули на кнопку или редактируемое поле, ничего не делаем
+                return;
             }
-
             const itemName = this.dataset.name;
             if (itemName) {
                 const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(itemName)}`;
@@ -3073,6 +3283,107 @@ function setupCardClickHandlers() {
             }
         });
     });
+}
+
+function updateTooltipPrices(steamData, kupikodData, hasTags = false) {
+    const tooltip = document.querySelector('.card-tooltip');
+    if (!tooltip) return;
+
+    // Удаляем плейсхолдер
+    const placeholder = tooltip.querySelector('.card-tooltip-prices-placeholder');
+    if (placeholder) placeholder.remove();
+
+    // Ищем или создаём контейнер для цен
+    let pricesContainer = tooltip.querySelector('.card-tooltip-prices');
+    if (!pricesContainer) {
+        pricesContainer = document.createElement('div');
+        pricesContainer.className = 'card-tooltip-prices';
+        tooltip.appendChild(pricesContainer);
+    }
+    if (hasTags) {
+        pricesContainer.style.borderTop = '1px solid rgba(255, 255, 255, 0.2)';
+        pricesContainer.style.marginTop = '8px';
+        pricesContainer.style.paddingTop = '8px';
+    }
+
+    // Формируем HTML с ценами
+    let pricesHtml = '';
+    let hasAny = false;
+
+    // Steam
+    if (steamData && steamData.price) {
+        hasAny = true;
+        if (steamData.discount && steamData.discount > 0) {
+            pricesHtml += `<div>🎮 Steam: ${steamData.price} ₽ (скидка ${steamData.discount}%)</div>`;
+        } else {
+            pricesHtml += `<div>🎮 Steam: ${steamData.price} ₽</div>`;
+        }
+    } else if (steamData && steamData.releaseDate && !steamData.price) {
+        hasAny = true;
+        pricesHtml += `<div>🎮 Steam: бесплатно</div>`;
+    }
+
+    // Kupikod
+    if (kupikodData && kupikodData.price) {
+        hasAny = true;
+        pricesHtml += `<div>🛒 Kupikod: ${kupikodData.price} ₽</div>`;
+    }
+
+    if (!hasAny) {
+        pricesHtml = `<div>💰 Цены не найдены</div>`;
+    }
+    pricesContainer.innerHTML = pricesHtml;
+}
+
+function updateBookTooltipPrices(chitaiData, litresData, hasTags) {
+    const tooltip = document.querySelector('.card-tooltip');
+    if (!tooltip) return;
+
+    // Удаляем старый блок цен
+    const oldPrices = tooltip.querySelector('.card-tooltip-prices');
+    if (oldPrices) oldPrices.remove();
+
+    // Если есть теги — добавляем разделитель
+    let borderClass = '';
+
+
+    const pricesContainer = document.createElement('div');
+    pricesContainer.className = borderClass || 'card-tooltip-prices';
+    if (hasTags) {
+        pricesContainer.style.borderTop = '1px solid rgba(255, 255, 255, 0.2)';
+        pricesContainer.style.marginTop = '8px';
+        pricesContainer.style.paddingTop = '8px';
+    }
+
+    let pricesHtml = '';
+    let hasAny = false;
+
+    // Читай-город
+    if (chitaiData && chitaiData.price) {
+        hasAny = true;
+        let priceText = `📚 Читай-город: ${chitaiData.price} ₽`;
+        if (chitaiData.discount && chitaiData.discount > 0) {
+            priceText += ` (скидка ${chitaiData.discount}%)`;
+        }
+        pricesHtml += `<div>${priceText}</div>`;
+    }
+
+    // Litres
+    if (litresData && litresData.price) {
+        hasAny = true;
+        let priceText = `📖 Litres: ${litresData.price} ₽`;
+        if (litresData.discount && litresData.discount > 0) {
+            priceText += ` (скидка ${litresData.discount}%)`;
+        }
+        pricesHtml += `<div>${priceText}</div>`;
+    }
+
+    if (!hasAny) {
+        pricesHtml = `<div>💰 Цены не найдены</div>`;
+    }
+
+    pricesContainer.innerHTML = pricesHtml;
+    tooltip.appendChild(pricesContainer);
 }
 
 randomBtn.addEventListener('click', async () => {
