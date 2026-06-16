@@ -59,13 +59,13 @@ function destroyWindowCompletely(win) {
         if (win.webContents && !win.webContents.isDestroyed()) {
             win.webContents.stop();
 
-            // 2. Очищаем сессию ПРИНУДИТЕЛЬНО
+
             win.webContents.session.clearStorageData({
                 storages: ['cookies', 'localstorage', 'sessionstorage', 'cache']
             });
 
             // 3. Сброс HTTP/2 соединений
-            win.webContents.session.closeAllConnections?.(); // Electron 22+
+            win.webContents.session.closeAllConnections?.();
 
             // 4. Отключаем кеш и keep-alive
             win.webContents.session.webRequest.onBeforeSendHeaders((details, callback) => {
@@ -83,7 +83,6 @@ function destroyWindowCompletely(win) {
     }
 }
 
-// Функция добавления окна в отслеживаемые
 function trackParsingWindow(win) {
     activeParsingWindows.add(win);
     win.once('closed', () => {
@@ -197,7 +196,6 @@ async function syncUserData(uid, idToken) {
         return { success: false, error: error.message };
     }
 }
-
 
 async function applySyncChoice(uid, idToken, choice, localData, remoteData) {
     try {
@@ -520,7 +518,7 @@ function clearUserSession() {
 }
 
 function getStoredUser() {
-    const stmt = db.prepare(`SELECT email, uid, id_token, refresh_token, is_authenticated FROM user_session WHERE id = 1`);
+    const stmt = db.prepare(`SELECT email, uid, id_token as idToken, refresh_token, is_authenticated FROM user_session WHERE id = 1`);
     return stmt.get();
 }
 
@@ -3194,10 +3192,10 @@ ipcMain.handle('auth-sign-out', async () => {
 
 ipcMain.handle('sync-apply-choice', async (event, choice, localData, remoteData) => {
     const storedUser = getStoredUser();
-    if (!storedUser || !storedUser.id_token) {
+    if (!storedUser || !storedUser.idToken) {
         return { success: false, error: 'Пользователь не авторизован' };
     }
-    return await applySyncChoice(storedUser.uid, storedUser.id_token, choice, localData, remoteData);
+    return await applySyncChoice(storedUser.uid, storedUser.idToken, choice, localData, remoteData);
 });
 
 ipcMain.handle('get-all-local-data', async () => {
