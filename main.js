@@ -1615,7 +1615,7 @@ async function fetchSteamGameTags(gameName) {
                 destroyWindowCompletely(hiddenWindow);
             }
             resolve(result);
-        };
+        };1
 
         try {
             // 1. Поиск игры через storesearch API
@@ -2112,6 +2112,39 @@ async function fetchLitresBookTags(bookName) {
         true
     );
 }
+async function fetchLitresBookAPIData(bookName) {
+    try {
+        const url = `https://api.litres.ru/foundation/api/search?q=${encodeURIComponent(bookName)}&types=text_book&limit=1`;
+        const response = await fetch(url);
+        const data = await response.json();
+
+        if (!data.payload?.data || data.payload.data.length === 0) {
+            console.log(`[Litres API] Book not found: ${bookName}`);
+            return null;
+        }
+
+        // Берём первую книгу (не аудиокнигу)
+        const book = data.payload.data.find(item => item.type === 'text_book');
+        if (!book) return null;
+
+        const instance = book.instance;
+
+        return {
+            fullTitle: instance.title,
+            coverUrl: instance.cover_url ? `https://www.litres.ru${instance.cover_url}` : null,
+            price: instance.prices?.final_price || null,
+            oldPrice: instance.prices?.full_price || null,
+            discount: instance.prices?.discount_percent || null,
+            rating: instance.rating?.rated_avg || null,
+            author: instance.persons?.find(p => p.role === 'author')?.full_name || null,
+            releaseDate: instance.date_written_at || null
+        };
+
+    } catch (error) {
+        console.error('[Litres API] Error:', error);
+        return null;
+    }
+}
 
 async function fetchChitaiGorodBook(bookName) {
     return parseSite(
@@ -2136,26 +2169,61 @@ async function fetchChitaiGorodBook(bookName) {
                 let fullTitle = '';
                 const titleEl = document.querySelector('h1.product-detail-page__title');
                 if (titleEl) {
-                    // Берём текст, но убираем возрастной рейтинг (он в отдельном div)
                     fullTitle = titleEl.childNodes[0]?.textContent?.trim() || titleEl.textContent.trim();
-                    // Если остался мусор, чистим
                     fullTitle = fullTitle.replace(/\\d+\\+/, '').trim();
                 }
                 
-                // Обложка - берём из srcset первый URL (самый маленький или большой)
+                // Обложка
                 let coverUrl = '';
                 const previewDiv = document.querySelector('.product-preview');
                 if (previewDiv) {
                     const img = previewDiv.querySelector('img');
                     if (img && img.srcset) {
-                        // srcset содержит URL вида "https://... 1x, https://... 2x"
                         const urls = img.srcset.split(',');
                         if (urls.length > 0) {
-                            // Берём первый URL (обычно 1x)
                             coverUrl = urls[0].trim().split(' ')[0];
                         }
                     } else if (img && img.src) {
                         coverUrl = img.src;
+                    }
+                }
+                
+                // ========== ЦЕНА ==========
+                let price = null;
+                let oldPrice = null;
+                let discount = null;
+                
+                // Ищем блок с ценой
+                const priceBlock = document.querySelector('.new-product-offer-online__price');
+                if (priceBlock) {
+                    // Актуальная цена
+                    const actualPriceEl = priceBlock.querySelector('.new-product-offer-price__actual');
+                    if (actualPriceEl) {
+                        const match = actualPriceEl.textContent.match(/(\\d+)/);
+                        if (match) price = match[1];
+                    }
+                    
+                    // Старая цена
+                    const oldPriceEl = priceBlock.querySelector('.new-product-offer-price__old-text');
+                    if (oldPriceEl) {
+                        const match = oldPriceEl.textContent.match(/(\\d+)/);
+                        if (match) oldPrice = match[1];
+                    }
+                    
+                    // Скидка в процентах
+                    const discountEl = priceBlock.querySelector('.new-product-offer-price__sale-size');
+                    if (discountEl) {
+                        const match = discountEl.textContent.match(/(\\d+)/);
+                        if (match) discount = match[1];
+                    }
+                }
+                
+                // Если не нашли через новые классы, пробуем старые
+                if (!price) {
+                    const priceContainer = document.querySelector('[class*="price"]');
+                    if (priceContainer) {
+                        const match = priceContainer.textContent.match(/(\\d+)\\s*₽/);
+                        if (match) price = match[1];
                     }
                 }
                 
@@ -2177,7 +2245,10 @@ async function fetchChitaiGorodBook(bookName) {
                     description: '',
                     coverUrl: coverUrl,
                     fullTitle: fullTitle,
-                    releaseDate: null  // на странице нет даты выхода в доступном виде
+                    releaseDate: null,
+                    price: price,
+                    oldPrice: oldPrice,
+                    discount: discount
                 };
             })()
         `
@@ -2319,6 +2390,7 @@ async function fetchCardData(cardName, section) {
             return { tags: filmResult?.tags || [], coverUrl: filmResult?.coverUrl || '', fullTitle: filmResult?.fullTitle || '', releaseDate: filmResult?.releaseDate || null };
         case 'books':
             let bookResult = await fetchChitaiGorodBook(cardName);
+            console.log(bookResult);
             if (bookResult == null || bookResult.tags === null || bookResult.tags.length === 0) {
                 bookResult = await fetchLitresBookTags(cardName);
             }
@@ -2583,6 +2655,10 @@ ipcMain.handle('fetch-steam-tags-api', async (event, title) => {
 
 ipcMain.handle('search-litres-book', async (event, title) => {
     return await fetchLitresBookTags(title);
+});
+
+ipcMain.handle('search-litres-book-api', async (event, title) => {
+    return await fetchLitresBookAPIData(title);
 });
 
 ipcMain.handle('search-kinopoisk-movie', async (event, title) => {
@@ -3231,4 +3307,8 @@ ipcMain.handle('mark-release-notification-shown', async (event, cardName, sectio
 
 ipcMain.handle('search-kupikod-price', async (event, title) => {
     return await fetchKupikodPriceAPI(title); // используем API версию
+});
+
+ipcMain.handle('search-chitai-gorod-book', async (event, title) => {
+    return await fetchChitaiGorodBook(title);
 });

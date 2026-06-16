@@ -1,6 +1,9 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
+    searchLitresBook: (title) => ipcRenderer.invoke('search-litres-book', title),
+    searchLitresBookAPI: (title) => ipcRenderer.invoke('search-litres-book-api', title),
+    searchChitaiGorodBook: (title) => ipcRenderer.invoke('search-chitai-gorod-book', title),
     fetchSteamTags: (title) => ipcRenderer.invoke('fetch-steam-tags', title),
     fetchSteamTagsApi: (title) => ipcRenderer.invoke('fetch-steam-tags-api', title),
     searchKupikodPrice: (title) => ipcRenderer.invoke('search-kupikod-price', title),

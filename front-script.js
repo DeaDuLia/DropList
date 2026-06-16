@@ -3158,15 +3158,13 @@ function setupCardClickHandlers() {
 
             lastFetchedCard = { itemName, section, description, tags, releaseDate, x: e.clientX, y: e.clientY };
 
-
             showTooltip(description, tags, releaseDate, e.clientX, e.clientY);
 
+            // ========== ИГРЫ ==========
             if (section === 'games') {
-                // Проверяем кэш
                 const cachedSteam = getCachedPrice('steam', itemName);
                 const cachedKupikod = getCachedPrice('kupikod', itemName);
 
-                // Если есть в кэше — обновляем тултип (ждём появления)
                 if (cachedSteam || cachedKupikod) {
                     const checkTooltip = setInterval(() => {
                         const tooltip = document.querySelector('.card-tooltip');
@@ -3177,7 +3175,6 @@ function setupCardClickHandlers() {
                     }, 50);
                 }
 
-                // Загружаем цены, если нет в кэше
                 if (!cachedSteam || !cachedKupikod) {
                     priceFetchTimer = setTimeout(async () => {
                         if (lastFetchedCard?.itemName !== itemName) return;
@@ -3205,6 +3202,52 @@ function setupCardClickHandlers() {
                         if (kupikodData) setCachedPrice('kupikod', itemName, kupikodData);
 
                         updateTooltipPrices(steamData || cachedSteam, kupikodData || cachedKupikod, tags.length > 0);
+                    }, 0);
+                }
+            }
+
+            // ========== КНИГИ ==========
+            if (section === 'books') {
+                const cachedChitai = getCachedPrice('chitai', itemName);
+                const cachedLitres = getCachedPrice('litres', itemName);
+
+                if (cachedChitai || cachedLitres) {
+                    const checkTooltip = setInterval(() => {
+                        const tooltip = document.querySelector('.card-tooltip');
+                        if (tooltip && tooltip.style.display === 'block') {
+                            clearInterval(checkTooltip);
+                            updateBookTooltipPrices(cachedChitai, cachedLitres, tags.length > 0);
+                        }
+                    }, 50);
+                }
+
+                if (!cachedChitai || !cachedLitres) {
+                    priceFetchTimer = setTimeout(async () => {
+                        if (lastFetchedCard?.itemName !== itemName) return;
+
+                        const tooltip = document.querySelector('.card-tooltip');
+                        if (tooltip && tooltip.style.display === 'block') {
+                            let priceDiv = tooltip.querySelector('.card-tooltip-prices');
+                            if (!priceDiv) {
+                                priceDiv = document.createElement('div');
+                                priceDiv.className = 'card-tooltip-prices';
+                                tooltip.appendChild(priceDiv);
+                            }
+                            priceDiv.innerHTML = '<div class="price-loading">💰 Загрузка цен...</div>';
+                            tooltip.style.visibility = 'visible';
+                        }
+
+                        const [chitaiData, litresData] = await Promise.all([
+                            !cachedChitai ? window.electronAPI.searchChitaiGorodBook(itemName) : Promise.resolve(null),
+                            !cachedLitres ? window.electronAPI.searchLitresBookAPI(itemName) : Promise.resolve(null)
+                        ]);
+
+                        if (lastFetchedCard?.itemName !== itemName) return;
+
+                        if (chitaiData) setCachedPrice('chitai', itemName, chitaiData);
+                        if (litresData) setCachedPrice('litres', itemName, litresData);
+
+                        updateBookTooltipPrices(chitaiData || cachedChitai, litresData || cachedLitres, tags.length > 0);
                     }, 0);
                 }
             }
@@ -3288,6 +3331,57 @@ function updateTooltipPrices(steamData, kupikodData, hasTags = false) {
         pricesHtml = `<div>💰 Цены не найдены</div>`;
     }
     pricesContainer.innerHTML = pricesHtml;
+}
+
+function updateBookTooltipPrices(chitaiData, litresData, hasTags) {
+    const tooltip = document.querySelector('.card-tooltip');
+    if (!tooltip) return;
+
+    // Удаляем старый блок цен
+    const oldPrices = tooltip.querySelector('.card-tooltip-prices');
+    if (oldPrices) oldPrices.remove();
+
+    // Если есть теги — добавляем разделитель
+    let borderClass = '';
+
+
+    const pricesContainer = document.createElement('div');
+    pricesContainer.className = borderClass || 'card-tooltip-prices';
+    if (hasTags) {
+        pricesContainer.style.borderTop = '1px solid rgba(255, 255, 255, 0.2)';
+        pricesContainer.style.marginTop = '8px';
+        pricesContainer.style.paddingTop = '8px';
+    }
+
+    let pricesHtml = '';
+    let hasAny = false;
+
+    // Читай-город
+    if (chitaiData && chitaiData.price) {
+        hasAny = true;
+        let priceText = `📚 Читай-город: ${chitaiData.price} ₽`;
+        if (chitaiData.discount && chitaiData.discount > 0) {
+            priceText += ` (скидка ${chitaiData.discount}%)`;
+        }
+        pricesHtml += `<div>${priceText}</div>`;
+    }
+
+    // Litres
+    if (litresData && litresData.price) {
+        hasAny = true;
+        let priceText = `📖 Litres: ${litresData.price} ₽`;
+        if (litresData.discount && litresData.discount > 0) {
+            priceText += ` (скидка ${litresData.discount}%)`;
+        }
+        pricesHtml += `<div>${priceText}</div>`;
+    }
+
+    if (!hasAny) {
+        pricesHtml = `<div>💰 Цены не найдены</div>`;
+    }
+
+    pricesContainer.innerHTML = pricesHtml;
+    tooltip.appendChild(pricesContainer);
 }
 
 randomBtn.addEventListener('click', async () => {
