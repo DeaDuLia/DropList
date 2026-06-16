@@ -3211,12 +3211,13 @@ function setupCardClickHandlers() {
                 const cachedChitai = getCachedPrice('chitai', itemName);
                 const cachedLitres = getCachedPrice('litres', itemName);
 
+
                 if (cachedChitai || cachedLitres) {
                     const checkTooltip = setInterval(() => {
                         const tooltip = document.querySelector('.card-tooltip');
                         if (tooltip && tooltip.style.display === 'block') {
                             clearInterval(checkTooltip);
-                            updateBookTooltipPrices(cachedChitai, cachedLitres, tags.length > 0);
+                            updateBookTooltipPrices(cachedChitai, cachedLitres,tags.length > 0);
                         }
                     }, 50);
                 }
@@ -3237,9 +3238,9 @@ function setupCardClickHandlers() {
                             tooltip.style.visibility = 'visible';
                         }
 
-                        const [chitaiData, litresData] = await Promise.all([
+                        const [chitaiData, litresData ] = await Promise.all([
                             !cachedChitai ? window.electronAPI.searchChitaiGorodBook(itemName) : Promise.resolve(null),
-                            !cachedLitres ? window.electronAPI.searchLitresBookAPI(itemName) : Promise.resolve(null)
+                            !cachedLitres ? window.electronAPI.searchLitresBookAPI(itemName) : Promise.resolve(null),
                         ]);
 
                         if (lastFetchedCard?.itemName !== itemName) return;

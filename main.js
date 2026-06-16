@@ -1330,8 +1330,8 @@ async function getValidToken() {
 }
 
 // Универсальная функция для парсинга сайтов
-async function parseSite(name, searchUrl, targetUrlParser, dataParser, needExtraWait = false) {
-    closeAllParsingWindows();
+async function parseSite(name, searchUrl, targetUrlParser, dataParser, needExtraWait = false, isParallel = false) {
+    if(!isParallel) { closeAllParsingWindows(); }
     let hiddenWindow = createHiddenWindow();
     let loadTimeout = null;
 
@@ -1363,6 +1363,7 @@ async function parseSite(name, searchUrl, targetUrlParser, dataParser, needExtra
         if (needExtraWait) { await new Promise(r => setTimeout(r, 2000)); }
         await waitForPageLoad();
         let targetUrl = await hiddenWindow.webContents.executeJavaScript(targetUrlParser);
+        console.log(targetUrl);
         if (!targetUrl) {
             cleanup();
             console.log(`[${name}] Info Not Found.`);
@@ -2145,7 +2146,6 @@ async function fetchLitresBookAPIData(bookName) {
         return null;
     }
 }
-
 async function fetchChitaiGorodBook(bookName) {
     return parseSite(
         'ChitaiGorod',
@@ -2251,7 +2251,9 @@ async function fetchChitaiGorodBook(bookName) {
                     discount: discount
                 };
             })()
-        `
+        `,
+        false,
+        true
     );
 }
 
