@@ -2,7 +2,7 @@
   "name": "DropList",
   "productName": "DropList",
   "version": "1.2.8",
-  "main": "main.js",
+  "main": "src/main.js",
   "author": "Nikita <nvdeshin@gmail.com>",
   "description": "Media catalog application",
   "scripts": {

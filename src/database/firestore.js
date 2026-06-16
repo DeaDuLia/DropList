@@ -1,0 +1,504 @@
+import {initializeApp} from "firebase/app";
+import {getAuth} from "firebase/auth";
+import {
+    clearExpectedReleasesDirty,
+    clearSectionDirty, clearTagsDirty,
+    clearUserSession,
+    db,
+    getAllLocalData,
+    getStoredUser,
+    isSectionDirty, isTagsDirty,
+    statements
+} from "./local-database.js";
+
+const firebaseConfig = {
+    apiKey: "AIzaSyALdaI9VkFIkN_gTTJKohahnAcdZqCxgRQ",
+    authDomain: "droplist-3fa8b.firebaseapp.com",
+    projectId: "droplist-3fa8b",
+    storageBucket: "droplist-3fa8b.firebasestorage.app",
+    messagingSenderId: "920691108684",
+    appId: "1:920691108684:web:c06a303e820e311c8a3de9"
+};
+
+const firebaseApp = initializeApp(firebaseConfig);
+export const auth = getAuth(firebaseApp);
+
+export async function syncUserData(uid, idToken) {
+    try {
+        const localLastSync = statements.getStatistic.get('last_firestore_update');
+        const localSyncTime = localLastSync ? localLastSync.value : null;
+
+        const remoteSyncTime = await getSyncTime(uid, idToken);
+
+        if (!remoteSyncTime) {
+            const localData = getAllLocalData();
+            const sections = ['games', 'movies', 'cartoons', 'serials', 'anime', 'books'];
+            for (const section of sections) {
+                await saveSectionToFirestore(uid, idToken, section, localData[section] || []);
+            }
+            await saveAllTagsToFirestore();
+            const now = new Date().toISOString();
+            await updateSyncTime(uid, idToken, now);
+            statements.setStatistic.run('last_firestore_update', now, now);
+            return { action: 'local_to_cloud', success: true };
+        }
+
+        // Сравниваем времена
+        const localTime = localSyncTime ? new Date(localSyncTime) : null;
+        const remoteTime = new Date(remoteSyncTime);
+
+        if (localTime && Math.abs(localTime - remoteTime) < 5000) {
+            console.log('[+] Data synced');
+            return { action: 'synced', success: true };
+        }
+
+        // Конфликт — загружаем все данные для выбора
+        const localData = getAllLocalData();
+        const sections = ['games', 'movies', 'cartoons', 'serials', 'anime', 'books'];
+        const remoteData = {};
+
+        for (const section of sections) {
+            remoteData[section] = await getSectionFromFirestore(uid, idToken, section);
+        }
+
+        return {
+            success: true,
+            needChoice: true,
+            localData: localData,
+            remoteData: remoteData,
+            localSyncTime: localSyncTime,
+            remoteSyncTime: remoteSyncTime
+        };
+
+    } catch (error) {
+        console.error('Sync error:', error);
+        return { success: false, error: error.message };
+    }
+}
+
+async function getSectionFromFirestore(uid, idToken, section) {
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/sections/${section}`;
+
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${idToken}` }
+        });
+
+        if (response.status === 404) return [];
+        if (!response.ok) {
+            console.log(`HTTP ${response.status}`)
+            return null;
+        }
+
+        const data = await response.json();
+        const items = [];
+
+        if (data.fields && data.fields.items && data.fields.items.arrayValue) {
+            const values = data.fields.items.arrayValue.values || [];
+            for (const item of values) {
+                const fields = item.mapValue.fields;
+                // Читаем теги из массива
+                let tags = [];
+                if (fields.tags && fields.tags.arrayValue) {
+                    tags = (fields.tags.arrayValue.values || []).map(v => v.stringValue);
+                }
+
+                items.push({
+                    name: fields.name?.stringValue || '',
+                    icoUrl: fields.icoUrl?.stringValue || '',
+                    rating: fields.rating?.stringValue || '0',
+                    status: fields.status?.stringValue || 'Уточнить',
+                    description: fields.description?.stringValue || '',
+                    tags: tags
+                });
+            }
+        }
+
+        return items;
+    } catch (error) {
+        console.error(`Error getting ${section}:`, error);
+        return null;
+    }
+}
+
+
+export async function saveAllTagsToFirestore(uid, idToken) {
+    const allTags = statements.getAllTags.all(); // [{name, count}]
+
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/sections/tags`;
+
+    const body = {
+        fields: {
+            items: {
+                arrayValue: {
+                    values: allTags.map(tag => ({
+                        mapValue: {
+                            fields: {
+                                name: { stringValue: tag.name },
+                                count: { integerValue: tag.count }
+                            }
+                        }
+                    }))
+                }
+            },
+            updatedAt: { timestampValue: new Date().toISOString() }
+        }
+    };
+
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+            'Authorization': `Bearer ${idToken}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+
+    console.log(`✅ Tags saved (${allTags.length} tags)`);
+    return true;
+}
+
+export async function getSyncTime(uid, idToken) {
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}`;
+
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${idToken}` }
+        });
+
+        if (response.status === 404) return null;
+        if (!response.ok) {
+            console.log(`HTTP ${response.status}`)
+            return null;
+        }
+
+        const data = await response.json();
+        return data.fields?.lastSync?.timestampValue || null;
+    } catch (error) {
+        console.error('Get sync time error:', error);
+        return null;
+    }
+}
+
+export async function updateSyncTime(uid, idToken, timestamp) {
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}?updateMask.fieldPaths=lastSync`;
+
+    const body = {
+        fields: {
+            lastSync: { timestampValue: timestamp }
+        }
+    };
+
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+            'Authorization': `Bearer ${idToken}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+
+    console.log('[+] Sync time updated:', timestamp);
+    return true;
+}
+
+export async function saveSectionToFirestore(uid, idToken, section, items) {
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/sections/${section}`;
+
+    const body = {
+        fields: {
+            items: {
+                arrayValue: {
+                    values: items.map(item => {
+                        // Преобразуем tags из строки в массив
+                        let tagsArray = [];
+                        if (item.tags) {
+                            if (typeof item.tags === 'string') {
+                                tagsArray = item.tags.split(',').filter(t => t);
+                            } else if (Array.isArray(item.tags)) {
+                                tagsArray = item.tags;
+                            }
+                        }
+
+                        return {
+                            mapValue: {
+                                fields: {
+                                    name: { stringValue: item.name || '' },
+                                    icoUrl: { stringValue: item.icoUrl || '' },
+                                    rating: { stringValue: item.rating || '0' },
+                                    status: { stringValue: item.status || 'Уточнить' },
+                                    description: { stringValue: item.description || '' },
+                                    tags: {
+                                        arrayValue: {
+                                            values: tagsArray.map(tag => ({ stringValue: tag }))
+                                        }
+                                    }
+                                }
+                            }
+                        };
+                    })
+                }
+            },
+            updatedAt: { timestampValue: new Date().toISOString() }
+        }
+    };
+
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+            'Authorization': `Bearer ${idToken}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+
+    console.log(`✅ Section ${section} saved (${items.length} items)`);
+    return true;
+}
+
+export async function syncDirtySections(uid, idToken) {
+    const freshToken = await getValidToken();
+    if (!freshToken) {
+        console.log('[!] No valid token, skipping sync');
+        return false;
+    }
+
+    const sections = ['games', 'movies', 'cartoons', 'serials', 'anime', 'books'];
+    const dirtySections = sections.filter(section => isSectionDirty(section));
+
+    if (dirtySections.length === 0) {
+        console.log('[i] No dirty sections, skipping sync');
+        return false;
+    }
+
+    console.log(`[i] Syncing dirty sections: ${dirtySections.join(', ')}`);
+
+    for (const section of dirtySections) {
+        const sectionData = statements.getDataBySection.all(section);
+        await saveSectionToFirestore(uid, freshToken, section, sectionData);
+        clearSectionDirty(section);
+    }
+
+    if (isTagsDirty()) {
+        console.log('[i] Syncing tags...');
+        await saveAllTagsToFirestore(uid, freshToken);
+        clearTagsDirty();
+    }
+
+    const dirtyExpectedReleases = statements.isExpectedReleasesDirty.get('dirty_expected_releases');
+    if (dirtyExpectedReleases && dirtyExpectedReleases.value === 'true') {
+        console.log('[i] Syncing expected releases...');
+        await saveExpectedReleasesToFirestore(uid, idToken);
+        clearExpectedReleasesDirty();
+    }
+
+    const now = new Date().toISOString();
+    await updateSyncTime(uid, freshToken, now);
+    statements.setStatistic.run('last_firestore_update', now, now);
+
+    return true;
+}
+
+async function refreshAccessToken(refreshToken) {
+    const url = `https://securetoken.googleapis.com/v1/token?key=${firebaseConfig.apiKey}`;
+
+    const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            grant_type: 'refresh_token',
+            refresh_token: refreshToken
+        })
+    });
+
+    if (!response.ok) {
+        const error = await response.text();
+        throw new Error(`Token refresh failed: ${error}`);
+    }
+
+    const data = await response.json();
+    return {
+        idToken: data.id_token,
+        refreshToken: data.refresh_token, // может прийти новый refresh token
+        expiresIn: data.expires_in
+    };
+}
+
+export async function getValidToken() {
+    const storedUser = getStoredUser();
+    if (!storedUser || !storedUser.is_authenticated) {
+        return null;
+    }
+
+    // Пробуем сначала через Firebase SDK (если он активен)
+    try {
+        const currentUser = auth.currentUser;
+        if (currentUser) {
+            const freshToken = await currentUser.getIdToken(true);
+            // Обновляем в БД
+            const stmt = db.prepare(`UPDATE user_session SET id_token = ? WHERE id = 1`);
+            stmt.run(freshToken);
+            console.log('[i] Token refreshed via Firebase SDK');
+            return freshToken;
+        }
+    } catch (error) {
+        console.log('[i] Firebase SDK not available, using REST API');
+    }
+
+    // Если SDK не помог — используем REST API с refresh token
+    if (storedUser.refresh_token) {
+        try {
+            const { idToken, refreshToken } = await refreshAccessToken(storedUser.refresh_token);
+
+            // Обновляем оба токена в БД
+            const stmt = db.prepare(`UPDATE user_session SET id_token = ?, refresh_token = ? WHERE id = 1`);
+            stmt.run(idToken, refreshToken || storedUser.refresh_token);
+
+            console.log('[i] Token refreshed via REST API');
+            return idToken;
+        } catch (error) {
+            console.error('[x] Failed to refresh token:', error);
+            // Токен не обновился — нужно перелогиниваться
+            clearUserSession();
+            return null;
+        }
+    }
+
+    console.log('[!] No refresh token available');
+    return null;
+}
+
+
+export async function loadAllTagsFromFirestore(uid, idToken) {
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/sections/tags`;
+
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${idToken}` }
+        });
+
+        if (response.status === 404) return [];
+        if (!response.ok) {
+            console.log(`HTTP ${response.status}`)
+            return null;
+        }
+
+        const data = await response.json();
+        const items = [];
+
+        if (data.fields && data.fields.items && data.fields.items.arrayValue) {
+            const values = data.fields.items.arrayValue.values || [];
+            for (const item of values) {
+                const fields = item.mapValue.fields;
+                items.push({
+                    name: fields.name?.stringValue || '',
+                    count: fields.count?.integerValue || 0
+                });
+            }
+        }
+
+        return items;
+    } catch (error) {
+        console.error('Error loading tags:', error);
+        return null;
+    }
+}
+
+export async function saveExpectedReleasesToFirestore(uid, idToken) {
+    const releases = statements.getAllExpectedReleases.all();
+
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/sections/expected_releases`;
+
+    const body = {
+        fields: {
+            items: {
+                arrayValue: {
+                    values: releases.map(release => ({
+                        mapValue: {
+                            fields: {
+                                card_name: { stringValue: release.card_name },
+                                section: { stringValue: release.section },
+                                release_date: { stringValue: release.release_date },
+                                last_notification_date: { stringValue: release.last_notification_date || '' }
+                            }
+                        }
+                    }))
+                }
+            },
+            updatedAt: { timestampValue: new Date().toISOString() }
+        }
+    };
+
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+            'Authorization': `Bearer ${idToken}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+
+    console.log(`✅ Expected releases saved (${releases.length} items)`);
+    return true;
+}
+
+export async function loadExpectedReleasesFromFirestore(uid, idToken) {
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/sections/expected_releases`;
+
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${idToken}` }
+        });
+
+        if (response.status === 404) return [];
+        if (!response.ok) {
+            console.log(`HTTP ${response.status}`);
+            return null;
+        }
+
+        const data = await response.json();
+        const releases = [];
+
+        if (data.fields && data.fields.items && data.fields.items.arrayValue) {
+            const values = data.fields.items.arrayValue.values || [];
+            for (const item of values) {
+                const fields = item.mapValue.fields;
+                releases.push({
+                    card_name: fields.card_name?.stringValue || '',
+                    section: fields.section?.stringValue || '',
+                    release_date: fields.release_date?.stringValue || '',
+                    last_notification_date: fields.last_notification_date?.stringValue || null
+                });
+            }
+        }
+
+        return releases;
+    } catch (error) {
+        console.error('Error loading expected releases:', error);
+        return null;
+    }
+}

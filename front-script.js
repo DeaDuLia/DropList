@@ -505,7 +505,6 @@ function createTooltip() {
         tooltipElement = document.createElement('div');
         tooltipElement.className = 'card-tooltip';
         document.body.appendChild(tooltipElement);
-        tooltipElement.style.visibility = 'hidden';
     }
     return tooltipElement;
 }
@@ -554,6 +553,8 @@ function showTooltip(description, tags, releaseDate, x, y) {
     if (!hasDescription && hasTags) {
         tooltipClass += ' card-tooltip-delayed';
     }
+
+
 
     tooltip.className = tooltipClass;
 
@@ -3158,8 +3159,14 @@ function setupCardClickHandlers() {
             if (priceFetchTimer) clearTimeout(priceFetchTimer);
 
             lastFetchedCard = { itemName, section, description, tags, releaseDate, x: e.clientX, y: e.clientY };
+            const hasDescription = description && description.trim().length > 0;
+            const hasTags = tags && tags.length > 0;
+            const hasReleaseDate = releaseDate && releaseDate !== 'undefined' && releaseDate !== 'null';
 
-            showTooltip(description, tags, releaseDate, e.clientX, e.clientY);
+
+            if (hasDescription || hasTags || hasReleaseDate || section === 'games' || section === 'books') {
+                showTooltip(description, tags, releaseDate, e.clientX, e.clientY);
+            }
 
             // ========== ИГРЫ ==========
             if (section === 'games') {
@@ -3199,8 +3206,8 @@ function setupCardClickHandlers() {
 
                         if (lastFetchedCard?.itemName !== itemName) return;
 
-                        if (steamData) setCachedPrice('steam', itemName, steamData);
-                        if (kupikodData) setCachedPrice('kupikod', itemName, kupikodData);
+                        setCachedPrice('steam', itemName, steamData || 'недоступно');
+                        setCachedPrice('kupikod', itemName, kupikodData || 'недоступно');
 
                         updateTooltipPrices(steamData || cachedSteam, kupikodData || cachedKupikod, tags.length > 0);
                     }, 0);
@@ -3246,8 +3253,8 @@ function setupCardClickHandlers() {
 
                         if (lastFetchedCard?.itemName !== itemName) return;
 
-                        if (chitaiData) setCachedPrice('chitai', itemName, chitaiData);
-                        if (litresData) setCachedPrice('litres', itemName, litresData);
+                        setCachedPrice('chitai', itemName, chitaiData || 'недоступно');
+                        setCachedPrice('litres', itemName, litresData || 'недоступно');
 
                         updateBookTooltipPrices(chitaiData || cachedChitai, litresData || cachedLitres, tags.length > 0);
                     }, 0);
