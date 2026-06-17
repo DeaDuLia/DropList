@@ -146,7 +146,7 @@ button {
     width: 100%;
 }
 
-#randomBtnSection, #searchInWeb {
+#randomBtnSection {
     background-color: var(--dark-nav-background); /* Фиолетовый цвет для кнопки случайности */
     color: white;
     border: none;
@@ -162,7 +162,7 @@ button {
     opacity: 0.7;
 }
 
-#randomBtnSection:hover, #searchInWeb:hover {
+#randomBtnSection:hover {
     background-color: var(--dark-nav-active-background);
     color: white;
     opacity: 1;
@@ -208,6 +208,7 @@ body {
     flex: 1;
     overflow-y: auto; /* Включаем вертикальный скролл */
     overflow-x: hidden; /* Отключаем горизонтальный скролл */
+    min-height: 500px;
 }
 
 /* Адаптация для мобильных устройств */

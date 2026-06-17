@@ -7,7 +7,6 @@ const scrollToTopBtn = document.getElementById('scrollToTopBtn');
 const donateModal = document.getElementById('donateModal');
 const closeDonateModal = document.getElementById('closeDonateModal');
 const randomBtn = document.getElementById('randomBtn');
-const searchInWebBtn = document.getElementById('searchInWeb');
 let addFormOverlay = null;
 let tooltipElement = null;
 let tooltipTimeout = null;
@@ -522,7 +521,6 @@ function showTooltip(description, tags, releaseDate, x, y) {
 function hideTooltip() {
     if (tooltipElement) {
         tooltipElement.style.display = 'none';
-        window.electronAPI.stopInfoSearching();
     }
     if (tooltipTimeout) {
         clearTimeout(tooltipTimeout);
@@ -1414,14 +1412,14 @@ registerBtn.addEventListener('click', async () => {
     }
 });
 
-// Закрытие модалки по клику вне
+
 authModal.addEventListener('click', (e) => {
     if (e.target === authModal) {
         authModal.style.display = 'none';
     }
 });
 
-// Инициализация при загрузке
+
 document.addEventListener('DOMContentLoaded', async () => {
     window.electronAPI.onRestoreSession(async (user) => {
         if (user) {
@@ -1479,7 +1477,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     await renderSection('games', games);
 });
 
-// Загрузка рейтингов
 async function loadRatings() {
     try {
         const ratings = await window.electronAPI.getRatings();
@@ -1495,7 +1492,7 @@ async function loadRatings() {
         await showError('Failed to load ratings');
     }
 }
-// Загрузка статусов
+
 async function loadStatuses() {
     try {
         const statuses = await window.electronAPI.getStatusesNoImport();
@@ -1511,7 +1508,7 @@ async function loadStatuses() {
     }
 }
 
-// Генерация HTML для иконки игры
+
 function getCardIconHTML(game) {
     let iconUrl = 'https://apptor.studio/assets/cache/images/600-856x600-629.png';
     // Проверяем URL обложки
@@ -1531,8 +1528,6 @@ function getCardIconHTML(game) {
                  onerror="this.src='https://apptor.studio/assets/cache/images/600-856x600-629.png'">
             `;
 }
-
-
 
 async function renderSection(section, data, resetPagination = true, preserveFilters = false, addMoreChecked=false, addFormVisible='') {
     const contentSection = document.getElementById('contentSection');
@@ -1600,7 +1595,6 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
                 <div id="searchSuggestions" class="search-suggestions"></div>
                 <button id="searchBtn"><img src="../../assets/icons/find.svg" alt="🔍" class="button-icon-no-text"></button>
                 <button id="clearSearchBtn" class="clear-search-btn">✕</button>
-                <button id="searchInWeb" title="Поиск в интернете"><img src="../../assets/icons/find.svg" alt="🔍" class="button-icon">интернет</button>
                 <button id="randomBtnSection" title="Случайная карточка"><img src="../../assets/icons/random.svg" alt="🎲" class="button-icon">Случайное</button>
             </div>
             
@@ -1677,7 +1671,6 @@ function handleScroll() {
         }
     }, 100);
 }
-
 
 function cleanupSection() {
     // Закрываем все выпадающие списки
@@ -2003,14 +1996,7 @@ async function initCardSection() {
         });
     }
 
-    const searchInWeb = document.getElementById('searchInWeb');
-    if (searchInWeb) {
-        searchInWeb.addEventListener('click', async () => {
-            await searchCardInWeb();
-        });
-    }
 
-    // Настраиваем кнопку добавления
     setupAddButton();
     setupAddFormTags();
     setupAutoSearchOnNameInput();
@@ -3200,7 +3186,11 @@ function setupCardClickHandlers() {
 
         card.addEventListener('mouseleave', () => {
             if (priceFetchTimer) clearTimeout(priceFetchTimer);
+            const section = document.querySelector('.nav-item.active')?.dataset.section;
             lastFetchedCard = null;
+            if (section === 'games' || section === 'books') {
+                window.electronAPI.stopInfoSearching();
+            }
             hideTooltip();
         });
 
@@ -3333,11 +3323,6 @@ randomBtn.addEventListener('click', async () => {
     await pickRandomVisibleCard();
 });
 
-searchInWebBtn.addEventListener('click', async () => {
-    await searchCardInWeb();
-});
-
-
 function highlightRandomCard(cardName) {
     // Находим карточку
     const card = document.querySelector(`.data-card[data-name="${cardName}"]`);
@@ -3406,19 +3391,6 @@ async function pickRandomVisibleCard() {
         // Подсвечиваем карточку
         highlightRandomCard(cardName);
 
-    } catch (error) {
-        console.error('Ошибка:', error);
-    }
-}
-
-async function searchCardInWeb() {
-    try {
-        const section = document.querySelector('.nav-item.active')?.dataset.section;
-        const textFromInput = document.getElementById('searchInput')?.value;
-
-        const searchText = textFromInput? textFromInput : 'популярное в разделе ' + section;
-        const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(searchText)}`;
-        window.electronAPI.openSearch(searchUrl);
     } catch (error) {
         console.error('Ошибка:', error);
     }
@@ -3564,12 +3536,54 @@ function showTitleSuggestion(fullTitle) {
 
     wrapper.appendChild(suggestion);
 
-    // При клике — заменяем название
-    suggestion.addEventListener('click', () => {
+    // ✅ ОБРАБОТЧИК КЛИКА ПО ПОДСКАЗКЕ
+    suggestion.addEventListener('click', (e) => {
+        e.stopPropagation(); // Останавливаем всплытие
         nameInput.value = fullTitle;
         updatePreview(fullTitle, null, null, null);
         suggestion.remove();
     });
+
+    // ✅ ОБРАБОТЧИК КЛИКА ВНЕ ПОДСКАЗКИ
+    function handleClickOutside(e) {
+        // Проверяем, что клик был НЕ внутри подсказки и НЕ внутри инпута
+        if (suggestion &&
+            !suggestion.contains(e.target) &&
+            e.target !== nameInput) {
+            suggestion.remove();
+            // Удаляем обработчик после удаления подсказки
+            document.removeEventListener('click', handleClickOutside);
+        }
+    }
+
+    // Добавляем обработчик с небольшой задержкой,
+    // чтобы не сработал на том же клике, который вызвал появление подсказки
+    setTimeout(() => {
+        document.addEventListener('click', handleClickOutside);
+    }, 10);
+
+    // ✅ ОБРАБОТЧИК НАЖАТИЯ ESC (закрыть подсказку)
+    function handleKeyDown(e) {
+        if (e.key === 'Escape') {
+            if (suggestion && suggestion.parentNode) {
+                suggestion.remove();
+                document.removeEventListener('click', handleClickOutside);
+                document.removeEventListener('keydown', handleKeyDown);
+            }
+        }
+    }
+    document.addEventListener('keydown', handleKeyDown);
+
+    // ✅ Если подсказка уже была удалена — чистим обработчики
+    // (это сработает, если подсказку удалили через клик по ней)
+    const observer = new MutationObserver(() => {
+        if (!suggestion.parentNode) {
+            document.removeEventListener('click', handleClickOutside);
+            document.removeEventListener('keydown', handleKeyDown);
+            observer.disconnect();
+        }
+    });
+    observer.observe(wrapper, { childList: true });
 }
 
 function setupAddButton() {
