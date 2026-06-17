@@ -13,12 +13,13 @@ const {fetchLitresBookTags, fetchLitresBookAPIData, fetchChitaiGorodBook} = requ
 const {fetchKinopoiskMovieTags, fetchFilmRuSerialsTags} = require("./service/search/movie-search.js");
 const {fetchCardData, updateAllReleaseDates, closeAllParsingWindows} = require("./service/search/data-search");
 const {getStoredUser, clearUserSession, clearTagsDirty, clearExpectedReleasesDirty, markSectionDirty, markTagsDirty,
-    markExpectedReleasesDirty, saveUserSession
+    markExpectedReleasesDirty, saveUserSession, markFavoritesDirty
 } = require("./database/local-database");
 const {syncUserData, syncDirtySections, getValidToken, saveSectionToFirestore, saveAllTagsToFirestore,
     saveExpectedReleasesToFirestore, updateSyncTime, loadExpectedReleasesFromFirestore, getSyncTime,
-    loadAllTagsFromFirestore
+    loadAllTagsFromFirestore, saveFavoritesToFirestore, loadFavoritesFromFirestore
 } = require("./database/firestore");
+
 
 autoUpdater.logger = log;
 
@@ -164,7 +165,7 @@ function getIconPath() {
     }
 }
 
-LocalDatabase.initializeDatabase();
+
 
 let win;
 async function createWindow() {
@@ -421,6 +422,7 @@ async function applySyncChoice(uid, idToken, choice, localData, remoteData) {
             }
             await saveAllTagsToFirestore(uid, freshToken);
             await saveExpectedReleasesToFirestore(uid, freshToken);
+            await saveFavoritesToFirestore(uid, freshToken);
             const localLastSync = LocalDatabase.statements.getStatistic.get('last_firestore_update');
             const localSyncTime = localLastSync ? localLastSync.value : null;
             await updateSyncTime(uid, freshToken, localSyncTime);
@@ -448,7 +450,15 @@ async function applySyncChoice(uid, idToken, choice, localData, remoteData) {
                     );
                 }
                 clearExpectedReleasesDirty();
-
+                LocalDatabase.db.prepare('DELETE FROM favorites').run();
+                const remoteFavorites = await loadFavoritesFromFirestore(uid, freshToken);
+                if (remoteFavorites) {
+                    for (const fav of remoteFavorites) {
+                        LocalDatabase.db.prepare('INSERT OR IGNORE INTO favorites (card_name, section, added_at) VALUES (?, ?, ?)')
+                            .run(fav.card_name, fav.section, fav.added_at || new Date().toISOString());
+                    }
+                }
+                clearFavoritesDirty();
                 const remoteSyncTime = await getSyncTime(uid, freshToken);
                 console.log(remoteSyncTime);
                 LocalDatabase.statements.setStatistic.run('last_firestore_update', remoteSyncTime, remoteSyncTime);
@@ -676,6 +686,8 @@ ipcMain.handle('delete-data', async (event, section, dataName) => {
         LocalDatabase.statements.removeTagCount.run(tag);
         LocalDatabase.statements.deleteTagIfZero.run(tag);
     }
+    LocalDatabase.statements.deleteFavoritesByCard.run(dataName, section);
+    markFavoritesDirty();
 
     markSectionDirty(section);
     markExpectedReleasesDirty();
@@ -689,6 +701,16 @@ ipcMain.handle('move-to-category', async (event, data) => {
     // Удаляем из старой категории
     const result = LocalDatabase.statements.addData.run(data.name, data.newCategory, data.oldIcoUrl || null, data.oldRating || '0', data.oldStatus || 'Уточнить', data.oldDescription);
     LocalDatabase.statements.deleteData.run(data.name, data.oldCategory);
+    const isFav = LocalDatabase.isFavorite(data.name, data.oldCategory);
+    if (isFav) {
+        LocalDatabase.statements.updateFavoriteSection.run(
+            data.newCategory,
+            data.name,
+            data.oldCategory
+        );
+        markFavoritesDirty();
+    }
+
     markSectionDirty(data.newCategory);
     markSectionDirty(data.oldCategory);
     const now = new Date().toISOString();
@@ -1235,3 +1257,24 @@ ipcMain.handle('search-chitai-gorod-book', async (event, title) => {
 ipcMain.handle('stop-info-searching', async () => {
     closeAllParsingWindows();
 });
+
+ipcMain.handle('add-favorite', (event, cardName, section) => {
+    const result = LocalDatabase.statements.addFavorite.run(cardName, section);
+    LocalDatabase.markFavoritesDirty();
+    return result;
+});
+
+ipcMain.handle('remove-favorite', (event, cardName, section) => {
+    const result = LocalDatabase.statements.removeFavorite.run(cardName, section);
+    LocalDatabase.markFavoritesDirty();
+    return result;
+});
+
+ipcMain.handle('is-favorite', (event, cardName, section) => {
+    return LocalDatabase.isFavorite(cardName, section);
+});
+
+ipcMain.handle('get-favorites-by-section', (event, section) => {
+    return LocalDatabase.getFavoritesBySection(section);
+});
+

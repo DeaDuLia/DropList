@@ -10,7 +10,7 @@ const randomBtn = document.getElementById('randomBtn');
 let addFormOverlay = null;
 let tooltipElement = null;
 let tooltipTimeout = null;
-
+let favoritesCache  = {};
 
 let searchTimeout = null;
 let lastValue = '';
@@ -62,7 +62,6 @@ let draggedElement = null;
 let isDraggingDown = false;
 let holdTimer = null;
 let isMouseDown = false;
-let dragStartY = 0;
 
 function getVisibleSections() {
     try {
@@ -85,10 +84,7 @@ function getHiddenSections() {
     return all.filter(s => !visible.includes(s));
 }
 
-function getSectionIndex(section) {
-    const visible = getVisibleSections();
-    return visible.indexOf(section);
-}
+
 
 // ====== РЕНДЕР НАВИГАЦИИ ======
 
@@ -1985,7 +1981,6 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
 
     if (!contentWrapper || !filterButtonsSection) return;
 
-    // Очистка перед рендером
     cleanupSection();
 
     if (resetPagination) {
@@ -2009,6 +2004,9 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
 
     window.allSectionData = data;
 
+    // 🔥 ЗАГРУЖАЕМ ИЗБРАННОЕ
+    const favorites = await loadFavorites(section);
+
     if (preserveFilters) {
         window.filteredData = filterData(data, currentFilters.searchQuery, currentFilters.statusFilter);
         window.filteredData = sortData(window.filteredData, currentFilters.sortBy);
@@ -2016,6 +2014,10 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
         window.filteredData = data;
         currentFilters = { searchQuery: '', statusFilter: 'Все', sortBy: 'date' };
     }
+
+    // 🔥 СОХРАНЯЕМ ИЗБРАННОЕ В ГЛОБАЛЬНОЙ ПЕРЕМЕННОЙ ДЛЯ loadMoreItems()
+    window._currentFavorites = favorites;
+
     filterButtonsSection.innerHTML = `
         <div class="filter-buttons-container">
             <div class="filter-buttons-group" id="statusFilter">
@@ -2023,10 +2025,9 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
             </div>
         </div>
     `;
-    // Рендерим контент во wrapper
+
     contentWrapper.innerHTML = `
     <div class="content-wrapper">
-        <!-- Кнопки фильтрации - ВЕРХНЯЯ СТРОКА -->
         <div class="filter-controls-panel">
             <div class="filter-container sort-buttons-container">
                 <button class="sort-button active" data-sort="date" title="По дате добавления">
@@ -2047,7 +2048,6 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
                 <button id="randomBtnSection" title="Случайная карточка"><img src="../../assets/icons/random.svg" alt="🎲" class="button-icon">Случайное</button>
             </div>
             
-            <!-- Кнопка добавления должна быть ВНЕ search-container -->
             <div class="add-button-container">
                 <button id="toggleAddFormBtn" class="add-button">+ Добавить</button>
             </div>
@@ -2062,11 +2062,9 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
     </div>
 `;
 
-    // Инициализируем секцию
     await initCardSection();
     setupSearchInput();
 
-    // Устанавливаем сохранённое значение фильтра статуса
     const statusFilter = document.getElementById('statusFilter');
     if (statusFilter && currentFilters.statusFilter) {
         statusFilter.value = currentFilters.statusFilter;
@@ -2075,7 +2073,6 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
     loadMoreItems();
     updateStats();
 
-    // Добавляем обработчик прокрутки для бесконечной загрузки
     contentWrapper.addEventListener('scroll', handleScroll);
     setupContentWrapperScroll();
     await checkSectionReleaseNotifications(section);
@@ -2083,23 +2080,46 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
 
 function filterData(data, searchQuery, statusFilter, isTag = false) {
     const queryLower = (searchQuery || '').toLowerCase();
+    const section = document.querySelector('.nav-item.active')?.dataset.section;
+    const favorites = favoritesCache[section] || [];
+
     return data.filter(item => {
-        // Поиск по названию
         const nameMatches = isTag
             ? false
             : !queryLower || item.name.toLowerCase().includes(queryLower);
-        // Поиск по тегам
+
         let tagMatches = false;
         if (queryLower && item.tags && item.tags.length) {
             tagMatches = item.tags.some(tag => tag.toLowerCase().includes(queryLower));
         }
 
         const matchesSearch = !queryLower || nameMatches || tagMatches;
-        const statusMatches = statusFilter === 'Все' || item.status === statusFilter;
+
+        let statusMatches = false;
+        if (statusFilter === 'Все') {
+            statusMatches = true;
+        } else if (statusFilter === 'Избранное') {
+            statusMatches = favorites.includes(item.name);
+        } else {
+            statusMatches = item.status === statusFilter;
+        }
 
         return matchesSearch && statusMatches;
     });
 }
+
+async function loadFavorites(section) {
+    try {
+        const favs = await window.electronAPI.getFavoritesBySection(section);
+        favoritesCache[section] = favs || [];
+        return favs || [];
+    } catch (error) {
+        console.error('Ошибка загрузки избранного:', error);
+        favoritesCache[section] = [];
+        return [];
+    }
+}
+
 
 let scrollTimeout;
 function handleScroll() {
@@ -2171,7 +2191,7 @@ async function loadMoreItems() {
     isLoading = true;
     const loadingIndicator = document.getElementById('loadingIndicator');
     if (loadingIndicator) loadingIndicator.style.display = 'block';
-    // Получаем данные для текущей страницы
+
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
     const itemsToRender = window.filteredData.slice(startIndex, endIndex);
@@ -2183,77 +2203,73 @@ async function loadMoreItems() {
         return;
     }
 
-    // Рендерим карточки
     const dataList = document.getElementById('dataList');
     if (dataList) {
-        dataList.innerHTML += renderCardList(itemsToRender);
+        // 🔥 БЕРЁМ ИЗБРАННОЕ ИЗ ГЛОБАЛЬНОЙ ПЕРЕМЕННОЙ
+        const favorites = window._currentFavorites || [];
+        dataList.innerHTML += renderCardList(itemsToRender, favorites);
     }
 
-    // Обновляем состояние
     currentPage++;
     isLoading = false;
     if (loadingIndicator) loadingIndicator.style.display = 'none';
 
-    // Инициализируем кнопки и поля для новых карточек
     setupDeleteButtons();
     setupEditableFields();
     setupTitleClickHandlers();
-    setupChangeImageButtons(); // Новая функция
-    setupChangeCategoryButtons(); // Новая функция
+    setupChangeImageButtons();
+    setupChangeCategoryButtons();
     setupCardClickHandlers();
     setupEditDescriptionButtons();
+    setupFavoriteButtons();
 }
 
 async function loadStatusFilter() {
     try {
-        const statuses = await window.electronAPI.getStatuses();
-        const section = document.querySelector('.nav-item.active')?.dataset.section;
-
-        // Получаем текущие данные
+        // Получаем статусы (уже без "Избранное")
+        const statuses = await window.electronAPI.getStatusesNoImport();
         const data = window.allSectionData || [];
 
-        // Считаем, сколько карточек каждого статуса
         const statusCount = {};
         data.forEach(item => {
             const status = item.status || 'Уточнить';
             statusCount[status] = (statusCount[status] || 0) + 1;
         });
 
+        // Добавляем отдельный фильтр "Избранное"
+        const section = document.querySelector('.nav-item.active')?.dataset.section;
+        const favorites = section ? await window.electronAPI.getFavoritesBySection(section) : [];
+        const favCount = favorites.length;
+
         const statusFilter = document.getElementById('statusFilter');
         if (statusFilter) {
-            // Фильтруем статусы: показываем только те, у которых есть карточки
             const activeStatuses = statuses.filter(s => statusCount[s] > 0);
             const currentFilter = currentFilters.statusFilter || 'Все';
-            if (currentFilter !== 'Все' && !activeStatuses.includes(currentFilter)) {
+
+            // Проверяем, что выбранный фильтр есть
+            if (currentFilter !== 'Все' && currentFilter !== 'Избранное' && !activeStatuses.includes(currentFilter)) {
                 currentFilters.statusFilter = 'Все';
             }
 
-            statusFilter.innerHTML = `
-                <button class="filter-button active" data-status="Все">Все (${data.length})</button>
-                ${activeStatuses.map(s =>
-                `<button class="filter-button" data-status="${s}">${s} (${statusCount[s]})</button>`
-            ).join('')}
+            let html = `
+                <button class="filter-button active" data-status="Все">Все</button>
             `;
+            if (favCount > 0) {
+                html += `<button class="filter-button" data-status="Избранное">Избранное</button>`;
+            }
 
+            html += activeStatuses.map(s =>
+                `<button class="filter-button" data-status="${s}">${s}</button>`
+            ).join('');
+
+            statusFilter.innerHTML = html;
+
+            // Устанавливаем активную кнопку
             const activeButton = statusFilter.querySelector(`.filter-button[data-status="${currentFilters.statusFilter || 'Все'}"]`);
             if (activeButton) {
                 statusFilter.querySelectorAll('.filter-button').forEach(btn => btn.classList.remove('active'));
                 activeButton.classList.add('active');
             }
-
-            // Если фильтр изменился — перефильтровываем карточки
-            if (currentFilter !== currentFilters.statusFilter) {
-                filterCards();
-            }
-
-            statusFilter.addEventListener('change', () => {
-                filterCards();
-            });
-
-            // Добавляем обработчик изменения фильтра
-            statusFilter.addEventListener('change', () => {
-                filterCards();
-            });
         }
     } catch (error) {
         console.error('Error loading statuses for filter:', error);
@@ -2400,31 +2416,37 @@ function setupSearchInput() {
 }
 function sortData(data, sortBy) {
     const statusPriority = {
-        'Избранное': 1,
-        'Завершено': 2,
-        'Импортировано': 3,
-        'Смотрел': 4,
-        'В процессе': 5,
-        'Уточнить': 6,
-        'Ожидается': 7
+        'Завершено': 1,
+        'Импортировано': 2,
+        'Смотрел': 3,
+        'В процессе': 4,
+        'Уточнить': 5,
+        'Ожидается': 6,
+        'В планах': 7
     };
 
+    const section = document.querySelector('.nav-item.active')?.dataset.section;
+    const favorites = favoritesCache[section] || [];
+
     return [...data].sort((a, b) => {
+        const aFav = favorites.includes(a.name) ? 1 : 0;
+        const bFav = favorites.includes(b.name) ? 1 : 0;
+
         if (sortBy === 'date') {
-            // По умолчанию данные уже в порядке добавления
+            if (aFav !== bFav) return bFav - aFav;
             return 0;
         } else if (sortBy === 'rating') {
-            // Сначала по статусу
             const statusA = statusPriority[a.status] || 5;
             const statusB = statusPriority[b.status] || 5;
             if (statusA !== statusB) return statusA - statusB;
 
-            // Затем по рейтингу (если статусы одинаковые)
             const ratingA = parseInt(a.rating) || 0;
             const ratingB = parseInt(b.rating) || 0;
-            return ratingB - ratingA; // Сначала высокий рейтинг
+            if (ratingA !== ratingB) return ratingB - ratingA;
+
+            return bFav - aFav;
         } else if (sortBy === 'alphabet') {
-            // По алфавиту
+            if (aFav !== bFav) return bFav - aFav;
             return a.name.localeCompare(b.name);
         }
         return 0;
@@ -2875,18 +2897,92 @@ function escapeHtml(str) {
         .replace(/'/g, '&#39;');
 }
 
-function renderCardList(cards) {
-    return cards.map(card => `
+function setupFavoriteButtons() {
+    document.querySelectorAll('.fav-btn').forEach(btn => {
+        // Удаляем старый обработчик
+        btn.removeEventListener('click', handleFavoriteClick);
+        btn.addEventListener('click', handleFavoriteClick);
+    });
+}
+
+async function handleFavoriteClick(e) {
+    e.stopPropagation();
+    const btn = e.currentTarget;
+    const cardName = btn.dataset.name;
+    const section = btn.dataset.section;
+    const isActive = btn.classList.contains('active');
+
+    try {
+        if (isActive) {
+            // Удаляем из избранного
+            await window.electronAPI.removeFavorite(cardName, section);
+            btn.classList.remove('active');
+            btn.querySelector('.fav-icon').textContent = '🤍';
+            btn.querySelector('.btn-text').textContent = 'В избранное';
+            btn.title = 'Добавить в избранное';
+
+            // Обновляем кеш
+            if (favoritesCache[section]) {
+                favoritesCache[section] = favoritesCache[section].filter(name => name !== cardName);
+            }
+        } else {
+            // Добавляем в избранное
+            await window.electronAPI.addFavorite(cardName, section);
+            btn.classList.add('active');
+            btn.querySelector('.fav-icon').textContent = '❤️';
+            btn.querySelector('.btn-text').textContent = 'В избранном';
+            btn.title = 'Убрать из избранного';
+
+            // Обновляем кеш
+            if (favoritesCache[section]) {
+                favoritesCache[section].push(cardName);
+            }
+        }
+
+        // Обновляем data-атрибут карточки
+        const card = btn.closest('.data-card');
+        if (card) {
+            card.dataset.favorite = isActive ? 'false' : 'true';
+        }
+
+        // Обновляем сортировку и фильтры (если нужно)
+        // filterCards(currentFilters.searchQuery);
+
+    } catch (error) {
+        console.error('Ошибка при работе с избранным:', error);
+        showError('Не удалось изменить статус избранного');
+    }
+}
+
+function renderCardList(cards, favorites = []) {
+    const section = document.querySelector('.nav-item.active')?.dataset.section || '';
+
+    return cards.map(card => {
+        const isFav = favorites.includes(card.name);
+
+        return `
         <div class="data-card" 
              data-name="${escapeHtml(card.name)}" 
              data-description="${escapeHtml(card.description || '')}" 
              data-tags='${JSON.stringify(card.tags || [])}'
              data-release-date="${card.releaseDate || ''}"
+             data-favorite="${isFav ? 'true' : 'false'}"
              style="display: block;">
+            
             <div class="card-hover-icon">
                 <img src="../../assets/icons/search-web.svg" alt="🔍">
             </div>
-            <div class="card-buttons">
+                <button class="card-btn fav-btn ${isFav ? 'active' : ''}" 
+                        data-name="${escapeHtml(card.name)}" 
+                        data-section="${section}"
+                        title="${isFav ? 'Убрать из избранного' : 'Добавить в избранное'}">
+                    <span class="fav-icon">${isFav ? '❤️' : '🤍'}</span>
+                    <span class="btn-text" style="display: none">${isFav ? 'В избранном' : 'В избранное'}</span>
+                </button>
+                <div class="card-buttons">
+                <!-- КНОПКА ИЗБРАННОГО -->
+                
+                
                 <button class="card-btn edit-desc-btn" data-name="${escapeHtml(card.name)}">
                     <img src="../../assets/icons/note.svg" alt="📝" class="button-icon-no-text">
                     <span class="btn-text">Заметки</span>
@@ -2908,7 +3004,9 @@ function renderCardList(cards) {
                     <img src="../../assets/icons/delete.svg" alt="🗑️" class="button-icon-no-text">
                 </button>
             </div>
+            
             ${getCardIconHTML(card)}
+            
             <div class="data-info">
                 <h3 class="data-title">${escapeHtml(card.name)}</h3>
                 <div class="data-ratings-container">
@@ -2927,7 +3025,7 @@ function renderCardList(cards) {
                 </div>
             </div>
         </div>
-    `).join('');
+    `}).join('');
 }
 
 async function addNewData(section) {

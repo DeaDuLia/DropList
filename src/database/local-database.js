@@ -57,7 +57,7 @@ export function initializeDatabase() {
         ('В планах'),
         ('В процессе'),
         ('Завершено'),
-        ('Избранное'),
+
         ('Ожидается'),
         ('Импортировано')
     `);
@@ -121,13 +121,21 @@ export function initializeDatabase() {
             PRIMARY KEY (card_name, section)
         )
     `);
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS favorites (
+            card_name TEXT,
+            section TEXT,
+            PRIMARY KEY (card_name, section)
+        )
+    `);
 }
+initializeDatabase();
 
 export const statements = {
     //Общее
     getRatings: db.prepare('SELECT rating FROM ratings'),
-    getStatuses: db.prepare('SELECT status FROM statuses'),
-    getStatusesNoImport: db.prepare(`SELECT status FROM statuses where status <> 'Импортировано'`),
+    getStatuses: db.prepare('SELECT status FROM statuses where status <> \'Избранное\''),
+    getStatusesNoImport: db.prepare(`SELECT status FROM statuses where status <> 'Импортировано' and status <> 'Избранное'`),
     importData: db.prepare(`
         INSERT OR IGNORE INTO data_cards 
         (name, section, ico_url, rating, status, description) 
@@ -228,6 +236,32 @@ export const statements = {
     getAllExpectedReleases: db.prepare('SELECT card_name, section, release_date, last_notification_date FROM expected_releases'),
     replaceAllExpectedReleases: db.prepare(`
         DELETE FROM expected_releases
+    `),
+
+    // ====== ИЗБРАННОЕ ======
+    addFavorite: db.prepare(`
+        INSERT OR IGNORE INTO favorites (card_name, section) VALUES (?, ?)
+    `),
+    removeFavorite: db.prepare(`
+        DELETE FROM favorites WHERE card_name = ? AND section = ?
+    `),
+    isFavorite: db.prepare(`
+        SELECT 1 FROM favorites WHERE card_name = ? AND section = ?
+    `),
+    getFavoritesBySection: db.prepare(`
+        SELECT card_name FROM favorites WHERE section = ?
+    `),
+    getAllFavorites: db.prepare(`
+        SELECT card_name, section FROM favorites
+    `),
+    clearFavorites: db.prepare(`
+        DELETE FROM favorites
+    `),
+    updateFavoriteSection: db.prepare(`
+        UPDATE favorites SET section = ? WHERE card_name = ? AND section = ?
+    `),
+    deleteFavoritesByCard: db.prepare(`
+        DELETE FROM favorites WHERE card_name = ? AND section = ?
     `)
 };
 
@@ -340,5 +374,51 @@ export function markExpectedReleasesDirty() {
 export function clearExpectedReleasesDirty() {
     statements.deleteStatistic.run('dirty_expected_releases');
     console.log('[i] Expected releases dirty flag cleared');
+}
+
+export function isFavorite(cardName, section) {
+    const result = statements.isFavorite.get(cardName, section);
+    return !!result;
+}
+
+export function getFavoritesBySection(section) {
+    return statements.getFavoritesBySection.all(section).map(row => row.card_name);
+}
+
+export function getAllFavorites() {
+    return statements.getAllFavorites.all();
+}
+
+export function clearFavorites() {
+    statements.clearFavorites.run();
+}
+
+export function markFavoritesDirty() {
+    const now = new Date().toISOString();
+    statements.setStatistic.run('dirty_favorites', 'true', now);
+}
+
+export function clearFavoritesDirty() {
+    statements.deleteStatistic.run('dirty_favorites');
+}
+
+export function isFavoritesDirty() {
+    const dirty = statements.getStatistic.get('dirty_favorites');
+    return dirty && dirty.value === 'true';
+}
+
+export function removeFavoriteStatus() {
+    // Проверяем, есть ли ещё карточки со статусом "Избранное"
+    const count = db.prepare(`
+        SELECT COUNT(*) as count FROM data_cards WHERE status = 'Избранное'
+    `).get();
+
+    if (count.count === 0) {
+        // Удаляем статус из таблицы statuses
+        db.prepare(`DELETE FROM statuses WHERE status = 'Избранное'`).run();
+        console.log('[DB] Статус "Избранное" удалён из БД');
+    } else {
+        console.warn(`[DB] Осталось ${count.count} карточек со статусом "Избранное"!`);
+    }
 }
 

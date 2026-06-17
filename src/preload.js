@@ -1,6 +1,10 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
+    addFavorite: (cardName, section) => ipcRenderer.invoke('add-favorite', cardName, section),
+    removeFavorite: (cardName, section) => ipcRenderer.invoke('remove-favorite', cardName, section),
+    isFavorite: (cardName, section) => ipcRenderer.invoke('is-favorite', cardName, section),
+    getFavoritesBySection: (section) => ipcRenderer.invoke('get-favorites-by-section', section),
     stopInfoSearching: () => ipcRenderer.invoke('stop-info-searching'),
     searchLitresBookAPI: (title) => ipcRenderer.invoke('search-litres-book-api', title),
     searchChitaiGorodBook: (title) => ipcRenderer.invoke('search-chitai-gorod-book', title),

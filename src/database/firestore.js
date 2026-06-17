@@ -1,12 +1,12 @@
 import {initializeApp} from "firebase/app";
 import {getAuth} from "firebase/auth";
 import {
-    clearExpectedReleasesDirty,
+    clearExpectedReleasesDirty, clearFavoritesDirty,
     clearSectionDirty, clearTagsDirty,
     clearUserSession,
     db,
     getAllLocalData,
-    getStoredUser,
+    getStoredUser, isFavoritesDirty,
     isSectionDirty, isTagsDirty,
     statements
 } from "./local-database.js";
@@ -37,6 +37,7 @@ export async function syncUserData(uid, idToken) {
                 await saveSectionToFirestore(uid, idToken, section, localData[section] || []);
             }
             await saveAllTagsToFirestore();
+            await saveFavoritesToFirestore(uid, idToken);
             const now = new Date().toISOString();
             await updateSyncTime(uid, idToken, now);
             statements.setStatistic.run('last_firestore_update', now, now);
@@ -283,32 +284,52 @@ export async function syncDirtySections(uid, idToken) {
     const sections = ['games', 'movies', 'cartoons', 'serials', 'anime', 'books'];
     const dirtySections = sections.filter(section => isSectionDirty(section));
 
-    if (dirtySections.length === 0) {
-        console.log('[i] No dirty sections, skipping sync');
-        return false;
+    let hasDirtyData = false;
+
+    // 1. СИНХРОНИЗИРУЕМ ГРЯЗНЫЕ РАЗДЕЛЫ
+    if (dirtySections.length > 0) {
+        console.log(`[i] Syncing dirty sections: ${dirtySections.join(', ')}`);
+        hasDirtyData = true;
+
+        for (const section of dirtySections) {
+            const sectionData = statements.getDataBySection.all(section);
+            await saveSectionToFirestore(uid, freshToken, section, sectionData);
+            clearSectionDirty(section);
+        }
     }
 
-    console.log(`[i] Syncing dirty sections: ${dirtySections.join(', ')}`);
-
-    for (const section of dirtySections) {
-        const sectionData = statements.getDataBySection.all(section);
-        await saveSectionToFirestore(uid, freshToken, section, sectionData);
-        clearSectionDirty(section);
-    }
-
+    // 2. СИНХРОНИЗИРУЕМ ТЕГИ
     if (isTagsDirty()) {
         console.log('[i] Syncing tags...');
+        hasDirtyData = true;
         await saveAllTagsToFirestore(uid, freshToken);
         clearTagsDirty();
     }
 
+    // 3. СИНХРОНИЗИРУЕМ ОЖИДАЕМЫЕ РЕЛИЗЫ
     const dirtyExpectedReleases = statements.isExpectedReleasesDirty.get('dirty_expected_releases');
     if (dirtyExpectedReleases && dirtyExpectedReleases.value === 'true') {
         console.log('[i] Syncing expected releases...');
+        hasDirtyData = true;
         await saveExpectedReleasesToFirestore(uid, idToken);
         clearExpectedReleasesDirty();
     }
 
+    // 4. СИНХРОНИЗИРУЕМ ИЗБРАННОЕ
+    if (isFavoritesDirty()) {
+        console.log('[i] Syncing favorites...');
+        hasDirtyData = true;
+        await saveFavoritesToFirestore(uid, freshToken);
+        clearFavoritesDirty();
+    }
+
+    // Если ничего не было грязного — просто выходим
+    if (!hasDirtyData) {
+        console.log('[i] No dirty data to sync');
+        return false;
+    }
+
+    // Обновляем время синхронизации
     const now = new Date().toISOString();
     await updateSyncTime(uid, freshToken, now);
     statements.setStatistic.run('last_firestore_update', now, now);
@@ -499,6 +520,85 @@ export async function loadExpectedReleasesFromFirestore(uid, idToken) {
         return releases;
     } catch (error) {
         console.error('Error loading expected releases:', error);
+        return null;
+    }
+}
+
+export async function saveFavoritesToFirestore(uid, idToken) {
+    const favorites = statements.getAllFavorites.all();
+
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/sections/favorites`;
+
+    const body = {
+        fields: {
+            items: {
+                arrayValue: {
+                    values: favorites.map(item => ({
+                        mapValue: {
+                            fields: {
+                                card_name: { stringValue: item.card_name },
+                                section: { stringValue: item.section },
+                                added_at: { timestampValue: item.added_at || new Date().toISOString() }
+                            }
+                        }
+                    }))
+                }
+            },
+            updatedAt: { timestampValue: new Date().toISOString() }
+        }
+    };
+
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+            'Authorization': `Bearer ${idToken}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+
+    console.log(`✅ Favorites saved (${favorites.length} items)`);
+    return true;
+}
+
+export async function loadFavoritesFromFirestore(uid, idToken) {
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/sections/favorites`;
+
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${idToken}` }
+        });
+
+        if (response.status === 404) return [];
+        if (!response.ok) {
+            console.log(`HTTP ${response.status}`);
+            return null;
+        }
+
+        const data = await response.json();
+        const favorites = [];
+
+        if (data.fields && data.fields.items && data.fields.items.arrayValue) {
+            const values = data.fields.items.arrayValue.values || [];
+            for (const item of values) {
+                const fields = item.mapValue.fields;
+                favorites.push({
+                    card_name: fields.card_name?.stringValue || '',
+                    section: fields.section?.stringValue || '',
+                    added_at: fields.added_at?.timestampValue || null
+                });
+            }
+        }
+
+        return favorites;
+    } catch (error) {
+        console.error('Error loading favorites:', error);
         return null;
     }
 }

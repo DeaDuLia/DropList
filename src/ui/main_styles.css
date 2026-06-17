@@ -2767,3 +2767,71 @@ select option[value="Ожидается"] { background-color: var(--rating-waiti
         padding: 4px 10px;
     }
 }
+
+.fav-btn {
+    position: absolute !important;
+    top: 10px !important;
+    left: 10px !important;
+    right: auto !important;
+    background: rgba(0, 0, 0, 0.5) !important;
+    border: 2px solid rgba(255, 255, 255, 0.2) !important;
+    border-radius: 50% !important;
+    width: 36px !important;
+    height: 36px !important;
+    padding: 0 !important;
+    display: flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    cursor: pointer !important;
+    transition: all 0.25s ease !important;
+    z-index: 10 !important;
+    backdrop-filter: blur(4px);
+
+    /* 👇 СКРЫТ ПО УМОЛЧАНИЮ */
+    opacity: 0 !important;
+    transform: scale(0.8) !important;
+    pointer-events: none !important;
+}
+
+.fav-btn:hover {
+    background: rgba(0, 0, 0, 0.7) !important;
+    border-color: rgba(255, 255, 255, 0.6) !important;
+    transform: scale(1.1);
+}
+
+.fav-btn .fav-icon {
+    font-size: 20px !important;
+    line-height: 1 !important;
+    transition: transform 0.25s ease;
+}
+
+.fav-btn:hover .fav-icon {
+    transform: scale(1.2);
+}
+
+.fav-btn.active {
+    border-color: #ff6b6b !important;
+    background: rgba(255, 107, 107, 0.3) !important;
+    box-shadow: 0 0 20px rgba(255, 107, 107, 0.3);
+}
+
+.fav-btn.active .fav-icon {
+    text-shadow: 0 0 20px rgba(255, 107, 107, 0.5);
+}
+
+.data-card:hover .fav-btn {
+    opacity: 1 !important;
+    transform: scale(1) !important;
+    pointer-events: auto !important;
+}
+
+.data-card:hover .fav-btn.active {
+    border-color: #ff6b6b;
+    box-shadow: 0 0 30px rgba(255, 107, 107, 0.4);
+}
+
+@keyframes heartBeat {
+    0% { transform: scale(1); }
+    50% { transform: scale(1.4); }
+    100% { transform: scale(1); }
+}
