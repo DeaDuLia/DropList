@@ -2835,3 +2835,14 @@ select option[value="Ожидается"] { background-color: var(--rating-waiti
     50% { transform: scale(1.4); }
     100% { transform: scale(1); }
 }
+
+.main-header * {
+    user-select: none !important;
+    -webkit-user-select: none !important;
+}
+
+/* Или конкретно для панели скрытых разделов */
+.hidden-sections-panel * {
+    user-select: none !important;
+    -webkit-user-select: none !important;
+}

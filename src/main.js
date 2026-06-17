@@ -13,7 +13,7 @@ const {fetchLitresBookTags, fetchLitresBookAPIData, fetchChitaiGorodBook} = requ
 const {fetchKinopoiskMovieTags, fetchFilmRuSerialsTags} = require("./service/search/movie-search.js");
 const {fetchCardData, updateAllReleaseDates, closeAllParsingWindows} = require("./service/search/data-search");
 const {getStoredUser, clearUserSession, clearTagsDirty, clearExpectedReleasesDirty, markSectionDirty, markTagsDirty,
-    markExpectedReleasesDirty, saveUserSession, markFavoritesDirty
+    markExpectedReleasesDirty, saveUserSession, markFavoritesDirty, clearFavoritesDirty
 } = require("./database/local-database");
 const {syncUserData, syncDirtySections, getValidToken, saveSectionToFirestore, saveAllTagsToFirestore,
     saveExpectedReleasesToFirestore, updateSyncTime, loadExpectedReleasesFromFirestore, getSyncTime,
@@ -454,8 +454,8 @@ async function applySyncChoice(uid, idToken, choice, localData, remoteData) {
                 const remoteFavorites = await loadFavoritesFromFirestore(uid, freshToken);
                 if (remoteFavorites) {
                     for (const fav of remoteFavorites) {
-                        LocalDatabase.db.prepare('INSERT OR IGNORE INTO favorites (card_name, section, added_at) VALUES (?, ?, ?)')
-                            .run(fav.card_name, fav.section, fav.added_at || new Date().toISOString());
+                        LocalDatabase.db.prepare('INSERT OR IGNORE INTO favorites (card_name, section) VALUES (?, ?)')
+                            .run(fav.card_name, fav.section);
                     }
                 }
                 clearFavoritesDirty();
