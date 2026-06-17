@@ -65,10 +65,12 @@
 }
 /* Шапка */
 .main-header {
+    position: relative; /* 👈 ВАЖНО! Чтобы панель позиционировалась относительно шапки */
     display: flex;
     background-color: var(--dark-header-background);
     color: var(--dark-main-text-color);
     box-shadow: var(--shadow);
+    z-index: 10;
 }
 /* Кнопки на шапке */
 .main-nav {
@@ -2539,4 +2541,229 @@ select option[value="Ожидается"] { background-color: var(--rating-waiti
 .card-tooltip-prices {
 
     font-size: 12px;
+}
+
+
+#sectionsMenuBtn {
+    background: transparent !important;
+    border: none !important;
+    padding: 4px 8px !important;
+    font-size: 18px;
+    color: rgba(255, 255, 255, 0.5);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+#sectionsMenuBtn:hover {
+    color: white;
+    background: rgba(255, 255, 255, 0.1) !important;
+}
+
+#sectionsMenuBtn.active {
+    color: #4a9eff;
+    background: rgba(74, 158, 255, 0.15) !important;
+}
+
+/* ========== РЕЖИМ ПЕРЕТАСКИВАНИЯ ========== */
+
+.nav-item.drag-mode {
+    cursor: grab;
+    user-select: none;
+    border: 1px dashed rgba(255, 255, 255, 0.2);
+    border-radius: 8px;
+    margin: 0 2px;
+    transition: all 0.2s ease;
+}
+
+.nav-item.drag-mode:hover {
+    background: var(--dark-nav-active-background);
+    transform: scale(1.02);
+}
+
+.nav-item.drag-mode:active {
+    cursor: grabbing;
+}
+
+.nav-item.dragging {
+    opacity: 0.3;
+    transform: scale(0.95);
+}
+
+.nav-item.drag-over {
+    border-color: #4a9eff;
+    background: rgba(74, 158, 255, 0.15);
+}
+
+
+
+/* ========== ПАНЕЛЬ СКРЫТЫХ РАЗДЕЛОВ ========== */
+
+.hidden-sections-panel {
+    display: none;
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    z-index: 9999;
+    padding: 12px 16px;
+    background: var(--dark-header-background);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 10px;
+    box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+    backdrop-filter: blur(10px);
+    transition: all 0.25s ease;
+}
+
+
+.hidden-sections-panel.visible {
+    display: block !important;
+    position: fixed !important; /* 👈 ВРЕМЕННО */
+    top: 22% !important;
+    left: 50% !important;
+    transform: translate(-50%, -50%) !important;
+    width: 80% !important;
+    z-index: 100 !important;
+}
+
+@keyframes slideDownPanel {
+    from {
+        opacity: 0;
+        transform: translateY(-8px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+.hidden-sections-panel.drag-over {
+    border-color: #e74c3c;
+    background: rgba(231, 76, 60, 0.06);
+}
+
+.hidden-sections-header {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+}
+
+.hidden-sections-icon {
+    font-size: 16px;
+}
+
+.hidden-sections-title {
+    font-size: 13px;
+    font-weight: 500;
+    color: rgba(255, 255, 255, 0.6);
+}
+
+.hidden-sections-count {
+    background: rgba(255, 255, 255, 0.08);
+    padding: 0 10px;
+    border-radius: 12px;
+    font-size: 11px;
+    line-height: 20px;
+    color: rgba(255, 255, 255, 0.4);
+}
+
+.hidden-sections-close {
+    margin-left: auto;
+    background: transparent;
+    border: none;
+    color: rgba(255, 255, 255, 0.3);
+    font-size: 16px;
+    cursor: pointer;
+    padding: 2px 8px;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.hidden-sections-close:hover {
+    color: white;
+    background: rgba(255, 255, 255, 0.1);
+}
+
+.hidden-sections-dropzone {
+    min-height: 60px;
+    border: 2px dashed rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    padding: 10px;
+    transition: all 0.2s ease;
+}
+
+.hidden-sections-dropzone.drag-over {
+    border-color: #4a9eff;
+    background: rgba(74, 158, 255, 0.06);
+}
+
+
+.hidden-sections-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    min-height: 36px;
+}
+
+.hidden-sections-hint {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 40px;
+    color: rgba(255, 255, 255, 0.2);
+    font-size: 13px;
+}
+
+.hidden-sections-list:not(:empty) + .hidden-sections-hint {
+    display: none;
+}
+
+.hidden-section-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 14px;
+    background: rgba(255, 255, 255, 0.06);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    border-radius: 8px;
+    font-size: 13px;
+    color: rgba(255, 255, 255, 0.7);
+    cursor: grab;
+    transition: all 0.2s ease;
+    user-select: none;
+}
+
+
+.hidden-section-item:hover {
+    background: rgba(255, 255, 255, 0.12);
+    color: white;
+}
+
+.hidden-section-item:active {
+    cursor: grabbing;
+}
+
+.hidden-section-item.dragging {
+    opacity: 0.3;
+}
+
+.hidden-section-item .restore-icon {
+    font-size: 12px;
+    opacity: 0.4;
+    margin-left: 4px;
+}
+
+/* Адаптация для мобильных */
+@media (max-width: 768px) {
+    .hidden-sections-panel {
+        padding: 10px 12px;
+    }
+    .hidden-section-item {
+        font-size: 12px;
+        padding: 4px 10px;
+    }
 }

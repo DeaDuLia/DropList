@@ -49,6 +49,450 @@ const showLoginBtn = document.getElementById('showLoginBtn');
 const authLoginForm = document.getElementById('authLoginForm');
 const authRegisterForm = document.getElementById('authRegisterForm');
 
+const SECTION_CONFIG = {
+    games: { icon: '🎮', label: 'Игры', default: true },
+    serials: { icon: '📺', label: 'Сериалы', default: true },
+    movies: { icon: '🎬', label: 'Кино', default: true },
+    cartoons: { icon: '🎥', label: 'Мульты', default: true },
+    anime: { icon: '🌸', label: 'Аниме', default: true },
+    books: { icon: '📚', label: 'Книги', default: true }
+};
+let isPanelOpen = false;
+let draggedElement = null;
+let isDraggingDown = false;
+let holdTimer = null;
+let isMouseDown = false;
+let dragStartY = 0;
+
+function getVisibleSections() {
+    try {
+        const saved = localStorage.getItem('visibleSections');
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            if (parsed.length > 0) return parsed;
+        }
+    } catch (e) {}
+    return Object.keys(SECTION_CONFIG);
+}
+
+function setVisibleSections(sections) {
+    localStorage.setItem('visibleSections', JSON.stringify(sections));
+}
+
+function getHiddenSections() {
+    const all = Object.keys(SECTION_CONFIG);
+    const visible = getVisibleSections();
+    return all.filter(s => !visible.includes(s));
+}
+
+function getSectionIndex(section) {
+    const visible = getVisibleSections();
+    return visible.indexOf(section);
+}
+
+// ====== РЕНДЕР НАВИГАЦИИ ======
+
+function renderNavigation() {
+    const navList = document.getElementById('navList');
+    if (!navList) return;
+
+    const visibleSections = getVisibleSections();
+
+    navList.innerHTML = visibleSections.map(section => {
+        const config = SECTION_CONFIG[section];
+        if (!config) return '';
+        return `
+            <li class="nav-item ${section === 'games' ? 'active' : ''}" 
+                data-section="${section}"
+                draggable="${isPanelOpen}"
+                data-icon="${config.icon}"
+                data-label="${config.label}">
+                <span>${config.icon}</span>
+                <span>${config.label}</span>
+            </li>
+        `;
+    }).join('');
+
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.classList.toggle('drag-mode', isPanelOpen);
+    });
+
+    renderHiddenSections();
+    attachNavigationEvents();
+}
+function attachNavigationEvents() {
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.removeEventListener('click', handleNavClick);
+        item.addEventListener('click', handleNavClick);
+    });
+}
+
+function handleNavClick() {
+    if (isPanelOpen) return; // В режиме редактирования клик по разделу не переключает
+
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    this.classList.add('active');
+
+    const section = this.dataset.section;
+    window.electronAPI.getData(section).then(data => {
+        renderSection(section, data, true, true);
+    });
+}
+
+
+// ====== РЕНДЕР СКРЫТЫХ РАЗДЕЛОВ ======
+
+function renderHiddenSections() {
+    const list = document.getElementById('hiddenSectionsList');
+    const count = document.getElementById('hiddenSectionsCount');
+    const hint = document.getElementById('hiddenSectionsHint');
+
+    if (!list) return;
+
+    const hidden = getHiddenSections();
+
+    if (count) count.textContent = hidden.length;
+
+    if (hidden.length === 0) {
+        list.innerHTML = '';
+        if (hint) hint.style.display = 'flex';
+    } else {
+        if (hint) hint.style.display = 'none';
+        list.innerHTML = hidden.map(section => {
+            const config = SECTION_CONFIG[section];
+            return `
+                <div class="hidden-section-item" data-section="${section}" draggable="true">
+                    <span>${config.icon}</span>
+                    <span>${config.label}</span>
+                    <span class="restore-icon">↩</span>
+                </div>
+            `;
+        }).join('');
+    }
+}
+
+// ====== УПРАВЛЕНИЕ ПАНЕЛЬЮ ======
+
+const panel = document.getElementById('hiddenSectionsPanel');
+const menuBtn = document.getElementById('sectionsMenuBtn');
+const closeBtn = document.getElementById('closeHiddenPanel');
+
+
+function openPanel() {
+    if (isPanelOpen) return;
+    isPanelOpen = true;
+    panel.classList.add('visible');
+    menuBtn.classList.add('active');
+
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.draggable = true;
+        item.classList.add('drag-mode');
+    });
+}
+
+function closePanel() {
+    if (!isPanelOpen) return;
+    isPanelOpen = false;
+
+    const panel = document.getElementById('hiddenSectionsPanel');
+    if (panel) panel.classList.remove('visible');
+
+    const menuBtn = document.getElementById('sectionsMenuBtn');
+    if (menuBtn) menuBtn.classList.remove('active');
+
+    // Сбрасываем drag-состояние
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.draggable = false;
+        item.classList.remove('drag-mode');
+        item.classList.remove('dragging');
+        item.classList.remove('drag-over');
+    });
+
+    // Сбрасываем подсветку панели
+    const dropzone = document.getElementById('hiddenSectionsDropzone');
+    if (dropzone) dropzone.classList.remove('drag-over');
+    if (panel) panel.classList.remove('drag-over');
+
+    // ✅ СБРАСЫВАЕМ ФЛАГИ, ЧТОБЫ ЗАЖАТИЕ РАБОТАЛО
+    isMouseDown = false;
+    isDraggingDown = false;
+    clearTimeout(holdTimer);
+    holdTimer = null;
+
+    // ✅ ПЕРЕИНИЦИАЛИЗИРУЕМ ОБРАБОТЧИКИ ЗАЖАТИЯ
+    // (чтобы они точно были навешаны)
+    setupDragOnHold();
+}
+
+// По клику на ⋮
+menuBtn.addEventListener('click', () => {
+    isPanelOpen ? closePanel() : openPanel();
+});
+
+// Закрытие по крестику
+closeBtn.addEventListener('click', closePanel);
+
+// Закрытие по Escape
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && isPanelOpen) closePanel();
+});
+
+// ====== ЗАЖАТИЕ МЫШИ С ОПРЕДЕЛЕНИЕМ НАПРАВЛЕНИЯ ======
+
+function setupDragOnHold() {
+    const navItems = document.querySelectorAll('.nav-item');
+
+    navItems.forEach(item => {
+        let startY = 0;
+        let isHeld = false;
+        let holdTimer = null;
+
+        item.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return;
+            if (isPanelOpen) return;
+
+            startY = e.clientY;
+            isMouseDown = true;
+            isHeld = false;
+
+            holdTimer = setTimeout(() => {
+                if (isMouseDown && !isPanelOpen) {
+                    isHeld = true;
+                    if (navigator.vibrate) navigator.vibrate(15);
+                    // Просто зажали — открываем панель
+                    openPanel();
+                }
+            }, 100);
+        });
+
+        item.addEventListener('mousemove', (e) => {
+            if (!isMouseDown || isPanelOpen) return;
+
+            const deltaY = e.clientY - startY;
+
+            // Если зажали и потянули вниз больше чем на 30px — открываем панель
+            if (isHeld && deltaY > 30) {
+                openPanel();
+                isMouseDown = false;
+                isHeld = false;
+                clearTimeout(holdTimer);
+            }
+        });
+
+        item.addEventListener('mouseup', () => {
+            isMouseDown = false;
+            clearTimeout(holdTimer);
+            isHeld = false;
+        });
+
+        item.addEventListener('mouseleave', () => {
+            if (isMouseDown) {
+                isMouseDown = false;
+                clearTimeout(holdTimer);
+                isHeld = false;
+            }
+        });
+    });
+
+    document.addEventListener('mouseup', () => {
+        isMouseDown = false;
+        clearTimeout(holdTimer);
+    });
+}
+
+// ====== DRAG-AND-DROP МЕЖДУ ШАПКОЙ И ПАНЕЛЬЮ ======
+
+function setupDragAndDrop() {
+    const dropzone = document.getElementById('hiddenSectionsDropzone');
+
+    // ГЛОБАЛЬНЫЙ DRAGSTART — для перетаскивания из шапки И из панели
+    document.addEventListener('dragstart', (e) => {
+        const navItem = e.target.closest('.nav-item');
+        const hiddenItem = e.target.closest('.hidden-section-item');
+
+        const item = navItem || hiddenItem;
+        if (!item) return;
+
+        // Если это nav-item — панель должна быть открыта
+        if (navItem && !isPanelOpen) {
+            e.preventDefault();
+            return;
+        }
+
+        draggedElement = item;
+        item.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', item.dataset.section);
+
+        // Для перемещения между разделами
+        if (navItem) {
+            const allItems = [...document.querySelectorAll('.nav-item')];
+            e.dataTransfer.setData('index', allItems.indexOf(navItem));
+        }
+    });
+
+    document.addEventListener('dragend', (e) => {
+        if (draggedElement) {
+            draggedElement.classList.remove('dragging');
+        }
+
+        document.querySelectorAll('.nav-item.drag-over').forEach(el => {
+            el.classList.remove('drag-over');
+        });
+        dropzone?.classList.remove('drag-over');
+        panel?.classList.remove('drag-over');
+
+        draggedElement = null;
+    });
+
+    document.addEventListener('dragover', (e) => {
+        if (!isPanelOpen) {
+            // Если панель закрыта — запрещаем drop
+            e.preventDefault();
+            return;
+        }
+
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+
+        const targetNav = e.target.closest('.nav-item');
+        const isDropzone = e.target.closest('.hidden-sections-dropzone');
+        const isPanelArea = e.target.closest('.hidden-sections-panel');
+
+        document.querySelectorAll('.nav-item.drag-over').forEach(el => {
+            el.classList.remove('drag-over');
+        });
+        dropzone?.classList.remove('drag-over');
+        panel?.classList.remove('drag-over');
+
+        if (targetNav && targetNav !== draggedElement) {
+            targetNav.classList.add('drag-over');
+        }
+
+        if (isDropzone) {
+            dropzone?.classList.add('drag-over');
+        }
+
+        if (isPanelArea && !isDropzone) {
+            panel?.classList.add('drag-over');
+        }
+    });
+
+    document.addEventListener('dragleave', (e) => {
+        const targetNav = e.target.closest('.nav-item');
+        if (targetNav) targetNav.classList.remove('drag-over');
+
+        if (e.target.closest('.hidden-sections-dropzone')) {
+            dropzone?.classList.remove('drag-over');
+        }
+        if (e.target.closest('.hidden-sections-panel')) {
+            panel?.classList.remove('drag-over');
+        }
+    });
+
+    document.addEventListener('drop', (e) => {
+        if (!isPanelOpen) return;
+        e.preventDefault();
+
+        const targetNav = e.target.closest('.nav-item');
+        const isDropzone = e.target.closest('.hidden-sections-dropzone');
+        const isPanelArea = e.target.closest('.hidden-sections-panel');
+        const section = e.dataTransfer.getData('text/plain');
+
+        if (!section || !SECTION_CONFIG[section]) {
+            dropzone?.classList.remove('drag-over');
+            panel?.classList.remove('drag-over');
+            return;
+        }
+
+        const visible = getVisibleSections();
+        const currentIndex = visible.indexOf(section);
+        const isHidden = currentIndex === -1;
+
+        // ====== 1. СКРЫТЬ РАЗДЕЛ (перетащили в зону или панель) ======
+        if ((isDropzone || isPanelArea) && !isHidden) {
+            if (visible.length > 1) {
+                visible.splice(currentIndex, 1);
+                setVisibleSections(visible);
+                renderNavigation();
+
+                // Если скрыли активный раздел — переключаемся на первый
+                const active = document.querySelector('.nav-item.active');
+                if (!active || active.dataset.section === section) {
+                    const first = document.querySelector('.nav-item');
+                    if (first) first.click();
+                }
+            } else {
+                showError('Нельзя скрыть единственный раздел!');
+            }
+            dropzone?.classList.remove('drag-over');
+            panel?.classList.remove('drag-over');
+            return;
+        }
+
+        // ====== 2. ВЕРНУТЬ РАЗДЕЛ ИЗ СКРЫТЫХ ======
+        if (isHidden && targetNav) {
+            // Определяем позицию для вставки (ДО или ПОСЛЕ)
+            const rect = targetNav.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const insertBefore = e.clientX < centerX;
+
+            const toIndex = visible.indexOf(targetNav.dataset.section);
+            const targetIndex = insertBefore ? toIndex : toIndex + 1;
+
+            // Вставляем в нужное место
+            visible.splice(targetIndex, 0, section);
+
+            setVisibleSections(visible);
+            renderNavigation();
+
+            // Активируем возвращённый раздел
+            const navItem = document.querySelector(`.nav-item[data-section="${section}"]`);
+            if (navItem) navItem.click();
+
+            document.querySelectorAll('.nav-item.drag-over').forEach(el => {
+                el.classList.remove('drag-over');
+            });
+            dropzone?.classList.remove('drag-over');
+            panel?.classList.remove('drag-over');
+            return;
+        }
+
+        // ====== 3. ПЕРЕМЕЩЕНИЕ МЕЖДУ РАЗДЕЛАМИ ======
+        if (targetNav && !isHidden && targetNav !== draggedElement) {
+            const rect = targetNav.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const insertBefore = e.clientX < centerX;
+
+            const toIndex = visible.indexOf(targetNav.dataset.section);
+            const targetIndex = insertBefore ? toIndex : toIndex + 1;
+
+            // Удаляем из старой позиции
+            const [removed] = visible.splice(currentIndex, 1);
+
+            // Вставляем в новую позицию (с учётом смещения)
+            const adjustedTarget = currentIndex < targetIndex ? targetIndex - 1 : targetIndex;
+            visible.splice(adjustedTarget, 0, removed);
+
+            setVisibleSections(visible);
+            renderNavigation();
+        }
+
+        // Очищаем подсветку
+        document.querySelectorAll('.nav-item.drag-over').forEach(el => {
+            el.classList.remove('drag-over');
+        });
+        dropzone?.classList.remove('drag-over');
+        panel?.classList.remove('drag-over');
+    });
+}
+
+
+
+
+
+
+
 document.addEventListener('DOMContentLoaded', () => {
 
     const minimizeBtn = document.getElementById('minimizeBtn');
@@ -72,6 +516,11 @@ document.addEventListener('DOMContentLoaded', () => {
             window.electronAPI.closeWindow();
         });
     }
+
+    renderNavigation();
+    setupDragOnHold();
+    setupDragAndDrop();
+
 });
 
 window.addEventListener('resize', () => {
