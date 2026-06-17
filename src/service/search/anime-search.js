@@ -2,7 +2,7 @@ import {parseSite} from "./data-search.js";
 
 
 export async function fetchYummyAniTags(animeName) {
-    return parseSite(name = 'YummyAni',
+    return parseSite('YummyAni',
         `https://old.yummyani.me/search?word=${encodeURIComponent(animeName)}`,
         `
             (function() {
