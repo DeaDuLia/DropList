@@ -3,6 +3,7 @@ import {fetchFilmRuSerialsTags, fetchKinopoiskMovieTags} from "./movie-search.js
 import {fetchChitaiGorodBook, fetchLitresBookTags} from "./book-search.js";
 import {BrowserWindow} from "electron";
 import {db, markExpectedReleasesDirty, statements} from "../../database/local-database.js";
+import {fetchYummyAniTags} from "./anime-search.js";
 let activeParsingWindows = new Set();
 
 export const DEFAULT_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
