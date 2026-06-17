@@ -12,23 +12,20 @@ let addFormOverlay = null;
 let tooltipElement = null;
 let tooltipTimeout = null;
 
-let titleSuggestionTimeout = null;
+
 let searchTimeout = null;
 let lastValue = '';
 let lastChangeTime = 0;
 
 
-// Кнопки шапки
 const exportBtn = document.getElementById('exportBtn');
 const importBtn = document.getElementById('importBtn');
 const replaceBtn = document.getElementById('replaceBtn');
 const donateBtn = document.getElementById('donateBtn');
-const toggleAddFormBtn = document.getElementById('toggleAddFormBtn');
 const updateModal = document.getElementById('updateModal');
 const noUpdateModal = document.getElementById('noUpdateModal');
 const updateErrorModal = document.getElementById('updateErrorModal');
 let currentUpdateInfo = null;
-let lastTextFromClipboard = '';
 
 let isAddingGame = false;
 let currentPage = 1;
@@ -85,7 +82,6 @@ window.addEventListener('resize', () => {
 });
 
 async function checkSectionReleaseNotifications(section) {
-    // Если сменился раздел — очищаем очередь и закрываем все активные баннеры
     if (currentSectionForNotifications !== null && currentSectionForNotifications !== section) {
         clearAllNotifications();
     }
@@ -95,10 +91,7 @@ async function checkSectionReleaseNotifications(section) {
     const result = await window.electronAPI.getSectionReleaseNotifications(section);
 
     if (result.success && result.notifications.length > 0) {
-        // Добавляем в очередь и показываем стеком
         addNotificationsToStack(result.notifications);
-
-        // Отмечаем все как показанные
         for (const notif of result.notifications) {
             await window.electronAPI.markReleaseNotificationShown(notif.cardName, notif.section);
         }
@@ -106,9 +99,7 @@ async function checkSectionReleaseNotifications(section) {
 }
 
 function clearAllNotifications() {
-    // Очищаем очередь
     notificationQueue = [];
-    // Закрываем все активные баннеры
     for (const banner of activeBanners) {
         if (banner && banner.parentNode) {
 
@@ -119,33 +110,24 @@ function clearAllNotifications() {
 }
 
 function addNotificationsToStack(notifications) {
-    // Добавляем новые уведомления в конец очереди
     notificationQueue.push(...notifications);
-
-    // Показываем все уведомления из очереди (стеком)
     showAllStackedNotifications();
 }
 
 function showAllStackedNotifications() {
-    // Сортируем уведомления по дате (ближайшие сверху или снизу? пусть снизу новые)
-    // Или оставляем как есть
-
     for (let i = 0; i < notificationQueue.length; i++) {
         const notification = notificationQueue[i];
-        // Откладываем показ, чтобы баннеры не появились одновременно с одинаковой позицией
         setTimeout(() => {
-            // Проверяем, не сменился ли раздел
             if (currentSectionForNotifications !== notification.section) return;
-
-            showReleaseNotification(notification, i);
+            showReleaseNotification(notification);
         }, i * 500);
     }
 
 }
 
 let notificationQueue = [];
-let activeBanners = []; // Массив активных баннеров
-let currentSectionForNotifications = null; // Запоминаем раздел, для которого показываем уведомления
+let activeBanners = [];
+let currentSectionForNotifications = null;
 
 const priceCache = new Map();
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 часа
@@ -179,15 +161,13 @@ function clearPriceCache() {
 }
 
 
-async function showReleaseNotification(notification, index) {
-    // Получаем URL обложки карточки из allSectionData
+async function showReleaseNotification(notification) {
     let coverUrl = '';
     const cardData = window.allSectionData?.find(c => c.name === notification.cardName);
     if (cardData && cardData.icoUrl && cardData.icoUrl.trim()) {
         coverUrl = cardData.icoUrl;
     }
 
-    // Если не нашли в allSectionData, пробуем найти в DOM
     if (!coverUrl) {
         const cardElement = document.querySelector(`.data-card[data-name="${notification.cardName}"]`);
         if (cardElement) {
@@ -198,7 +178,6 @@ async function showReleaseNotification(notification, index) {
         }
     }
 
-    // Форматируем дату
     const releaseDate = new Date(notification.releaseDate);
     const formattedDate = releaseDate.toLocaleDateString('ru-RU', {
         day: 'numeric',
@@ -210,7 +189,6 @@ async function showReleaseNotification(notification, index) {
     banner.className = `release-banner ${notification.isReleased ? 'release-banner-released' :
         (notification.daysLeft <= 7 ? 'release-banner-upcoming_week' : 'release-banner-upcoming_month')}`;
 
-    // Вычисляем позицию снизу (каждый следующий выше предыдущего)
     const bannerHeight = 120;
     const bottomOffset = (activeBanners.length * (bannerHeight));
     banner.style.bottom = bottomOffset + 'px';
@@ -234,7 +212,6 @@ async function showReleaseNotification(notification, index) {
 
     document.body.appendChild(banner);
 
-    // Добавляем в массив активных баннеров
     activeBanners.push(banner);
 
     const closeBtn = banner.querySelector('.release-banner-close');
@@ -249,9 +226,7 @@ async function showReleaseNotification(notification, index) {
         }
     };
 
-    // Функция закрытия баннера
     const closeBanner = () => {
-        // Удаляем из массива активных баннеров
         const idx = activeBanners.indexOf(banner);
         if (idx !== -1) activeBanners.splice(idx, 1);
 
@@ -259,7 +234,6 @@ async function showReleaseNotification(notification, index) {
             hideBanner(banner);
         }
 
-        // Пересчитываем позиции оставшихся баннеров
         repositionBanners();
     };
 
@@ -268,11 +242,9 @@ async function showReleaseNotification(notification, index) {
         closeBanner();
     };
 
-    // Клик по баннеру (кроме кнопки закрытия)
     banner.onclick = async (e) => {
         if (e.target === closeBtn || closeBtn.contains(e.target)) return;
 
-        // Сбрасываем фильтры на "Все"
         currentFilters.statusFilter = 'Все';
         document.querySelectorAll('.filter-button').forEach(btn => {
             btn.classList.remove('active');
@@ -281,7 +253,6 @@ async function showReleaseNotification(notification, index) {
             }
         });
 
-        // Сбрасываем сортировку на "по дате"
         currentFilters.sortBy = 'date';
         document.querySelectorAll('.sort-button').forEach(btn => {
             btn.classList.remove('active');
@@ -290,16 +261,11 @@ async function showReleaseNotification(notification, index) {
             }
         });
 
-        // Вставляем название в поиск
         const searchInput = document.getElementById('searchInput');
         if (searchInput) {
             searchInput.value = notification.cardName;
         }
-
-        // Вызываем поиск
         filterCards(notification.cardName);
-
-        // Закрываем баннер
         closeBanner();
     };
 }
@@ -316,26 +282,19 @@ function getAdaptiveDelay(currentValue) {
     const timeSinceLastChange = lastChangeTime ? now - lastChangeTime : 0;
     const addedChars = currentValue.length - lastValue.length;
 
-    // Если это первый ввод
     if (!lastValue) return 1500;
 
-    // Вычисляем скорость ввода (символов в секунду)
     const speed = addedChars / (timeSinceLastChange / 1000);
 
     console.log(`[AutoSearch] Speed: ${speed.toFixed(1)} chars/sec, added: ${addedChars}, time: ${timeSinceLastChange}ms`);
 
-    // Адаптивная логика
     if (speed > 10) {
-        // Печатает очень быстро (>10 символов/сек) → видимо копирует название
         return 800;
     } else if (speed > 5) {
-        // Печатает быстро (5-10 символов/сек)
         return 1000;
     } else if (speed > 2) {
-        // Печатает медленно (2-5 символов/сек)
         return 1500;
     } else {
-        // Печатает очень медленно или пауза
         return 2000;
     }
 }
@@ -370,18 +329,15 @@ async function autoSearchOnInput(title, section) {
             }
         }
 
-        // Получаем теги и дату
         const result = await autoFetchTags(title, section);
         const tags = result.tags || [];      // ← массив тегов
         const releaseDate = result.releaseDate; // ← дата
 
-        // Сохраняем дату в dataset формы
         const nameInput = document.getElementById('nameInput');
         if (nameInput && releaseDate) {
             nameInput.dataset.fetchedReleaseDate = releaseDate;
         }
 
-        // Добавляем теги в форму
         if (tags.length > 0 && window.getAddFormTags) {
             if (window.clearAddFormTags) {
                 window.clearAddFormTags();
@@ -444,14 +400,11 @@ function setupAutoSearchOnNameInput() {
         const section = document.querySelector('.nav-item.active')?.dataset.section;
         const now = Date.now();
 
-        // Сохраняем предыдущее значение и время
         if (searchTimeout) clearTimeout(searchTimeout);
 
-        // Вычисляем задержку на основе скорости
         const delay = getAdaptiveDelay(currentValue);
         console.log(`[AutoSearch] Delay: ${delay}ms (value: "${currentValue}")`);
 
-        // Обновляем для следующего раза
         lastValue = currentValue;
         lastChangeTime = now;
 
@@ -928,9 +881,8 @@ function setupEditDescriptionButtons() {
 }
 
 function showSyncChoiceModal(localData, remoteData, localTime, remoteTime) {
-    let modalResolve;
-    const promise = new Promise((resolve) => {
-        modalResolve = resolve;
+    return new Promise((resolve) => {
+        let modalResolve = resolve;
 
         const modal = document.createElement('div');
         modal.className = 'modal';
@@ -966,31 +918,27 @@ function showSyncChoiceModal(localData, remoteData, localTime, remoteTime) {
         const remoteBtn = modal.querySelector('#syncRemoteBtn');
         const cancelBtn = modal.querySelector('#syncCancelBtn');
         const loadingIndicator = modal.querySelector('#syncLoadingIndicator');
-
         const showLoading = (choice) => {
             localBtn.style.display = 'none';
             remoteBtn.style.display = 'none';
             cancelBtn.style.display = 'none';
             loadingIndicator.style.display = 'block';
-            // Сохраняем modal в resolve, чтобы закрыть потом
-            modalResolve({ choice, modal });
+            modalResolve({choice, modal});
         };
 
         localBtn.onclick = () => showLoading('local');
         remoteBtn.onclick = () => showLoading('remote');
         cancelBtn.onclick = () => {
             document.body.removeChild(modal);
-            modalResolve({ choice: null, modal: null });
+            modalResolve({choice: null, modal: null});
         };
         modal.onclick = (e) => {
             if (e.target === modal) {
                 document.body.removeChild(modal);
-                modalResolve({ choice: null, modal: null });
+                modalResolve({choice: null, modal: null});
             }
         };
     });
-
-    return promise;
 }
 
 async function initUpdateSystem() {
@@ -1025,6 +973,7 @@ function addUpdateButton() {
     updateButton.id = 'checkUpdateBtn';
     updateButton.className = 'header-button';
     updateButton.title = 'Проверить обновления';
+    updateButton.style.display = 'none';
     updateButton.innerHTML = '<img src="../../assets/icons/update.svg" alt="🔄" class="button-icon">';
 
     updateButton.addEventListener('click', async () => {
@@ -1102,18 +1051,6 @@ function formatReleaseNotes(notes) {
     }
 
     return formatted;
-}
-
-async function updateDownloadsCount() {
-    try {
-        const result = await window.electronAPI.getGitHubDownloads();
-        const downloadsNumber = document.getElementById('downloadsNumber');
-        if (downloadsNumber && result.success) {
-            downloadsNumber.textContent = result.downloads.toLocaleString();
-        }
-    } catch (error) {
-        console.error('Failed to get downloads count:', error);
-    }
 }
 
 scrollToTopBtn.addEventListener('click', () => {
@@ -1532,7 +1469,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         currentUser = savedUser;
         updateAuthButton(savedUser.email);
     }
-    await updateDownloadsCount();
+
     await loadRatings();
     await loadStatuses();
     await initUpdateSystem();
@@ -2639,8 +2576,6 @@ function setupEditableFields() {
         overlay.className = 'editable-select-overlay';
         document.body.appendChild(overlay);
     }
-
-    const overlay = document.getElementById('editable-select-overlay');
 
     document.querySelectorAll('.editable-field').forEach(field => {
         field.style.cursor = 'pointer';

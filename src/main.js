@@ -164,50 +164,6 @@ function getIconPath() {
     }
 }
 
-async function getGitHubDownloads() {
-    return new Promise((resolve, reject) => {
-        const options = {
-            hostname: 'api.github.com',
-            path: '/repos/DeaDuLia/DropList/releases',
-            headers: {
-                'User-Agent': 'DropList-App',
-                // Добавляем заголовок для увеличения лимита запросов
-                'Accept': 'application/vnd.github.v3+json'
-            }
-        };
-
-        https.get(options, (res) => {
-            let data = '';
-            res.on('data', (chunk) => {
-                data += chunk;
-            });
-            res.on('end', () => {
-                try {
-                    const releases = JSON.parse(data);
-                    if (releases && releases.length > 0) {
-                        // Суммируем загрузки всех ассетов всех релизов
-                        const totalDownloads = releases.reduce((total, release) => {
-                            if (release.assets && release.assets.length > 0) {
-                                return total + release.assets.reduce((sum, asset) => sum + asset.download_count, 0);
-                            }
-                            return total;
-                        }, 0);
-                        resolve(totalDownloads);
-                    } else {
-                        resolve(0);
-                    }
-                } catch (e) {
-                    console.error('Error parsing GitHub response:', e);
-                    reject(e);
-                }
-            });
-        }).on('error', (err) => {
-            console.error('GitHub API request failed:', err);
-            reject(err);
-        });
-    });
-}
-
 LocalDatabase.initializeDatabase();
 
 let win;
@@ -450,42 +406,6 @@ ipcMain.on('message-from-external', (event, imgUrl, name) => {
     }
 });
 
-async function getCachedGitHubDownloads() {
-    try {
-        const cachedData = LocalDatabase.statements.getStatistic.get('last_downloads');
-
-        if (cachedData) {
-            const cacheDate = new Date(cachedData.actual_date);
-            const now = new Date();
-            const diffHours = (now - cacheDate) / (1000 * 60 * 60);
-
-            if (diffHours < 1) {
-                return parseInt(cachedData.value) || 0;
-            }
-        }
-
-        console.log('[i] Fetching fresh downloads count');
-        const downloads = await getGitHubDownloads();
-
-        LocalDatabase.statements.setStatistic.run(
-            'last_downloads',
-            downloads.toString(),
-            new Date().toISOString()
-        );
-
-        return downloads;
-
-    } catch (error) {
-        console.error('Error in getCachedGitHubDownloads:', error);
-        const cachedData = LocalDatabase.statements.getStatistic.get('last_downloads');
-        if (cachedData) {
-            return parseInt(cachedData.value) || 0;
-        }
-
-        return 0;
-    }
-}
-
 async function applySyncChoice(uid, idToken, choice, localData, remoteData) {
     try {
         const freshToken = await getValidToken();
@@ -682,16 +602,6 @@ ipcMain.handle('search-yummyani-anime', async (event, title) => {
 
 ipcMain.handle('search-filmru-serial', async (event, title) => {
     return await fetchFilmRuSerialsTags(title);
-});
-
-ipcMain.handle('get-github-downloads', async () => {
-    try {
-        const downloads = await getCachedGitHubDownloads();
-        return { success: true, downloads };
-    } catch (error) {
-        console.error('Error getting GitHub downloads:', error);
-        return { success: false, downloads: 0 };
-    }
 });
 
 ipcMain.handle('get-ratings', () => {

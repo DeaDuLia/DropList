@@ -55,7 +55,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
     updateDataDescription: (section, name, description) => ipcRenderer.invoke('update-data-description', section, name, description),
 
     moveDataToCategory: (data) => ipcRenderer.invoke('move-to-category', data),
-    getGitHubDownloads: () => ipcRenderer.invoke('get-github-downloads'),
     replaceData: () => ipcRenderer.invoke('replace-data'),
     openSearch: (url) => ipcRenderer.invoke('search-in-browser', url)
 });

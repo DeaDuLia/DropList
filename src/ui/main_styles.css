@@ -1020,23 +1020,6 @@ input:focus, select:focus {
     font-size: 0.9rem;
 }
 
-/* Счётчик загрузок - премиум вариант */
-#downloadsCount {
-    background: #3d3d3d;
-    border: 1px solid #4a4a4a;
-    border-radius: 6px;
-    padding: 6px 12px;
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    cursor: default;
-    opacity: 0.7;
-}
-
-#downloadsCount:hover {
-    opacity: 1;
-}
-
 .editable-select-container {
     position: relative;
     display: inline-block;
