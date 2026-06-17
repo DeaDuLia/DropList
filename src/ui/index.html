@@ -26,41 +26,38 @@
 </div>
 <header class="main-header">
     <nav class="main-nav">
-        <ul class="nav-list">
-            <li class="nav-item active" data-section="games">
-                <img src="assets/icons/games.svg" alt="🎮" class="button-icon"><span>Игры</span>
-            </li>
-            <li class="nav-item" data-section="serials">
-                <img src="assets/icons/serials.svg" alt="📺" class="button-icon"><span>Сериалы</span>
-            </li>
-            <li class="nav-item" data-section="movies">
-                <img src="assets/icons/movies.svg" alt="🎬" class="button-icon"><span>Кино</span>
-            </li>
-            <li class="nav-item" data-section="cartoons">
-                <img src="assets/icons/cartoons.svg" alt="🎥" class="button-icon"><span>Мульты</span>
-            </li>
-            <li class="nav-item" data-section="anime">
-                <img src="assets/icons/anime.svg" alt="🌸" class="button-icon"><span>Аниме</span>
-            </li>
-            <li class="nav-item" data-section="books">
-                <img src="assets/icons/books.svg" alt="📚" class="button-icon"><span>Книги</span>
-            </li>
+        <ul class="nav-list" id="navList">
+            <!-- Разделы рендерятся через JS -->
         </ul>
     </nav>
     <div class="header-buttons">
-        <button id="replaceBtn" class="header-button" title="Заменить все данные"><img src="assets/icons/synchronyze.svg" alt="🔄" class="button-icon"></button>
-        <button id="importBtn" class="header-button" title="Импорт данных"><img src="assets/icons/import.svg" alt="" class="button-icon"></button>
-        <button id="exportBtn" class="header-button" title="Экспорт данных"><img src="assets/icons/export.svg" alt="" class="button-icon"></button>
-        <button id="donateBtn" class="header-button" title="Поддержать разработчика"><img src="assets/icons/donate.svg" alt="❤️" class="button-icon"> Поддержать</button>
-        <button id="downloadsCount" class="header-button" title="Всего загрузок приложения">
-            <img src="assets/icons/download.svg" alt="📥" class="button-icon">
-            <span id="downloadsNumber">0</span>
+        <button id="sectionsMenuBtn" class="header-button" title="Управление разделами">
+            <span style="font-size: 18px; font-weight: bold; line-height: 1;">⋮</span>
         </button>
+        <button id="replaceBtn" class="header-button" title="Заменить все данные" style="display: none"><img src="../../assets/icons/synchronyze.svg" alt="🔄" class="button-icon"></button>
+        <button id="importBtn" class="header-button" title="Импорт данных" style="display: none"><img src="../../assets/icons/import.svg" alt="" class="button-icon"></button>
+        <button id="exportBtn" class="header-button" title="Экспорт данных" style="display: none"><img src="../../assets/icons/export.svg" alt="" class="button-icon"></button>
+        <button id="donateBtn" class="header-button" title="Поддержать разработчика"><img src="../../assets/icons/donate.svg" alt="❤️" class="button-icon"> Поддержать</button>
         <button id="authBtn" class="header-button" title="Войти">
-            <img src="assets/icons/user.svg" alt="👤" class="button-icon"> Войти
+            <img src="../../assets/icons/user.svg" alt="👤" class="button-icon"> Войти
         </button>
     </div>
 </header>
+<div class="hidden-sections-panel" id="hiddenSectionsPanel">
+    <div class="hidden-sections-header">
+        <span class="hidden-sections-icon">📦</span>
+        <span class="hidden-sections-title">Скрытые разделы</span>
+        <span class="hidden-sections-count" id="hiddenSectionsCount">0</span>
+        <button id="closeHiddenPanel" class="hidden-sections-close" title="Закрыть">✕</button>
+    </div>
+    <div class="hidden-sections-dropzone" id="hiddenSectionsDropzone">
+        <div class="hidden-sections-list" id="hiddenSectionsList"></div>
+        <div class="hidden-sections-hint" id="hiddenSectionsHint">
+            <span>Перетащите сюда раздел, чтобы скрыть</span>
+        </div>
+    </div>
+</div>
+
 <div id="contentSection" class="content-section">
     <div class="filter-buttons-section">
         <!-- Контент будет рендериться здесь через JS -->
@@ -82,7 +79,7 @@
         <div class="donate-methods">
             <div class="donate-method">
                 <h2>
-                    <img src="assets/icons/mail.svg" alt="📧" class="button-icon" style="width:20px;height:20px">
+                    <img src="../../assets/icons/mail.svg" alt="📧" class="button-icon" style="width:20px;height:20px">
                     Почта для связи
                 </h2>
                 <p>nvdeshin@gmail.com</p>

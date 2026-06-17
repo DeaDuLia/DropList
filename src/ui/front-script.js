@@ -7,28 +7,24 @@ const scrollToTopBtn = document.getElementById('scrollToTopBtn');
 const donateModal = document.getElementById('donateModal');
 const closeDonateModal = document.getElementById('closeDonateModal');
 const randomBtn = document.getElementById('randomBtn');
-const searchInWebBtn = document.getElementById('searchInWeb');
 let addFormOverlay = null;
 let tooltipElement = null;
 let tooltipTimeout = null;
+let favoritesCache  = {};
 
-let titleSuggestionTimeout = null;
 let searchTimeout = null;
 let lastValue = '';
 let lastChangeTime = 0;
 
 
-// Кнопки шапки
 const exportBtn = document.getElementById('exportBtn');
 const importBtn = document.getElementById('importBtn');
 const replaceBtn = document.getElementById('replaceBtn');
 const donateBtn = document.getElementById('donateBtn');
-const toggleAddFormBtn = document.getElementById('toggleAddFormBtn');
 const updateModal = document.getElementById('updateModal');
 const noUpdateModal = document.getElementById('noUpdateModal');
 const updateErrorModal = document.getElementById('updateErrorModal');
 let currentUpdateInfo = null;
-let lastTextFromClipboard = '';
 
 let isAddingGame = false;
 let currentPage = 1;
@@ -53,6 +49,446 @@ const showLoginBtn = document.getElementById('showLoginBtn');
 const authLoginForm = document.getElementById('authLoginForm');
 const authRegisterForm = document.getElementById('authRegisterForm');
 
+const SECTION_CONFIG = {
+    games: { icon: '🎮', label: 'Игры', default: true },
+    serials: { icon: '📺', label: 'Сериалы', default: true },
+    movies: { icon: '🎬', label: 'Кино', default: true },
+    cartoons: { icon: '🎥', label: 'Мульты', default: true },
+    anime: { icon: '🌸', label: 'Аниме', default: true },
+    books: { icon: '📚', label: 'Книги', default: true }
+};
+let isPanelOpen = false;
+let draggedElement = null;
+let isDraggingDown = false;
+let holdTimer = null;
+let isMouseDown = false;
+
+function getVisibleSections() {
+    try {
+        const saved = localStorage.getItem('visibleSections');
+        if (saved) {
+            const parsed = JSON.parse(saved);
+            if (parsed.length > 0) return parsed;
+        }
+    } catch (e) {}
+    return Object.keys(SECTION_CONFIG);
+}
+
+function setVisibleSections(sections) {
+    localStorage.setItem('visibleSections', JSON.stringify(sections));
+}
+
+function getHiddenSections() {
+    const all = Object.keys(SECTION_CONFIG);
+    const visible = getVisibleSections();
+    return all.filter(s => !visible.includes(s));
+}
+
+
+
+// ====== РЕНДЕР НАВИГАЦИИ ======
+
+function renderNavigation() {
+    const navList = document.getElementById('navList');
+    if (!navList) return;
+
+    const visibleSections = getVisibleSections();
+
+    navList.innerHTML = visibleSections.map(section => {
+        const config = SECTION_CONFIG[section];
+        if (!config) return '';
+        return `
+            <li class="nav-item ${section === 'games' ? 'active' : ''}" 
+                data-section="${section}"
+                draggable="${isPanelOpen}"
+                data-icon="${config.icon}"
+                data-label="${config.label}">
+                <span>${config.icon}</span>
+                <span>${config.label}</span>
+            </li>
+        `;
+    }).join('');
+
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.classList.toggle('drag-mode', isPanelOpen);
+    });
+
+    renderHiddenSections();
+    attachNavigationEvents();
+}
+function attachNavigationEvents() {
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.removeEventListener('click', handleNavClick);
+        item.addEventListener('click', handleNavClick);
+    });
+}
+
+function handleNavClick() {
+    if (isPanelOpen) return; // В режиме редактирования клик по разделу не переключает
+
+    document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+    this.classList.add('active');
+
+    const section = this.dataset.section;
+    window.electronAPI.getData(section).then(data => {
+        renderSection(section, data, true, true);
+    });
+}
+
+
+// ====== РЕНДЕР СКРЫТЫХ РАЗДЕЛОВ ======
+
+function renderHiddenSections() {
+    const list = document.getElementById('hiddenSectionsList');
+    const count = document.getElementById('hiddenSectionsCount');
+    const hint = document.getElementById('hiddenSectionsHint');
+
+    if (!list) return;
+
+    const hidden = getHiddenSections();
+
+    if (count) count.textContent = hidden.length;
+
+    if (hidden.length === 0) {
+        list.innerHTML = '';
+        if (hint) hint.style.display = 'flex';
+    } else {
+        if (hint) hint.style.display = 'none';
+        list.innerHTML = hidden.map(section => {
+            const config = SECTION_CONFIG[section];
+            return `
+                <div class="hidden-section-item" data-section="${section}" draggable="true">
+                    <span>${config.icon}</span>
+                    <span>${config.label}</span>
+                    <span class="restore-icon">↩</span>
+                </div>
+            `;
+        }).join('');
+    }
+}
+
+// ====== УПРАВЛЕНИЕ ПАНЕЛЬЮ ======
+
+const panel = document.getElementById('hiddenSectionsPanel');
+const menuBtn = document.getElementById('sectionsMenuBtn');
+const closeBtn = document.getElementById('closeHiddenPanel');
+
+
+function openPanel() {
+    if (isPanelOpen) return;
+    isPanelOpen = true;
+    panel.classList.add('visible');
+    menuBtn.classList.add('active');
+
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.draggable = true;
+        item.classList.add('drag-mode');
+    });
+}
+
+function closePanel() {
+    if (!isPanelOpen) return;
+    isPanelOpen = false;
+
+    const panel = document.getElementById('hiddenSectionsPanel');
+    if (panel) panel.classList.remove('visible');
+
+    const menuBtn = document.getElementById('sectionsMenuBtn');
+    if (menuBtn) menuBtn.classList.remove('active');
+
+    // Сбрасываем drag-состояние
+    document.querySelectorAll('.nav-item').forEach(item => {
+        item.draggable = false;
+        item.classList.remove('drag-mode');
+        item.classList.remove('dragging');
+        item.classList.remove('drag-over');
+    });
+
+    // Сбрасываем подсветку панели
+    const dropzone = document.getElementById('hiddenSectionsDropzone');
+    if (dropzone) dropzone.classList.remove('drag-over');
+    if (panel) panel.classList.remove('drag-over');
+
+    // ✅ СБРАСЫВАЕМ ФЛАГИ, ЧТОБЫ ЗАЖАТИЕ РАБОТАЛО
+    isMouseDown = false;
+    isDraggingDown = false;
+    clearTimeout(holdTimer);
+    holdTimer = null;
+
+    // ✅ ПЕРЕИНИЦИАЛИЗИРУЕМ ОБРАБОТЧИКИ ЗАЖАТИЯ
+    // (чтобы они точно были навешаны)
+    setupDragOnHold();
+}
+
+// По клику на ⋮
+menuBtn.addEventListener('click', () => {
+    isPanelOpen ? closePanel() : openPanel();
+});
+
+// Закрытие по крестику
+closeBtn.addEventListener('click', closePanel);
+
+// Закрытие по Escape
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && isPanelOpen) closePanel();
+});
+
+// ====== ЗАЖАТИЕ МЫШИ С ОПРЕДЕЛЕНИЕМ НАПРАВЛЕНИЯ ======
+
+function setupDragOnHold() {
+    const navItems = document.querySelectorAll('.nav-item');
+
+    navItems.forEach(item => {
+        let startY = 0;
+        let isHeld = false;
+        let holdTimer = null;
+
+        item.addEventListener('mousedown', (e) => {
+            if (e.button !== 0) return;
+            if (isPanelOpen) return;
+
+            startY = e.clientY;
+            isMouseDown = true;
+            isHeld = false;
+
+            holdTimer = setTimeout(() => {
+                if (isMouseDown && !isPanelOpen) {
+                    isHeld = true;
+                    if (navigator.vibrate) navigator.vibrate(15);
+                    // Просто зажали — открываем панель
+                    openPanel();
+                }
+            }, 100);
+        });
+
+        item.addEventListener('mousemove', (e) => {
+            if (!isMouseDown || isPanelOpen) return;
+
+            const deltaY = e.clientY - startY;
+
+            // Если зажали и потянули вниз больше чем на 30px — открываем панель
+            if (isHeld && deltaY > 30) {
+                openPanel();
+                isMouseDown = false;
+                isHeld = false;
+                clearTimeout(holdTimer);
+            }
+        });
+
+        item.addEventListener('mouseup', () => {
+            isMouseDown = false;
+            clearTimeout(holdTimer);
+            isHeld = false;
+        });
+
+        item.addEventListener('mouseleave', () => {
+            if (isMouseDown) {
+                isMouseDown = false;
+                clearTimeout(holdTimer);
+                isHeld = false;
+            }
+        });
+    });
+
+    document.addEventListener('mouseup', () => {
+        isMouseDown = false;
+        clearTimeout(holdTimer);
+    });
+}
+
+// ====== DRAG-AND-DROP МЕЖДУ ШАПКОЙ И ПАНЕЛЬЮ ======
+
+function setupDragAndDrop() {
+    const dropzone = document.getElementById('hiddenSectionsDropzone');
+
+    // ГЛОБАЛЬНЫЙ DRAGSTART — для перетаскивания из шапки И из панели
+    document.addEventListener('dragstart', (e) => {
+        const navItem = e.target.closest('.nav-item');
+        const hiddenItem = e.target.closest('.hidden-section-item');
+
+        const item = navItem || hiddenItem;
+        if (!item) return;
+
+        // Если это nav-item — панель должна быть открыта
+        if (navItem && !isPanelOpen) {
+            e.preventDefault();
+            return;
+        }
+
+        draggedElement = item;
+        item.classList.add('dragging');
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', item.dataset.section);
+
+        // Для перемещения между разделами
+        if (navItem) {
+            const allItems = [...document.querySelectorAll('.nav-item')];
+            e.dataTransfer.setData('index', allItems.indexOf(navItem));
+        }
+    });
+
+    document.addEventListener('dragend', (e) => {
+        if (draggedElement) {
+            draggedElement.classList.remove('dragging');
+        }
+
+        document.querySelectorAll('.nav-item.drag-over').forEach(el => {
+            el.classList.remove('drag-over');
+        });
+        dropzone?.classList.remove('drag-over');
+        panel?.classList.remove('drag-over');
+
+        draggedElement = null;
+    });
+
+    document.addEventListener('dragover', (e) => {
+        if (!isPanelOpen) {
+            // Если панель закрыта — запрещаем drop
+            e.preventDefault();
+            return;
+        }
+
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'move';
+
+        const targetNav = e.target.closest('.nav-item');
+        const isDropzone = e.target.closest('.hidden-sections-dropzone');
+        const isPanelArea = e.target.closest('.hidden-sections-panel');
+
+        document.querySelectorAll('.nav-item.drag-over').forEach(el => {
+            el.classList.remove('drag-over');
+        });
+        dropzone?.classList.remove('drag-over');
+        panel?.classList.remove('drag-over');
+
+        if (targetNav && targetNav !== draggedElement) {
+            targetNav.classList.add('drag-over');
+        }
+
+        if (isDropzone) {
+            dropzone?.classList.add('drag-over');
+        }
+
+        if (isPanelArea && !isDropzone) {
+            panel?.classList.add('drag-over');
+        }
+    });
+
+    document.addEventListener('dragleave', (e) => {
+        const targetNav = e.target.closest('.nav-item');
+        if (targetNav) targetNav.classList.remove('drag-over');
+
+        if (e.target.closest('.hidden-sections-dropzone')) {
+            dropzone?.classList.remove('drag-over');
+        }
+        if (e.target.closest('.hidden-sections-panel')) {
+            panel?.classList.remove('drag-over');
+        }
+    });
+
+    document.addEventListener('drop', (e) => {
+        if (!isPanelOpen) return;
+        e.preventDefault();
+
+        const targetNav = e.target.closest('.nav-item');
+        const isDropzone = e.target.closest('.hidden-sections-dropzone');
+        const isPanelArea = e.target.closest('.hidden-sections-panel');
+        const section = e.dataTransfer.getData('text/plain');
+
+        if (!section || !SECTION_CONFIG[section]) {
+            dropzone?.classList.remove('drag-over');
+            panel?.classList.remove('drag-over');
+            return;
+        }
+
+        const visible = getVisibleSections();
+        const currentIndex = visible.indexOf(section);
+        const isHidden = currentIndex === -1;
+
+        // ====== 1. СКРЫТЬ РАЗДЕЛ (перетащили в зону или панель) ======
+        if ((isDropzone || isPanelArea) && !isHidden) {
+            if (visible.length > 1) {
+                visible.splice(currentIndex, 1);
+                setVisibleSections(visible);
+                renderNavigation();
+
+                // Если скрыли активный раздел — переключаемся на первый
+                const active = document.querySelector('.nav-item.active');
+                if (!active || active.dataset.section === section) {
+                    const first = document.querySelector('.nav-item');
+                    if (first) first.click();
+                }
+            } else {
+                showError('Нельзя скрыть единственный раздел!');
+            }
+            dropzone?.classList.remove('drag-over');
+            panel?.classList.remove('drag-over');
+            return;
+        }
+
+        // ====== 2. ВЕРНУТЬ РАЗДЕЛ ИЗ СКРЫТЫХ ======
+        if (isHidden && targetNav) {
+            // Определяем позицию для вставки (ДО или ПОСЛЕ)
+            const rect = targetNav.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const insertBefore = e.clientX < centerX;
+
+            const toIndex = visible.indexOf(targetNav.dataset.section);
+            const targetIndex = insertBefore ? toIndex : toIndex + 1;
+
+            // Вставляем в нужное место
+            visible.splice(targetIndex, 0, section);
+
+            setVisibleSections(visible);
+            renderNavigation();
+
+            // Активируем возвращённый раздел
+            const navItem = document.querySelector(`.nav-item[data-section="${section}"]`);
+            if (navItem) navItem.click();
+
+            document.querySelectorAll('.nav-item.drag-over').forEach(el => {
+                el.classList.remove('drag-over');
+            });
+            dropzone?.classList.remove('drag-over');
+            panel?.classList.remove('drag-over');
+            return;
+        }
+
+        // ====== 3. ПЕРЕМЕЩЕНИЕ МЕЖДУ РАЗДЕЛАМИ ======
+        if (targetNav && !isHidden && targetNav !== draggedElement) {
+            const rect = targetNav.getBoundingClientRect();
+            const centerX = rect.left + rect.width / 2;
+            const insertBefore = e.clientX < centerX;
+
+            const toIndex = visible.indexOf(targetNav.dataset.section);
+            const targetIndex = insertBefore ? toIndex : toIndex + 1;
+
+            // Удаляем из старой позиции
+            const [removed] = visible.splice(currentIndex, 1);
+
+            // Вставляем в новую позицию (с учётом смещения)
+            const adjustedTarget = currentIndex < targetIndex ? targetIndex - 1 : targetIndex;
+            visible.splice(adjustedTarget, 0, removed);
+
+            setVisibleSections(visible);
+            renderNavigation();
+        }
+
+        // Очищаем подсветку
+        document.querySelectorAll('.nav-item.drag-over').forEach(el => {
+            el.classList.remove('drag-over');
+        });
+        dropzone?.classList.remove('drag-over');
+        panel?.classList.remove('drag-over');
+    });
+}
+
+
+
+
+
+
+
 document.addEventListener('DOMContentLoaded', () => {
 
     const minimizeBtn = document.getElementById('minimizeBtn');
@@ -76,6 +512,11 @@ document.addEventListener('DOMContentLoaded', () => {
             window.electronAPI.closeWindow();
         });
     }
+
+    renderNavigation();
+    setupDragOnHold();
+    setupDragAndDrop();
+
 });
 
 window.addEventListener('resize', () => {
@@ -85,7 +526,6 @@ window.addEventListener('resize', () => {
 });
 
 async function checkSectionReleaseNotifications(section) {
-    // Если сменился раздел — очищаем очередь и закрываем все активные баннеры
     if (currentSectionForNotifications !== null && currentSectionForNotifications !== section) {
         clearAllNotifications();
     }
@@ -95,10 +535,7 @@ async function checkSectionReleaseNotifications(section) {
     const result = await window.electronAPI.getSectionReleaseNotifications(section);
 
     if (result.success && result.notifications.length > 0) {
-        // Добавляем в очередь и показываем стеком
         addNotificationsToStack(result.notifications);
-
-        // Отмечаем все как показанные
         for (const notif of result.notifications) {
             await window.electronAPI.markReleaseNotificationShown(notif.cardName, notif.section);
         }
@@ -106,9 +543,7 @@ async function checkSectionReleaseNotifications(section) {
 }
 
 function clearAllNotifications() {
-    // Очищаем очередь
     notificationQueue = [];
-    // Закрываем все активные баннеры
     for (const banner of activeBanners) {
         if (banner && banner.parentNode) {
 
@@ -119,33 +554,24 @@ function clearAllNotifications() {
 }
 
 function addNotificationsToStack(notifications) {
-    // Добавляем новые уведомления в конец очереди
     notificationQueue.push(...notifications);
-
-    // Показываем все уведомления из очереди (стеком)
     showAllStackedNotifications();
 }
 
 function showAllStackedNotifications() {
-    // Сортируем уведомления по дате (ближайшие сверху или снизу? пусть снизу новые)
-    // Или оставляем как есть
-
     for (let i = 0; i < notificationQueue.length; i++) {
         const notification = notificationQueue[i];
-        // Откладываем показ, чтобы баннеры не появились одновременно с одинаковой позицией
         setTimeout(() => {
-            // Проверяем, не сменился ли раздел
             if (currentSectionForNotifications !== notification.section) return;
-
-            showReleaseNotification(notification, i);
+            showReleaseNotification(notification);
         }, i * 500);
     }
 
 }
 
 let notificationQueue = [];
-let activeBanners = []; // Массив активных баннеров
-let currentSectionForNotifications = null; // Запоминаем раздел, для которого показываем уведомления
+let activeBanners = [];
+let currentSectionForNotifications = null;
 
 const priceCache = new Map();
 const CACHE_TTL = 24 * 60 * 60 * 1000; // 24 часа
@@ -179,15 +605,13 @@ function clearPriceCache() {
 }
 
 
-async function showReleaseNotification(notification, index) {
-    // Получаем URL обложки карточки из allSectionData
+async function showReleaseNotification(notification) {
     let coverUrl = '';
     const cardData = window.allSectionData?.find(c => c.name === notification.cardName);
     if (cardData && cardData.icoUrl && cardData.icoUrl.trim()) {
         coverUrl = cardData.icoUrl;
     }
 
-    // Если не нашли в allSectionData, пробуем найти в DOM
     if (!coverUrl) {
         const cardElement = document.querySelector(`.data-card[data-name="${notification.cardName}"]`);
         if (cardElement) {
@@ -198,7 +622,6 @@ async function showReleaseNotification(notification, index) {
         }
     }
 
-    // Форматируем дату
     const releaseDate = new Date(notification.releaseDate);
     const formattedDate = releaseDate.toLocaleDateString('ru-RU', {
         day: 'numeric',
@@ -210,7 +633,6 @@ async function showReleaseNotification(notification, index) {
     banner.className = `release-banner ${notification.isReleased ? 'release-banner-released' :
         (notification.daysLeft <= 7 ? 'release-banner-upcoming_week' : 'release-banner-upcoming_month')}`;
 
-    // Вычисляем позицию снизу (каждый следующий выше предыдущего)
     const bannerHeight = 120;
     const bottomOffset = (activeBanners.length * (bannerHeight));
     banner.style.bottom = bottomOffset + 'px';
@@ -234,7 +656,6 @@ async function showReleaseNotification(notification, index) {
 
     document.body.appendChild(banner);
 
-    // Добавляем в массив активных баннеров
     activeBanners.push(banner);
 
     const closeBtn = banner.querySelector('.release-banner-close');
@@ -249,9 +670,7 @@ async function showReleaseNotification(notification, index) {
         }
     };
 
-    // Функция закрытия баннера
     const closeBanner = () => {
-        // Удаляем из массива активных баннеров
         const idx = activeBanners.indexOf(banner);
         if (idx !== -1) activeBanners.splice(idx, 1);
 
@@ -259,7 +678,6 @@ async function showReleaseNotification(notification, index) {
             hideBanner(banner);
         }
 
-        // Пересчитываем позиции оставшихся баннеров
         repositionBanners();
     };
 
@@ -268,11 +686,9 @@ async function showReleaseNotification(notification, index) {
         closeBanner();
     };
 
-    // Клик по баннеру (кроме кнопки закрытия)
     banner.onclick = async (e) => {
         if (e.target === closeBtn || closeBtn.contains(e.target)) return;
 
-        // Сбрасываем фильтры на "Все"
         currentFilters.statusFilter = 'Все';
         document.querySelectorAll('.filter-button').forEach(btn => {
             btn.classList.remove('active');
@@ -281,7 +697,6 @@ async function showReleaseNotification(notification, index) {
             }
         });
 
-        // Сбрасываем сортировку на "по дате"
         currentFilters.sortBy = 'date';
         document.querySelectorAll('.sort-button').forEach(btn => {
             btn.classList.remove('active');
@@ -290,16 +705,11 @@ async function showReleaseNotification(notification, index) {
             }
         });
 
-        // Вставляем название в поиск
         const searchInput = document.getElementById('searchInput');
         if (searchInput) {
             searchInput.value = notification.cardName;
         }
-
-        // Вызываем поиск
         filterCards(notification.cardName);
-
-        // Закрываем баннер
         closeBanner();
     };
 }
@@ -316,26 +726,19 @@ function getAdaptiveDelay(currentValue) {
     const timeSinceLastChange = lastChangeTime ? now - lastChangeTime : 0;
     const addedChars = currentValue.length - lastValue.length;
 
-    // Если это первый ввод
     if (!lastValue) return 1500;
 
-    // Вычисляем скорость ввода (символов в секунду)
     const speed = addedChars / (timeSinceLastChange / 1000);
 
     console.log(`[AutoSearch] Speed: ${speed.toFixed(1)} chars/sec, added: ${addedChars}, time: ${timeSinceLastChange}ms`);
 
-    // Адаптивная логика
     if (speed > 10) {
-        // Печатает очень быстро (>10 символов/сек) → видимо копирует название
         return 800;
     } else if (speed > 5) {
-        // Печатает быстро (5-10 символов/сек)
         return 1000;
     } else if (speed > 2) {
-        // Печатает медленно (2-5 символов/сек)
         return 1500;
     } else {
-        // Печатает очень медленно или пауза
         return 2000;
     }
 }
@@ -370,18 +773,15 @@ async function autoSearchOnInput(title, section) {
             }
         }
 
-        // Получаем теги и дату
         const result = await autoFetchTags(title, section);
         const tags = result.tags || [];      // ← массив тегов
         const releaseDate = result.releaseDate; // ← дата
 
-        // Сохраняем дату в dataset формы
         const nameInput = document.getElementById('nameInput');
         if (nameInput && releaseDate) {
             nameInput.dataset.fetchedReleaseDate = releaseDate;
         }
 
-        // Добавляем теги в форму
         if (tags.length > 0 && window.getAddFormTags) {
             if (window.clearAddFormTags) {
                 window.clearAddFormTags();
@@ -444,14 +844,11 @@ function setupAutoSearchOnNameInput() {
         const section = document.querySelector('.nav-item.active')?.dataset.section;
         const now = Date.now();
 
-        // Сохраняем предыдущее значение и время
         if (searchTimeout) clearTimeout(searchTimeout);
 
-        // Вычисляем задержку на основе скорости
         const delay = getAdaptiveDelay(currentValue);
         console.log(`[AutoSearch] Delay: ${delay}ms (value: "${currentValue}")`);
 
-        // Обновляем для следующего раза
         lastValue = currentValue;
         lastChangeTime = now;
 
@@ -505,7 +902,6 @@ function createTooltip() {
         tooltipElement = document.createElement('div');
         tooltipElement.className = 'card-tooltip';
         document.body.appendChild(tooltipElement);
-        tooltipElement.style.visibility = 'hidden';
     }
     return tooltipElement;
 }
@@ -554,6 +950,8 @@ function showTooltip(description, tags, releaseDate, x, y) {
     if (!hasDescription && hasTags) {
         tooltipClass += ' card-tooltip-delayed';
     }
+
+
 
     tooltip.className = tooltipClass;
 
@@ -640,7 +1038,7 @@ function setupEditDescriptionButtons() {
                         <div style="display: flex; gap: 6px; align-items: center;">
                             <input type="text" id="tagInput" maxlength="50" placeholder="Например: хоррор, комедия, шедевр" autocomplete="off" style="flex: 1; background: #1e1e1e; border: 1px solid #4a4a4a; border-radius: 8px; color: white; padding: 8px 12px; font-size: 13px;">
                             <button id="searchTagsOnlineBtn" class="search-tags-online-btn" title="Поиск тегов онлайн" style="background: transparent; border: none; cursor: pointer; padding: 6px; display: flex; align-items: center; justify-content: center; border-radius: 6px;">
-                                <img src="assets/icons/find.svg" alt="🔍" style="width: 18px; height: 18px; filter: brightness(0) invert(1); opacity: 0.6;">
+                                <img src="../../assets/icons/find.svg" alt="🔍" style="width: 18px; height: 18px; filter: brightness(0) invert(1); opacity: 0.6;">
                             </button>
                         </div>
                     </div>
@@ -926,9 +1324,8 @@ function setupEditDescriptionButtons() {
 }
 
 function showSyncChoiceModal(localData, remoteData, localTime, remoteTime) {
-    let modalResolve;
-    const promise = new Promise((resolve) => {
-        modalResolve = resolve;
+    return new Promise((resolve) => {
+        let modalResolve = resolve;
 
         const modal = document.createElement('div');
         modal.className = 'modal';
@@ -942,8 +1339,8 @@ function showSyncChoiceModal(localData, remoteData, localTime, remoteTime) {
                 <h3>⚠️ Конфликт синхронизации</h3>
                 <p>Локальные и облачные данные различаются.</p>
                 <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; margin: 15px 0;">
-                    <p><img src="assets/icons/folder.svg" alt="📁" class="button-icon" style="width:14px;height:14px"> Локальные: ${localDate}</p>
-                    <p><img src="assets/icons/cloud.svg" alt="☁️" class="button-icon" style="width:14px;height:14px"> Облачные: ${remoteDate}</p>
+                    <p><img src="../../assets/icons/folder.svg" alt="📁" class="button-icon" style="width:14px;height:14px"> Локальные: ${localDate}</p>
+                    <p><img src="../../assets/icons/cloud.svg" alt="☁️" class="button-icon" style="width:14px;height:14px"> Облачные: ${remoteDate}</p>
                 </div>
                 <p>Что вы хотите сохранить?</p>
                 <div style="display: flex; gap: 10px; margin-top: 20px;">
@@ -964,31 +1361,27 @@ function showSyncChoiceModal(localData, remoteData, localTime, remoteTime) {
         const remoteBtn = modal.querySelector('#syncRemoteBtn');
         const cancelBtn = modal.querySelector('#syncCancelBtn');
         const loadingIndicator = modal.querySelector('#syncLoadingIndicator');
-
         const showLoading = (choice) => {
             localBtn.style.display = 'none';
             remoteBtn.style.display = 'none';
             cancelBtn.style.display = 'none';
             loadingIndicator.style.display = 'block';
-            // Сохраняем modal в resolve, чтобы закрыть потом
-            modalResolve({ choice, modal });
+            modalResolve({choice, modal});
         };
 
         localBtn.onclick = () => showLoading('local');
         remoteBtn.onclick = () => showLoading('remote');
         cancelBtn.onclick = () => {
             document.body.removeChild(modal);
-            modalResolve({ choice: null, modal: null });
+            modalResolve({choice: null, modal: null});
         };
         modal.onclick = (e) => {
             if (e.target === modal) {
                 document.body.removeChild(modal);
-                modalResolve({ choice: null, modal: null });
+                modalResolve({choice: null, modal: null});
             }
         };
     });
-
-    return promise;
 }
 
 async function initUpdateSystem() {
@@ -1023,7 +1416,8 @@ function addUpdateButton() {
     updateButton.id = 'checkUpdateBtn';
     updateButton.className = 'header-button';
     updateButton.title = 'Проверить обновления';
-    updateButton.innerHTML = '<img src="assets/icons/update.svg" alt="🔄" class="button-icon">';
+    updateButton.style.display = 'none';
+    updateButton.innerHTML = '<img src="../../assets/icons/update.svg" alt="🔄" class="button-icon">';
 
     updateButton.addEventListener('click', async () => {
         await window.updateAPI.checkForUpdates(true);
@@ -1100,18 +1494,6 @@ function formatReleaseNotes(notes) {
     }
 
     return formatted;
-}
-
-async function updateDownloadsCount() {
-    try {
-        const result = await window.electronAPI.getGitHubDownloads();
-        const downloadsNumber = document.getElementById('downloadsNumber');
-        if (downloadsNumber && result.success) {
-            downloadsNumber.textContent = result.downloads.toLocaleString();
-        }
-    } catch (error) {
-        console.error('Failed to get downloads count:', error);
-    }
 }
 
 scrollToTopBtn.addEventListener('click', () => {
@@ -1373,10 +1755,10 @@ function showError(message) {
 
 function updateAuthButton(email) {
     if (email) {
-        authBtn.innerHTML = `<img src="assets/icons/user.svg" alt="👤" class="button-icon"> ${email.split('@')[0]}`;
+        authBtn.innerHTML = `<img src="../../assets/icons/user.svg" alt="👤" class="button-icon"> ${email.split('@')[0]}`;
         authBtn.title = "Нажмите для выхода";
     } else {
-        authBtn.innerHTML = `<img src="assets/icons/user.svg" alt="👤" class="button-icon"> Войти`;
+        authBtn.innerHTML = `<img src="../../assets/icons/user.svg" alt="👤" class="button-icon"> Войти`;
         authBtn.title = "Войти";
     }
 }
@@ -1475,14 +1857,14 @@ registerBtn.addEventListener('click', async () => {
     }
 });
 
-// Закрытие модалки по клику вне
+
 authModal.addEventListener('click', (e) => {
     if (e.target === authModal) {
         authModal.style.display = 'none';
     }
 });
 
-// Инициализация при загрузке
+
 document.addEventListener('DOMContentLoaded', async () => {
     window.electronAPI.onRestoreSession(async (user) => {
         if (user) {
@@ -1530,7 +1912,7 @@ document.addEventListener('DOMContentLoaded', async () => {
         currentUser = savedUser;
         updateAuthButton(savedUser.email);
     }
-    await updateDownloadsCount();
+
     await loadRatings();
     await loadStatuses();
     await initUpdateSystem();
@@ -1540,7 +1922,6 @@ document.addEventListener('DOMContentLoaded', async () => {
     await renderSection('games', games);
 });
 
-// Загрузка рейтингов
 async function loadRatings() {
     try {
         const ratings = await window.electronAPI.getRatings();
@@ -1556,7 +1937,7 @@ async function loadRatings() {
         await showError('Failed to load ratings');
     }
 }
-// Загрузка статусов
+
 async function loadStatuses() {
     try {
         const statuses = await window.electronAPI.getStatusesNoImport();
@@ -1572,7 +1953,7 @@ async function loadStatuses() {
     }
 }
 
-// Генерация HTML для иконки игры
+
 function getCardIconHTML(game) {
     let iconUrl = 'https://apptor.studio/assets/cache/images/600-856x600-629.png';
     // Проверяем URL обложки
@@ -1593,8 +1974,6 @@ function getCardIconHTML(game) {
             `;
 }
 
-
-
 async function renderSection(section, data, resetPagination = true, preserveFilters = false, addMoreChecked=false, addFormVisible='') {
     const contentSection = document.getElementById('contentSection');
     const filterButtonsSection = contentSection.querySelector('.filter-buttons-section');
@@ -1602,7 +1981,6 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
 
     if (!contentWrapper || !filterButtonsSection) return;
 
-    // Очистка перед рендером
     cleanupSection();
 
     if (resetPagination) {
@@ -1626,6 +2004,9 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
 
     window.allSectionData = data;
 
+    // 🔥 ЗАГРУЖАЕМ ИЗБРАННОЕ
+    const favorites = await loadFavorites(section);
+
     if (preserveFilters) {
         window.filteredData = filterData(data, currentFilters.searchQuery, currentFilters.statusFilter);
         window.filteredData = sortData(window.filteredData, currentFilters.sortBy);
@@ -1633,6 +2014,10 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
         window.filteredData = data;
         currentFilters = { searchQuery: '', statusFilter: 'Все', sortBy: 'date' };
     }
+
+    // 🔥 СОХРАНЯЕМ ИЗБРАННОЕ В ГЛОБАЛЬНОЙ ПЕРЕМЕННОЙ ДЛЯ loadMoreItems()
+    window._currentFavorites = favorites;
+
     filterButtonsSection.innerHTML = `
         <div class="filter-buttons-container">
             <div class="filter-buttons-group" id="statusFilter">
@@ -1640,32 +2025,29 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
             </div>
         </div>
     `;
-    // Рендерим контент во wrapper
+
     contentWrapper.innerHTML = `
     <div class="content-wrapper">
-        <!-- Кнопки фильтрации - ВЕРХНЯЯ СТРОКА -->
         <div class="filter-controls-panel">
             <div class="filter-container sort-buttons-container">
                 <button class="sort-button active" data-sort="date" title="По дате добавления">
-                    <img src="assets/icons/sort-date.svg" alt="📅" class="button-icon-no-text">
+                    <img src="../../assets/icons/sort-date.svg" alt="📅" class="button-icon-no-text">
                 </button>
                 <button class="sort-button" data-sort="alphabet" title="По алфавиту">
-                    <img src="assets/icons/sort-alpha.svg" alt="🔤" class="button-icon-no-text">
+                    <img src="../../assets/icons/sort-alpha.svg" alt="🔤" class="button-icon-no-text">
                 </button>
                 <button class="sort-button" data-sort="rating" title="По рейтингу и статусу">
-                    <img src="assets/icons/sort-rating.svg" alt="⭐" class="button-icon-no-text">
+                    <img src="../../assets/icons/sort-rating.svg" alt="⭐" class="button-icon-no-text">
                 </button>
             </div>
             <div class="search-container">
                 <input type="text" id="searchInput" placeholder="Поиск по названию" value="${currentFilters.searchQuery}">
                 <div id="searchSuggestions" class="search-suggestions"></div>
-                <button id="searchBtn"><img src="assets/icons/find.svg" alt="🔍" class="button-icon-no-text"></button>
+                <button id="searchBtn"><img src="../../assets/icons/find.svg" alt="🔍" class="button-icon-no-text"></button>
                 <button id="clearSearchBtn" class="clear-search-btn">✕</button>
-                <button id="searchInWeb" title="Поиск в интернете"><img src="assets/icons/find.svg" alt="🔍" class="button-icon">интернет</button>
-                <button id="randomBtnSection" title="Случайная карточка"><img src="assets/icons/random.svg" alt="🎲" class="button-icon">Случайное</button>
+                <button id="randomBtnSection" title="Случайная карточка"><img src="../../assets/icons/random.svg" alt="🎲" class="button-icon">Случайное</button>
             </div>
             
-            <!-- Кнопка добавления должна быть ВНЕ search-container -->
             <div class="add-button-container">
                 <button id="toggleAddFormBtn" class="add-button">+ Добавить</button>
             </div>
@@ -1680,11 +2062,9 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
     </div>
 `;
 
-    // Инициализируем секцию
     await initCardSection();
     setupSearchInput();
 
-    // Устанавливаем сохранённое значение фильтра статуса
     const statusFilter = document.getElementById('statusFilter');
     if (statusFilter && currentFilters.statusFilter) {
         statusFilter.value = currentFilters.statusFilter;
@@ -1693,7 +2073,6 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
     loadMoreItems();
     updateStats();
 
-    // Добавляем обработчик прокрутки для бесконечной загрузки
     contentWrapper.addEventListener('scroll', handleScroll);
     setupContentWrapperScroll();
     await checkSectionReleaseNotifications(section);
@@ -1701,23 +2080,46 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
 
 function filterData(data, searchQuery, statusFilter, isTag = false) {
     const queryLower = (searchQuery || '').toLowerCase();
+    const section = document.querySelector('.nav-item.active')?.dataset.section;
+    const favorites = favoritesCache[section] || [];
+
     return data.filter(item => {
-        // Поиск по названию
         const nameMatches = isTag
             ? false
             : !queryLower || item.name.toLowerCase().includes(queryLower);
-        // Поиск по тегам
+
         let tagMatches = false;
         if (queryLower && item.tags && item.tags.length) {
             tagMatches = item.tags.some(tag => tag.toLowerCase().includes(queryLower));
         }
 
         const matchesSearch = !queryLower || nameMatches || tagMatches;
-        const statusMatches = statusFilter === 'Все' || item.status === statusFilter;
+
+        let statusMatches = false;
+        if (statusFilter === 'Все') {
+            statusMatches = true;
+        } else if (statusFilter === 'Избранное') {
+            statusMatches = favorites.includes(item.name);
+        } else {
+            statusMatches = item.status === statusFilter;
+        }
 
         return matchesSearch && statusMatches;
     });
 }
+
+async function loadFavorites(section) {
+    try {
+        const favs = await window.electronAPI.getFavoritesBySection(section);
+        favoritesCache[section] = favs || [];
+        return favs || [];
+    } catch (error) {
+        console.error('Ошибка загрузки избранного:', error);
+        favoritesCache[section] = [];
+        return [];
+    }
+}
+
 
 let scrollTimeout;
 function handleScroll() {
@@ -1738,7 +2140,6 @@ function handleScroll() {
         }
     }, 100);
 }
-
 
 function cleanupSection() {
     // Закрываем все выпадающие списки
@@ -1790,7 +2191,7 @@ async function loadMoreItems() {
     isLoading = true;
     const loadingIndicator = document.getElementById('loadingIndicator');
     if (loadingIndicator) loadingIndicator.style.display = 'block';
-    // Получаем данные для текущей страницы
+
     const startIndex = (currentPage - 1) * itemsPerPage;
     const endIndex = startIndex + itemsPerPage;
     const itemsToRender = window.filteredData.slice(startIndex, endIndex);
@@ -1802,40 +2203,73 @@ async function loadMoreItems() {
         return;
     }
 
-    // Рендерим карточки
     const dataList = document.getElementById('dataList');
     if (dataList) {
-        dataList.innerHTML += renderCardList(itemsToRender);
+        // 🔥 БЕРЁМ ИЗБРАННОЕ ИЗ ГЛОБАЛЬНОЙ ПЕРЕМЕННОЙ
+        const favorites = window._currentFavorites || [];
+        dataList.innerHTML += renderCardList(itemsToRender, favorites);
     }
 
-    // Обновляем состояние
     currentPage++;
     isLoading = false;
     if (loadingIndicator) loadingIndicator.style.display = 'none';
 
-    // Инициализируем кнопки и поля для новых карточек
     setupDeleteButtons();
     setupEditableFields();
     setupTitleClickHandlers();
-    setupChangeImageButtons(); // Новая функция
-    setupChangeCategoryButtons(); // Новая функция
+    setupChangeImageButtons();
+    setupChangeCategoryButtons();
     setupCardClickHandlers();
     setupEditDescriptionButtons();
+    setupFavoriteButtons();
 }
 
 async function loadStatusFilter() {
     try {
-        const statuses = await window.electronAPI.getStatuses();
+        // Получаем статусы (уже без "Избранное")
+        const statuses = await window.electronAPI.getStatusesNoImport();
+        const data = window.allSectionData || [];
+
+        const statusCount = {};
+        data.forEach(item => {
+            const status = item.status || 'Уточнить';
+            statusCount[status] = (statusCount[status] || 0) + 1;
+        });
+
+        // Добавляем отдельный фильтр "Избранное"
+        const section = document.querySelector('.nav-item.active')?.dataset.section;
+        const favorites = section ? await window.electronAPI.getFavoritesBySection(section) : [];
+        const favCount = favorites.length;
+
         const statusFilter = document.getElementById('statusFilter');
         if (statusFilter) {
-            statusFilter.innerHTML = `<button class="filter-button active" data-status="Все">Все</button>
-                ${statuses.map(s => `<button class="filter-button" data-status="${s}">${s}</button>`).join('')}
-            `;
+            const activeStatuses = statuses.filter(s => statusCount[s] > 0);
+            const currentFilter = currentFilters.statusFilter || 'Все';
 
-            // Добавляем обработчик изменения фильтра
-            statusFilter.addEventListener('change', () => {
-                filterCards();
-            });
+            // Проверяем, что выбранный фильтр есть
+            if (currentFilter !== 'Все' && currentFilter !== 'Избранное' && !activeStatuses.includes(currentFilter)) {
+                currentFilters.statusFilter = 'Все';
+            }
+
+            let html = `
+                <button class="filter-button active" data-status="Все">Все</button>
+            `;
+            if (favCount > 0) {
+                html += `<button class="filter-button" data-status="Избранное">Избранное</button>`;
+            }
+
+            html += activeStatuses.map(s =>
+                `<button class="filter-button" data-status="${s}">${s}</button>`
+            ).join('');
+
+            statusFilter.innerHTML = html;
+
+            // Устанавливаем активную кнопку
+            const activeButton = statusFilter.querySelector(`.filter-button[data-status="${currentFilters.statusFilter || 'Все'}"]`);
+            if (activeButton) {
+                statusFilter.querySelectorAll('.filter-button').forEach(btn => btn.classList.remove('active'));
+                activeButton.classList.add('active');
+            }
         }
     } catch (error) {
         console.error('Error loading statuses for filter:', error);
@@ -1982,31 +2416,37 @@ function setupSearchInput() {
 }
 function sortData(data, sortBy) {
     const statusPriority = {
-        'Избранное': 1,
-        'Завершено': 2,
-        'Импортировано': 3,
-        'Смотрел': 4,
-        'В процессе': 5,
-        'Уточнить': 6,
-        'Ожидается': 7
+        'Завершено': 1,
+        'Импортировано': 2,
+        'Смотрел': 3,
+        'В процессе': 4,
+        'Уточнить': 5,
+        'Ожидается': 6,
+        'В планах': 7
     };
 
+    const section = document.querySelector('.nav-item.active')?.dataset.section;
+    const favorites = favoritesCache[section] || [];
+
     return [...data].sort((a, b) => {
+        const aFav = favorites.includes(a.name) ? 1 : 0;
+        const bFav = favorites.includes(b.name) ? 1 : 0;
+
         if (sortBy === 'date') {
-            // По умолчанию данные уже в порядке добавления
+            if (aFav !== bFav) return bFav - aFav;
             return 0;
         } else if (sortBy === 'rating') {
-            // Сначала по статусу
             const statusA = statusPriority[a.status] || 5;
             const statusB = statusPriority[b.status] || 5;
             if (statusA !== statusB) return statusA - statusB;
 
-            // Затем по рейтингу (если статусы одинаковые)
             const ratingA = parseInt(a.rating) || 0;
             const ratingB = parseInt(b.rating) || 0;
-            return ratingB - ratingA; // Сначала высокий рейтинг
+            if (ratingA !== ratingB) return ratingB - ratingA;
+
+            return bFav - aFav;
         } else if (sortBy === 'alphabet') {
-            // По алфавиту
+            if (aFav !== bFav) return bFav - aFav;
             return a.name.localeCompare(b.name);
         }
         return 0;
@@ -2064,14 +2504,7 @@ async function initCardSection() {
         });
     }
 
-    const searchInWeb = document.getElementById('searchInWeb');
-    if (searchInWeb) {
-        searchInWeb.addEventListener('click', async () => {
-            await searchCardInWeb();
-        });
-    }
 
-    // Настраиваем кнопку добавления
     setupAddButton();
     setupAddFormTags();
     setupAutoSearchOnNameInput();
@@ -2242,7 +2675,7 @@ function getAddFormHTML(addMoreChecked = false, visible = '') {
                         ${getCardIconHTML({ name: 'Название', icoUrl: '' })}
                         <div class="preview-overlay">
                             <button id="previewSearchBtn" class="preview-search-btn" title="Найти обложку">
-                                <img src="assets/icons/findImage.svg" alt="🔍" style="width: 32px; height: 32px;">
+                                <img src="../../assets/icons/findImage.svg" alt="🔍" style="width: 32px; height: 32px;">
                             </button>
                         </div>
                         <div class="preview-data-info">
@@ -2464,24 +2897,98 @@ function escapeHtml(str) {
         .replace(/'/g, '&#39;');
 }
 
-function renderCardList(cards) {
-    return cards.map(card => `
+function setupFavoriteButtons() {
+    document.querySelectorAll('.fav-btn').forEach(btn => {
+        // Удаляем старый обработчик
+        btn.removeEventListener('click', handleFavoriteClick);
+        btn.addEventListener('click', handleFavoriteClick);
+    });
+}
+
+async function handleFavoriteClick(e) {
+    e.stopPropagation();
+    const btn = e.currentTarget;
+    const cardName = btn.dataset.name;
+    const section = btn.dataset.section;
+    const isActive = btn.classList.contains('active');
+
+    try {
+        if (isActive) {
+            // Удаляем из избранного
+            await window.electronAPI.removeFavorite(cardName, section);
+            btn.classList.remove('active');
+            btn.querySelector('.fav-icon').textContent = '🤍';
+            btn.querySelector('.btn-text').textContent = 'В избранное';
+            btn.title = 'Добавить в избранное';
+
+            // Обновляем кеш
+            if (favoritesCache[section]) {
+                favoritesCache[section] = favoritesCache[section].filter(name => name !== cardName);
+            }
+        } else {
+            // Добавляем в избранное
+            await window.electronAPI.addFavorite(cardName, section);
+            btn.classList.add('active');
+            btn.querySelector('.fav-icon').textContent = '❤️';
+            btn.querySelector('.btn-text').textContent = 'В избранном';
+            btn.title = 'Убрать из избранного';
+
+            // Обновляем кеш
+            if (favoritesCache[section]) {
+                favoritesCache[section].push(cardName);
+            }
+        }
+
+        // Обновляем data-атрибут карточки
+        const card = btn.closest('.data-card');
+        if (card) {
+            card.dataset.favorite = isActive ? 'false' : 'true';
+        }
+
+        // Обновляем сортировку и фильтры (если нужно)
+        // filterCards(currentFilters.searchQuery);
+
+    } catch (error) {
+        console.error('Ошибка при работе с избранным:', error);
+        showError('Не удалось изменить статус избранного');
+    }
+}
+
+function renderCardList(cards, favorites = []) {
+    const section = document.querySelector('.nav-item.active')?.dataset.section || '';
+
+    return cards.map(card => {
+        const isFav = favorites.includes(card.name);
+
+        return `
         <div class="data-card" 
              data-name="${escapeHtml(card.name)}" 
              data-description="${escapeHtml(card.description || '')}" 
              data-tags='${JSON.stringify(card.tags || [])}'
              data-release-date="${card.releaseDate || ''}"
+             data-favorite="${isFav ? 'true' : 'false'}"
              style="display: block;">
+            
             <div class="card-hover-icon">
-                <img src="assets/icons/search-web.svg" alt="🔍">
+                <img src="../../assets/icons/search-web.svg" alt="🔍">
             </div>
-            <div class="card-buttons">
+                <button class="card-btn fav-btn ${isFav ? 'active' : ''}" 
+                        data-name="${escapeHtml(card.name)}" 
+                        data-section="${section}"
+                        title="${isFav ? 'Убрать из избранного' : 'Добавить в избранное'}">
+                    <span class="fav-icon">${isFav ? '❤️' : '🤍'}</span>
+                    <span class="btn-text" style="display: none">${isFav ? 'В избранном' : 'В избранное'}</span>
+                </button>
+                <div class="card-buttons">
+                <!-- КНОПКА ИЗБРАННОГО -->
+                
+                
                 <button class="card-btn edit-desc-btn" data-name="${escapeHtml(card.name)}">
-                    <img src="assets/icons/note.svg" alt="📝" class="button-icon-no-text">
+                    <img src="../../assets/icons/note.svg" alt="📝" class="button-icon-no-text">
                     <span class="btn-text">Заметки</span>
                 </button>
                 <button class="card-btn change-image-btn" data-name="${escapeHtml(card.name)}">
-                    <img src="assets/icons/changeImage.svg" alt="🖼️" class="button-icon-no-text">
+                    <img src="../../assets/icons/changeImage.svg" alt="🖼️" class="button-icon-no-text">
                     <span class="btn-text">Обложка</span>
                 </button>
                 <button class="card-btn change-category-btn" 
@@ -2490,14 +2997,16 @@ function renderCardList(cards) {
                     data-rating="${card.rating}" 
                     datatype="${card.icoUrl}" 
                     data-description="${escapeHtml(card.description || '')}">
-                    <img src="assets/icons/changeCategory.svg" alt="⇄" class="button-icon-no-text">
+                    <img src="../../assets/icons/changeCategory.svg" alt="⇄" class="button-icon-no-text">
                     <span class="btn-text">Переместить</span>
                 </button>
                 <button class="card-btn delete-btn" data-name="${escapeHtml(card.name)}">
-                    <img src="assets/icons/delete.svg" alt="🗑️" class="button-icon-no-text">
+                    <img src="../../assets/icons/delete.svg" alt="🗑️" class="button-icon-no-text">
                 </button>
             </div>
+            
             ${getCardIconHTML(card)}
+            
             <div class="data-info">
                 <h3 class="data-title">${escapeHtml(card.name)}</h3>
                 <div class="data-ratings-container">
@@ -2516,7 +3025,7 @@ function renderCardList(cards) {
                 </div>
             </div>
         </div>
-    `).join('');
+    `}).join('');
 }
 
 async function addNewData(section) {
@@ -2568,6 +3077,7 @@ async function addNewData(section) {
 
         // Добавляем новую карточку с тегами
         await window.electronAPI.addData(section, cardData);
+        await loadStatusFilter();
         if (nameInput) {
             delete nameInput.dataset.fetchedReleaseDate;
         }
@@ -2637,8 +3147,6 @@ function setupEditableFields() {
         overlay.className = 'editable-select-overlay';
         document.body.appendChild(overlay);
     }
-
-    const overlay = document.getElementById('editable-select-overlay');
 
     document.querySelectorAll('.editable-field').forEach(field => {
         field.style.cursor = 'pointer';
@@ -3158,8 +3666,14 @@ function setupCardClickHandlers() {
             if (priceFetchTimer) clearTimeout(priceFetchTimer);
 
             lastFetchedCard = { itemName, section, description, tags, releaseDate, x: e.clientX, y: e.clientY };
+            const hasDescription = description && description.trim().length > 0;
+            const hasTags = tags && tags.length > 0;
+            const hasReleaseDate = releaseDate && releaseDate !== 'undefined' && releaseDate !== 'null';
 
-            showTooltip(description, tags, releaseDate, e.clientX, e.clientY);
+
+            if (hasDescription || hasTags || hasReleaseDate || section === 'games' || section === 'books') {
+                showTooltip(description, tags, releaseDate, e.clientX, e.clientY);
+            }
 
             // ========== ИГРЫ ==========
             if (section === 'games') {
@@ -3199,8 +3713,8 @@ function setupCardClickHandlers() {
 
                         if (lastFetchedCard?.itemName !== itemName) return;
 
-                        if (steamData) setCachedPrice('steam', itemName, steamData);
-                        if (kupikodData) setCachedPrice('kupikod', itemName, kupikodData);
+                        setCachedPrice('steam', itemName, steamData || 'недоступно');
+                        setCachedPrice('kupikod', itemName, kupikodData || 'недоступно');
 
                         updateTooltipPrices(steamData || cachedSteam, kupikodData || cachedKupikod, tags.length > 0);
                     }, 0);
@@ -3246,8 +3760,8 @@ function setupCardClickHandlers() {
 
                         if (lastFetchedCard?.itemName !== itemName) return;
 
-                        if (chitaiData) setCachedPrice('chitai', itemName, chitaiData);
-                        if (litresData) setCachedPrice('litres', itemName, litresData);
+                        setCachedPrice('chitai', itemName, chitaiData || 'недоступно');
+                        setCachedPrice('litres', itemName, litresData || 'недоступно');
 
                         updateBookTooltipPrices(chitaiData || cachedChitai, litresData || cachedLitres, tags.length > 0);
                     }, 0);
@@ -3257,7 +3771,11 @@ function setupCardClickHandlers() {
 
         card.addEventListener('mouseleave', () => {
             if (priceFetchTimer) clearTimeout(priceFetchTimer);
+            const section = document.querySelector('.nav-item.active')?.dataset.section;
             lastFetchedCard = null;
+            if (section === 'games' || section === 'books') {
+                window.electronAPI.stopInfoSearching();
+            }
             hideTooltip();
         });
 
@@ -3390,11 +3908,6 @@ randomBtn.addEventListener('click', async () => {
     await pickRandomVisibleCard();
 });
 
-searchInWebBtn.addEventListener('click', async () => {
-    await searchCardInWeb();
-});
-
-
 function highlightRandomCard(cardName) {
     // Находим карточку
     const card = document.querySelector(`.data-card[data-name="${cardName}"]`);
@@ -3463,19 +3976,6 @@ async function pickRandomVisibleCard() {
         // Подсвечиваем карточку
         highlightRandomCard(cardName);
 
-    } catch (error) {
-        console.error('Ошибка:', error);
-    }
-}
-
-async function searchCardInWeb() {
-    try {
-        const section = document.querySelector('.nav-item.active')?.dataset.section;
-        const textFromInput = document.getElementById('searchInput')?.value;
-
-        const searchText = textFromInput? textFromInput : 'популярное в разделе ' + section;
-        const searchUrl = `https://www.google.com/search?q=${encodeURIComponent(searchText)}`;
-        window.electronAPI.openSearch(searchUrl);
     } catch (error) {
         console.error('Ошибка:', error);
     }
@@ -3621,15 +4121,55 @@ function showTitleSuggestion(fullTitle) {
 
     wrapper.appendChild(suggestion);
 
-    // При клике — заменяем название
-    suggestion.addEventListener('click', () => {
+    // ✅ ОБРАБОТЧИК КЛИКА ПО ПОДСКАЗКЕ
+    suggestion.addEventListener('click', (e) => {
+        e.stopPropagation(); // Останавливаем всплытие
         nameInput.value = fullTitle;
         updatePreview(fullTitle, null, null, null);
         suggestion.remove();
     });
+
+    // ✅ ОБРАБОТЧИК КЛИКА ВНЕ ПОДСКАЗКИ
+    function handleClickOutside(e) {
+        // Проверяем, что клик был НЕ внутри подсказки и НЕ внутри инпута
+        if (suggestion &&
+            !suggestion.contains(e.target) &&
+            e.target !== nameInput) {
+            suggestion.remove();
+            // Удаляем обработчик после удаления подсказки
+            document.removeEventListener('click', handleClickOutside);
+        }
+    }
+
+    // Добавляем обработчик с небольшой задержкой,
+    // чтобы не сработал на том же клике, который вызвал появление подсказки
+    setTimeout(() => {
+        document.addEventListener('click', handleClickOutside);
+    }, 10);
+
+    // ✅ ОБРАБОТЧИК НАЖАТИЯ ESC (закрыть подсказку)
+    function handleKeyDown(e) {
+        if (e.key === 'Escape') {
+            if (suggestion && suggestion.parentNode) {
+                suggestion.remove();
+                document.removeEventListener('click', handleClickOutside);
+                document.removeEventListener('keydown', handleKeyDown);
+            }
+        }
+    }
+    document.addEventListener('keydown', handleKeyDown);
+
+    // ✅ Если подсказка уже была удалена — чистим обработчики
+    // (это сработает, если подсказку удалили через клик по ней)
+    const observer = new MutationObserver(() => {
+        if (!suggestion.parentNode) {
+            document.removeEventListener('click', handleClickOutside);
+            document.removeEventListener('keydown', handleKeyDown);
+            observer.disconnect();
+        }
+    });
+    observer.observe(wrapper, { childList: true });
 }
-
-
 
 function setupAddButton() {
     const toggleBtn = document.getElementById('toggleAddFormBtn');
