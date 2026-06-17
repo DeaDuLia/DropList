@@ -8,7 +8,6 @@ let activeParsingWindows = new Set();
 export const DEFAULT_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 export function closeAllParsingWindows() {
-    console.log(`[Parsing] Closing ${activeParsingWindows.size} windows`);
     for (const win of activeParsingWindows) {
         if (win && !win.isDestroyed()) {
             destroyWindowCompletely(win);
@@ -72,7 +71,6 @@ export async function parseSite(name, searchUrl, targetUrlParser, dataParser, ne
         return new Promise((resolve) => {
             loadTimeout = setTimeout(() => {
                 if (hiddenWindow && !hiddenWindow.isDestroyed()) {
-                    console.log(`[${name}] page timeout, stopping load`);
                     hiddenWindow.webContents.stop();
                 }
                 resolve();
@@ -86,7 +84,6 @@ export async function parseSite(name, searchUrl, targetUrlParser, dataParser, ne
 
     try {
         trackParsingWindow(hiddenWindow);
-        console.log(`[${name}] Searching: ${searchUrl}`);
         hiddenWindow.loadURL(searchUrl);
         if (needExtraWait) { await new Promise(r => setTimeout(r, 2000)); }
         await waitForPageLoad();
@@ -97,10 +94,8 @@ export async function parseSite(name, searchUrl, targetUrlParser, dataParser, ne
 
         if (!targetUrl) {
             cleanup();
-            console.log(`[${name}] Info Not Found.`);
             return { tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null };
         }
-        console.log(`[${name}] Info Found: ${targetUrl}`);
         hiddenWindow.loadURL(targetUrl);
         await waitForPageLoad();
         if (!hiddenWindow || hiddenWindow.isDestroyed()) {

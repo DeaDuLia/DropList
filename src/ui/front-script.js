@@ -2207,11 +2207,48 @@ async function loadMoreItems() {
 async function loadStatusFilter() {
     try {
         const statuses = await window.electronAPI.getStatuses();
+        const section = document.querySelector('.nav-item.active')?.dataset.section;
+
+        // Получаем текущие данные
+        const data = window.allSectionData || [];
+
+        // Считаем, сколько карточек каждого статуса
+        const statusCount = {};
+        data.forEach(item => {
+            const status = item.status || 'Уточнить';
+            statusCount[status] = (statusCount[status] || 0) + 1;
+        });
+
         const statusFilter = document.getElementById('statusFilter');
         if (statusFilter) {
-            statusFilter.innerHTML = `<button class="filter-button active" data-status="Все">Все</button>
-                ${statuses.map(s => `<button class="filter-button" data-status="${s}">${s}</button>`).join('')}
+            // Фильтруем статусы: показываем только те, у которых есть карточки
+            const activeStatuses = statuses.filter(s => statusCount[s] > 0);
+            const currentFilter = currentFilters.statusFilter || 'Все';
+            if (currentFilter !== 'Все' && !activeStatuses.includes(currentFilter)) {
+                currentFilters.statusFilter = 'Все';
+            }
+
+            statusFilter.innerHTML = `
+                <button class="filter-button active" data-status="Все">Все (${data.length})</button>
+                ${activeStatuses.map(s =>
+                `<button class="filter-button" data-status="${s}">${s} (${statusCount[s]})</button>`
+            ).join('')}
             `;
+
+            const activeButton = statusFilter.querySelector(`.filter-button[data-status="${currentFilters.statusFilter || 'Все'}"]`);
+            if (activeButton) {
+                statusFilter.querySelectorAll('.filter-button').forEach(btn => btn.classList.remove('active'));
+                activeButton.classList.add('active');
+            }
+
+            // Если фильтр изменился — перефильтровываем карточки
+            if (currentFilter !== currentFilters.statusFilter) {
+                filterCards();
+            }
+
+            statusFilter.addEventListener('change', () => {
+                filterCards();
+            });
 
             // Добавляем обработчик изменения фильтра
             statusFilter.addEventListener('change', () => {
@@ -2942,6 +2979,7 @@ async function addNewData(section) {
 
         // Добавляем новую карточку с тегами
         await window.electronAPI.addData(section, cardData);
+        await loadStatusFilter();
         if (nameInput) {
             delete nameInput.dataset.fetchedReleaseDate;
         }

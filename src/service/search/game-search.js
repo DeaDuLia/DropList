@@ -35,8 +35,6 @@ export async function fetchSteamGameTags(gameName) {
             const appId = game.id;
             const fullTitle = game.name;
 
-            console.log(`[Steam] Found ID for "${gameName}": ${appId}`);
-
             // 2. Открываем страницу игры
             const gameUrl = `https://store.steampowered.com/app/${appId}/?l=russian`;
 
@@ -58,11 +56,9 @@ export async function fetchSteamGameTags(gameName) {
             });
 
             hiddenWindow.loadURL(gameUrl);
-            console.log(`[Steam] Page loading started`);
 
             const waitForLoad = new Promise((resolve) => {
                 hiddenWindow.webContents.once('did-finish-load', () => {
-                    console.log(`[Steam] Page finished loading`);
                     isLoaded = true;
                     resolve();
                 });
@@ -70,7 +66,6 @@ export async function fetchSteamGameTags(gameName) {
                 loadTimeout = setTimeout(() => {
                     if (!isLoaded) {
                         if (hiddenWindow && !hiddenWindow.isDestroyed()) {
-                            console.log(`[Steam] Page timeout, stopping load`);
                             hiddenWindow.webContents.stop();
                             isLoaded = true;
                         }
@@ -86,7 +81,6 @@ export async function fetchSteamGameTags(gameName) {
             }
             currentUrl = hiddenWindow.webContents.getURL();
             if (!currentUrl || currentUrl === 'about:blank' || currentUrl.includes('error')) {
-                console.log('[Steam] Page not loaded properly');
                 finish({ tags: [], coverUrl: '', fullTitle: '', releaseDate: null, description: '', price: null });
                 return;
             }
@@ -197,7 +191,6 @@ export async function fetchSteamGameTags(gameName) {
                 })();
             `);
 
-            console.log(`[Steam] Price: ${gameData.price} ₽, Discount: ${gameData.discount}%`);
 
             finish({
                 tags: gameData.tags,
@@ -338,7 +331,6 @@ export async function fetchKupikodPrice(gameName) {
 export async function fetchKupikodPriceAPI(gameName) {
     try {
         const url = `https://search-v2.kupikod.com/search?q=${encodeURIComponent(gameName)}&limit=1`;
-        console.log(`[Kupikod API] Request: ${url}`);
 
         const response = await fetch(url, {
             headers: {
@@ -378,13 +370,10 @@ export async function fetchSteamAPIData(gameName) {
         const searchData = await searchResponse.json();
 
         if (!searchData.items || searchData.items.length === 0) {
-            console.log(`[Steam API] Game not found: ${gameName}`);
             return null;
         }
         const game = searchData.items[0];
         const appId = game.id;
-
-        console.log(`[Steam API] Selected: "${game.name}" (ID: ${appId})`);
 
         // Получаем детали
         const detailsUrl = `https://store.steampowered.com/api/appdetails?appids=${appId}&cc=ru&l=russian`;
