@@ -17,7 +17,7 @@ const {getStoredUser, clearUserSession, clearTagsDirty, clearExpectedReleasesDir
 } = require("./database/local-database");
 const {syncUserData, syncDirtySections, getValidToken, saveSectionToFirestore, saveAllTagsToFirestore,
     saveExpectedReleasesToFirestore, updateSyncTime, loadExpectedReleasesFromFirestore, getSyncTime,
-    loadAllTagsFromFirestore, saveFavoritesToFirestore, loadFavoritesFromFirestore
+    loadAllTagsFromFirestore, saveFavoritesToFirestore, loadFavoritesFromFirestore, auth
 } = require("./database/firestore");
 
 
