@@ -537,8 +537,7 @@ export async function saveFavoritesToFirestore(uid, idToken) {
                         mapValue: {
                             fields: {
                                 card_name: { stringValue: item.card_name },
-                                section: { stringValue: item.section },
-                                added_at: { timestampValue: item.added_at || new Date().toISOString() }
+                                section: { stringValue: item.section }
                             }
                         }
                     }))
@@ -590,8 +589,7 @@ export async function loadFavoritesFromFirestore(uid, idToken) {
                 const fields = item.mapValue.fields;
                 favorites.push({
                     card_name: fields.card_name?.stringValue || '',
-                    section: fields.section?.stringValue || '',
-                    added_at: fields.added_at?.timestampValue || null
+                    section: fields.section?.stringValue || ''
                 });
             }
         }

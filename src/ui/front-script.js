@@ -256,7 +256,7 @@ function setupDragOnHold() {
                     // Просто зажали — открываем панель
                     openPanel();
                 }
-            }, 100);
+            }, 115);
         });
 
         item.addEventListener('mousemove', (e) => {
