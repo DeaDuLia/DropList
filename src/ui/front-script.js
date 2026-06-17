@@ -103,7 +103,6 @@ function renderNavigation() {
                 draggable="${isPanelOpen}"
                 data-icon="${config.icon}"
                 data-label="${config.label}">
-                <span>${config.icon}</span>
                 <span>${config.label}</span>
             </li>
         `;
@@ -158,7 +157,6 @@ function renderHiddenSections() {
             const config = SECTION_CONFIG[section];
             return `
                 <div class="hidden-section-item" data-section="${section}" draggable="true">
-                    <span>${config.icon}</span>
                     <span>${config.label}</span>
                     <span class="restore-icon">↩</span>
                 </div>
