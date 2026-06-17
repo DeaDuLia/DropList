@@ -263,7 +263,7 @@ async function createWindow() {
     }
 
     // ТОЛЬКО ПОСЛЕ ЭТОГО ЗАГРУЖАЕМ СТРАНИЦУ
-    win.loadFile('index.html');
+    win.loadFile('./src/ui/index.html');
 
     win.webContents.on('did-finish-load', () => {
         if (storedUser && storedUser.is_authenticated) {
@@ -337,7 +337,7 @@ ipcMain.on('open-external', (event, url, name) => {
     externalWindow.webContents.setWindowOpenHandler(() => {
         return { action: 'deny' };
     });
-    externalWindow.loadFile('loading.html');
+    externalWindow.loadFile('./src/ui/loading.html');
 
 
 

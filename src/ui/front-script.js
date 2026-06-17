@@ -642,7 +642,7 @@ function setupEditDescriptionButtons() {
                         <div style="display: flex; gap: 6px; align-items: center;">
                             <input type="text" id="tagInput" maxlength="50" placeholder="Например: хоррор, комедия, шедевр" autocomplete="off" style="flex: 1; background: #1e1e1e; border: 1px solid #4a4a4a; border-radius: 8px; color: white; padding: 8px 12px; font-size: 13px;">
                             <button id="searchTagsOnlineBtn" class="search-tags-online-btn" title="Поиск тегов онлайн" style="background: transparent; border: none; cursor: pointer; padding: 6px; display: flex; align-items: center; justify-content: center; border-radius: 6px;">
-                                <img src="assets/icons/find.svg" alt="🔍" style="width: 18px; height: 18px; filter: brightness(0) invert(1); opacity: 0.6;">
+                                <img src="../../assets/icons/find.svg" alt="🔍" style="width: 18px; height: 18px; filter: brightness(0) invert(1); opacity: 0.6;">
                             </button>
                         </div>
                     </div>
@@ -944,8 +944,8 @@ function showSyncChoiceModal(localData, remoteData, localTime, remoteTime) {
                 <h3>⚠️ Конфликт синхронизации</h3>
                 <p>Локальные и облачные данные различаются.</p>
                 <div style="background: rgba(0,0,0,0.2); padding: 10px; border-radius: 8px; margin: 15px 0;">
-                    <p><img src="assets/icons/folder.svg" alt="📁" class="button-icon" style="width:14px;height:14px"> Локальные: ${localDate}</p>
-                    <p><img src="assets/icons/cloud.svg" alt="☁️" class="button-icon" style="width:14px;height:14px"> Облачные: ${remoteDate}</p>
+                    <p><img src="../../assets/icons/folder.svg" alt="📁" class="button-icon" style="width:14px;height:14px"> Локальные: ${localDate}</p>
+                    <p><img src="../../assets/icons/cloud.svg" alt="☁️" class="button-icon" style="width:14px;height:14px"> Облачные: ${remoteDate}</p>
                 </div>
                 <p>Что вы хотите сохранить?</p>
                 <div style="display: flex; gap: 10px; margin-top: 20px;">
@@ -1025,7 +1025,7 @@ function addUpdateButton() {
     updateButton.id = 'checkUpdateBtn';
     updateButton.className = 'header-button';
     updateButton.title = 'Проверить обновления';
-    updateButton.innerHTML = '<img src="assets/icons/update.svg" alt="🔄" class="button-icon">';
+    updateButton.innerHTML = '<img src="../../assets/icons/update.svg" alt="🔄" class="button-icon">';
 
     updateButton.addEventListener('click', async () => {
         await window.updateAPI.checkForUpdates(true);
@@ -1375,10 +1375,10 @@ function showError(message) {
 
 function updateAuthButton(email) {
     if (email) {
-        authBtn.innerHTML = `<img src="assets/icons/user.svg" alt="👤" class="button-icon"> ${email.split('@')[0]}`;
+        authBtn.innerHTML = `<img src="../../assets/icons/user.svg" alt="👤" class="button-icon"> ${email.split('@')[0]}`;
         authBtn.title = "Нажмите для выхода";
     } else {
-        authBtn.innerHTML = `<img src="assets/icons/user.svg" alt="👤" class="button-icon"> Войти`;
+        authBtn.innerHTML = `<img src="../../assets/icons/user.svg" alt="👤" class="button-icon"> Войти`;
         authBtn.title = "Войти";
     }
 }
@@ -1649,22 +1649,22 @@ async function renderSection(section, data, resetPagination = true, preserveFilt
         <div class="filter-controls-panel">
             <div class="filter-container sort-buttons-container">
                 <button class="sort-button active" data-sort="date" title="По дате добавления">
-                    <img src="assets/icons/sort-date.svg" alt="📅" class="button-icon-no-text">
+                    <img src="../../assets/icons/sort-date.svg" alt="📅" class="button-icon-no-text">
                 </button>
                 <button class="sort-button" data-sort="alphabet" title="По алфавиту">
-                    <img src="assets/icons/sort-alpha.svg" alt="🔤" class="button-icon-no-text">
+                    <img src="../../assets/icons/sort-alpha.svg" alt="🔤" class="button-icon-no-text">
                 </button>
                 <button class="sort-button" data-sort="rating" title="По рейтингу и статусу">
-                    <img src="assets/icons/sort-rating.svg" alt="⭐" class="button-icon-no-text">
+                    <img src="../../assets/icons/sort-rating.svg" alt="⭐" class="button-icon-no-text">
                 </button>
             </div>
             <div class="search-container">
                 <input type="text" id="searchInput" placeholder="Поиск по названию" value="${currentFilters.searchQuery}">
                 <div id="searchSuggestions" class="search-suggestions"></div>
-                <button id="searchBtn"><img src="assets/icons/find.svg" alt="🔍" class="button-icon-no-text"></button>
+                <button id="searchBtn"><img src="../../assets/icons/find.svg" alt="🔍" class="button-icon-no-text"></button>
                 <button id="clearSearchBtn" class="clear-search-btn">✕</button>
-                <button id="searchInWeb" title="Поиск в интернете"><img src="assets/icons/find.svg" alt="🔍" class="button-icon">интернет</button>
-                <button id="randomBtnSection" title="Случайная карточка"><img src="assets/icons/random.svg" alt="🎲" class="button-icon">Случайное</button>
+                <button id="searchInWeb" title="Поиск в интернете"><img src="../../assets/icons/find.svg" alt="🔍" class="button-icon">интернет</button>
+                <button id="randomBtnSection" title="Случайная карточка"><img src="../../assets/icons/random.svg" alt="🎲" class="button-icon">Случайное</button>
             </div>
             
             <!-- Кнопка добавления должна быть ВНЕ search-container -->
@@ -2244,7 +2244,7 @@ function getAddFormHTML(addMoreChecked = false, visible = '') {
                         ${getCardIconHTML({ name: 'Название', icoUrl: '' })}
                         <div class="preview-overlay">
                             <button id="previewSearchBtn" class="preview-search-btn" title="Найти обложку">
-                                <img src="assets/icons/findImage.svg" alt="🔍" style="width: 32px; height: 32px;">
+                                <img src="../../assets/icons/findImage.svg" alt="🔍" style="width: 32px; height: 32px;">
                             </button>
                         </div>
                         <div class="preview-data-info">
@@ -2475,15 +2475,15 @@ function renderCardList(cards) {
              data-release-date="${card.releaseDate || ''}"
              style="display: block;">
             <div class="card-hover-icon">
-                <img src="assets/icons/search-web.svg" alt="🔍">
+                <img src="../../assets/icons/search-web.svg" alt="🔍">
             </div>
             <div class="card-buttons">
                 <button class="card-btn edit-desc-btn" data-name="${escapeHtml(card.name)}">
-                    <img src="assets/icons/note.svg" alt="📝" class="button-icon-no-text">
+                    <img src="../../assets/icons/note.svg" alt="📝" class="button-icon-no-text">
                     <span class="btn-text">Заметки</span>
                 </button>
                 <button class="card-btn change-image-btn" data-name="${escapeHtml(card.name)}">
-                    <img src="assets/icons/changeImage.svg" alt="🖼️" class="button-icon-no-text">
+                    <img src="../../assets/icons/changeImage.svg" alt="🖼️" class="button-icon-no-text">
                     <span class="btn-text">Обложка</span>
                 </button>
                 <button class="card-btn change-category-btn" 
@@ -2492,11 +2492,11 @@ function renderCardList(cards) {
                     data-rating="${card.rating}" 
                     datatype="${card.icoUrl}" 
                     data-description="${escapeHtml(card.description || '')}">
-                    <img src="assets/icons/changeCategory.svg" alt="⇄" class="button-icon-no-text">
+                    <img src="../../assets/icons/changeCategory.svg" alt="⇄" class="button-icon-no-text">
                     <span class="btn-text">Переместить</span>
                 </button>
                 <button class="card-btn delete-btn" data-name="${escapeHtml(card.name)}">
-                    <img src="assets/icons/delete.svg" alt="🗑️" class="button-icon-no-text">
+                    <img src="../../assets/icons/delete.svg" alt="🗑️" class="button-icon-no-text">
                 </button>
             </div>
             ${getCardIconHTML(card)}
