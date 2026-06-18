@@ -75,7 +75,7 @@ export async function parseSite(name, searchUrl, targetUrlParser, dataParser, ne
                     hiddenWindow.webContents.stop();
                 }
                 resolve();
-            }, 5000);
+            }, 2000);
             hiddenWindow.webContents.once('did-finish-load', () => {
                 clearTimeout(loadTimeout);
                 resolve();
