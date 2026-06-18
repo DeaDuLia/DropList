@@ -253,10 +253,9 @@ function setupDragOnHold() {
                 if (isMouseDown && !isPanelOpen) {
                     isHeld = true;
                     if (navigator.vibrate) navigator.vibrate(15);
-                    // Просто зажали — открываем панель
                     openPanel();
                 }
-            }, 115);
+            }, 400);
         });
 
         item.addEventListener('mousemove', (e) => {

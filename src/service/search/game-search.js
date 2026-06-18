@@ -71,7 +71,7 @@ export async function fetchSteamGameTags(gameName) {
                         }
                         resolve();
                     }
-                }, 5000);
+                }, 2000);
             });
 
             await waitForLoad;
