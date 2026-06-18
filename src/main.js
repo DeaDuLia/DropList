@@ -11,14 +11,14 @@ const LocalDatabase = require('./database/local-database');
 const {fetchSteamAPIData, fetchSteamGameTags, fetchKupikodPriceAPI} = require("./service/search/game-search.js");
 const {fetchLitresBookTags, fetchLitresBookAPIData, fetchChitaiGorodBook} = require("./service/search/book-search.js");
 const {fetchKinopoiskMovieTags, fetchFilmRuSerialsTags} = require("./service/search/movie-search.js");
-const {fetchCardData, updateAllReleaseDates, closeAllParsingWindows} = require("./service/search/data-search");
+const {fetchCardData, updateAllReleaseDates, closeAllParsingWindows} = require("./service/search/data-search.js");
 const {getStoredUser, clearUserSession, clearTagsDirty, clearExpectedReleasesDirty, markSectionDirty, markTagsDirty,
     markExpectedReleasesDirty, saveUserSession, markFavoritesDirty, clearFavoritesDirty
-} = require("./database/local-database");
+} = require("./database/local-database.js");
 const {syncUserData, syncDirtySections, getValidToken, saveSectionToFirestore, saveAllTagsToFirestore,
     saveExpectedReleasesToFirestore, updateSyncTime, loadExpectedReleasesFromFirestore, getSyncTime,
     loadAllTagsFromFirestore, saveFavoritesToFirestore, loadFavoritesFromFirestore, auth
-} = require("./database/firestore");
+} = require("./database/firestore.js");
 
 
 autoUpdater.logger = log;
