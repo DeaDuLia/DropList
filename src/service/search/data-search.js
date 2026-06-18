@@ -3,7 +3,7 @@ import {fetchFilmRuSerialsTags, fetchKinopoiskMovieTags} from "./movie-search.js
 import {fetchChitaiGorodBook, fetchLitresBookTags} from "./book-search.js";
 import {BrowserWindow} from "electron";
 import {db, markExpectedReleasesDirty, statements} from "../../database/local-database.js";
-import {fetchYummyAniTags} from "./anime-search.js";
+import {fetchAnimeGoTags, fetchYummyAniTags} from "./anime-search.js";
 let activeParsingWindows = new Set();
 
 export const DEFAULT_USER_AGENT = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
@@ -86,13 +86,14 @@ export async function parseSite(name, searchUrl, targetUrlParser, dataParser, ne
     try {
         trackParsingWindow(hiddenWindow);
         hiddenWindow.loadURL(searchUrl);
+        console.log(name, ' - ', searchUrl);
         if (needExtraWait) { await new Promise(r => setTimeout(r, 2000)); }
         await waitForPageLoad();
         if (!hiddenWindow || hiddenWindow.isDestroyed()) {
             return { tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null };
         }
         let targetUrl = await hiddenWindow.webContents.executeJavaScript(targetUrlParser);
-
+        console.log(name, ' - ', targetUrl);
         if (!targetUrl) {
             cleanup();
             return { tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null };
@@ -103,6 +104,7 @@ export async function parseSite(name, searchUrl, targetUrlParser, dataParser, ne
             return { tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null };
         }
         let result = await hiddenWindow.webContents.executeJavaScript(dataParser);
+        console.log(name, ' - ', result);
         cleanup();
         return result;
     } catch (error) {
@@ -131,7 +133,11 @@ export function createHiddenWindow() {
 export async function fetchCardData(cardName, section) {
     switch (section) {
         case 'anime':
-            const animeResult = await fetchYummyAniTags(cardName);
+            let animeResult = await fetchAnimeGoTags(cardName);
+            console.log('[AnimeGo] DEBUG:', JSON.stringify(animeResult.debug, null, 2)); // 👈 Выводим отладку
+            if (animeResult == null || animeResult.tags === null || animeResult.tags.length === 0) {
+                animeResult = await fetchYummyAniTags(cardName);
+            }
             return { tags: animeResult?.tags || [], coverUrl: animeResult?.coverUrl || '', fullTitle: animeResult?.fullTitle || '', releaseDate: animeResult?.releaseDate || null };
         case 'games':
             let gameResult = await fetchSteamGameTags(cardName);
