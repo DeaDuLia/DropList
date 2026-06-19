@@ -3654,11 +3654,21 @@ function setupCardClickHandlers() {
         let lastFetchedCard = null;
 
         card.addEventListener('mouseenter', (e) => {
+            if (e.target.closest('.edit-desc-btn') ||
+                e.target.closest('.change-image-btn') ||
+                e.target.closest('.change-category-btn') ||
+                e.target.closest('.delete-btn') ||
+                e.target.closest('.data-title') ||
+                e.target.closest('.editable-field') ||
+                e.target.closest('.fav-btn')) {
+                return;
+            }
             const itemName = card.dataset.name;
             const description = card.dataset.description || '';
             const tags = JSON.parse(card.dataset.tags || '[]');
             const releaseDate = card.dataset.releaseDate || null;
             const section = document.querySelector('.nav-item.active')?.dataset.section;
+
 
             if (priceFetchTimer) clearTimeout(priceFetchTimer);
 
@@ -3788,7 +3798,8 @@ function setupCardClickHandlers() {
                 e.target.closest('.change-category-btn') ||
                 e.target.closest('.delete-btn') ||
                 e.target.closest('.data-title') ||
-                e.target.closest('.editable-field')) {
+                e.target.closest('.editable-field') ||
+                e.target.closest('.fav-btn')) {
                 return;
             }
             const itemName = this.dataset.name;
