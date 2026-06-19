@@ -1014,7 +1014,7 @@ function setupEditDescriptionButtons() {
                     
                     <!-- Поле для даты релиза -->
                     <label style="font-size: 12px; opacity: 0.7; margin-bottom: 4px;">Дата релиза</label>
-                    <input type="date" id="editReleaseDate" value="${currentReleaseDate}" style="width: 100%; background: #1e1e1e; border: 1px solid #4a4a4a; border-radius: 8px; color: white; padding: 8px; margin-bottom: 12px;">
+                    <input type="date" id="editReleaseDate" value="${currentReleaseDate}" style="width: 100%; background: #1e1e1e; border: 1px solid #4a4a4a; border-radius: 8px; color: white; padding: 8px; margin-bottom: 12px; color-scheme: light; accent-color: #0078d4;">
                     ${currentReleaseDate ? `<p style="font-size: 11px; opacity: 0.5; margin-top: -8px; margin-bottom: 12px;">Сейчас: ${formattedDate}</p>` : '<p style="font-size: 11px; opacity: 0.5; margin-top: -8px; margin-bottom: 12px;">Оставьте пустым, если нет даты релиза</p>'}
                     
                     <!-- Поле для заметки -->

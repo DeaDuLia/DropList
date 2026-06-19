@@ -2043,16 +2043,11 @@ select option[value="Ожидается"] { background-color: var(--rating-waiti
     flex-wrap: wrap;
     gap: 6px;
     margin-bottom: 8px;
-    min-height: 28px;
-}
-
-/* Разделитель между тегами и полем ввода */
-.tags-list {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 8px;
-    margin-bottom: 8px;
     min-height: 32px;
+    max-height: 100px;           /* 👈 Максимальная высота */
+    overflow-y: auto;            /* 👈 Включаем вертикальный скролл */
+    padding: 4px 2px;            /* 👈 Немного отступов для скролла */
+    scrollbar-width: thin;
 }
 
 .tags-list:not(:empty) {
@@ -2845,4 +2840,8 @@ select option[value="Ожидается"] { background-color: var(--rating-waiti
 .hidden-sections-panel * {
     user-select: none !important;
     -webkit-user-select: none !important;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator {
+    filter: invert(1);
 }
