@@ -3068,28 +3068,70 @@ async function addNewData(section) {
                 return;
             }
 
-            // При замене — сначала удаляем старую карточку с её тегами
+            // ===== ЗАМЕНА =====
             await window.electronAPI.deleteData(section, cardData.name);
+
+            const allIndex = window.allSectionData.findIndex(item => item.name === cardData.name);
+            if (allIndex !== -1) window.allSectionData.splice(allIndex, 1);
+
+            const filteredIndex = window.filteredData.findIndex(item => item.name === cardData.name);
+            if (filteredIndex !== -1) window.filteredData.splice(filteredIndex, 1);
+
+            const oldCard = document.querySelector(`.data-card[data-name="${cardData.name}"]`);
+            if (oldCard) oldCard.remove();
         }
 
-        // Добавляем новую карточку с тегами
+        // ===== ДОБАВЛЕНИЕ =====
         await window.electronAPI.addData(section, cardData);
+
+        const newCard = {
+            name: cardData.name,
+            icoUrl: cardData.icoUrl || '',
+            rating: cardData.rating || '0',
+            status: cardData.status || 'Уточнить',
+            description: '',
+            tags: cardData.tags || [],
+            releaseDate: cardData.releaseDate || null
+        };
+        window.allSectionData.push(newCard);
+        window.filteredData.push(newCard);
+
+        const dataList = document.getElementById('dataList');
+        if (dataList) {
+            const favorites = window._currentFavorites || [];
+            const cardHTML = renderCardList([newCard], favorites);
+            dataList.insertAdjacentHTML('beforeend', cardHTML);
+        }
+
+        updateStats();
         await loadStatusFilter();
+
+        // ===== ОЧИСТКА ФОРМЫ И ЗАКРЫТИЕ =====
+        // ✅ СКРЫВАЕМ ФОРМУ
+        const addForm = document.getElementById('addForm');
+        const overlay = document.querySelector('.add-form-overlay');
+        const toggleBtn = document.getElementById('toggleAddFormBtn');
+
+        if (addForm) addForm.classList.remove('visible');
+        if (overlay) overlay.classList.remove('visible');
+        if (toggleBtn) toggleBtn.textContent = '+ Добавить';
+
+        // Очищаем поля
         if (nameInput) {
+            nameInput.value = '';
             delete nameInput.dataset.fetchedReleaseDate;
         }
-        let data = await window.electronAPI.getData(section);
-        await renderSection(section, data, true, false, false, true);
-
-        let overlay = document.querySelector('.add-form-overlay');
-        overlay.classList.remove('visible');
-
-        // Очищаем форму
-        nameInput.value = '';
-        icoInput.value = '';
+        if (icoInput) icoInput.value = '';
         if (window.clearAddFormTags) {
             window.clearAddFormTags();
         }
+
+        // Сброс рейтинга и статуса на дефолт
+        if (ratingSelect) ratingSelect.value = '0';
+        if (statusSelect) statusSelect.value = 'Уточнить';
+
+        // Обновляем превью
+        updatePreview('Название', '', '0', 'Уточнить');
 
     } catch (error) {
         console.error('Ошибка при добавлении:', error);
@@ -3379,18 +3421,14 @@ function getStatusColor(status) {
     return statusColors[status] || 'var(--rating-not-played)';
 }
 
-function setupDeleteButtons() {
-    const oldButtons = document.querySelectorAll('.delete-btn');
-    oldButtons.forEach(btn => {
-        btn.replaceWith(btn.cloneNode(true));
-    });
+// front-script.js
 
+function setupDeleteButtons() {
     document.querySelectorAll('.delete-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
             e.stopPropagation();
             const itemName = btn.dataset.name;
 
-            // Создаем модальное окно подтверждения
             const confirmModal = document.createElement('div');
             confirmModal.className = 'modal';
             confirmModal.style.display = 'block';
@@ -3406,7 +3444,6 @@ function setupDeleteButtons() {
 
             document.body.appendChild(confirmModal);
 
-            // Обработчики для кнопок
             confirmModal.querySelector('.cancel-btn').addEventListener('click', () => {
                 document.body.removeChild(confirmModal);
             });
@@ -3414,18 +3451,28 @@ function setupDeleteButtons() {
             confirmModal.querySelector('.confirm-btn').addEventListener('click', async () => {
                 try {
                     const section = document.querySelector('.nav-item.active')?.dataset.section;
+
+                    // 1. Удаляем из БД
                     await window.electronAPI.deleteData(section, itemName);
-                    // Удаляем карточку из DOM
-                    const card = btn.closest('.data-card');
-                    if (card) card.remove();
-                    document.body.removeChild(confirmModal);
-                    const itemIndex = window.allSectionData.findIndex(item => item.name === itemName);
-                    if (itemIndex !== -1) window.allSectionData.splice(itemIndex, 1);
+
+                    // 2. Удаляем из массивов
+                    const allIndex = window.allSectionData.findIndex(item => item.name === itemName);
+                    if (allIndex !== -1) window.allSectionData.splice(allIndex, 1);
 
                     const filteredIndex = window.filteredData.findIndex(item => item.name === itemName);
-                    if (filteredIndex !== -1) {
-                        window.filteredData.splice(filteredIndex, 1);
-                    }
+                    if (filteredIndex !== -1) window.filteredData.splice(filteredIndex, 1);
+
+                    // 3. Удаляем карточку из DOM (одну!)
+                    const card = btn.closest('.data-card');
+                    if (card) card.remove();
+
+                    // 4. Обновляем статистику и фильтры
+                    updateStats();
+                    await loadStatusFilter();
+
+                    // 5. Закрываем модалку
+                    document.body.removeChild(confirmModal);
+
                 } catch (error) {
                     console.error('Не удалось удалить:', error);
                     await showError('Не удалось удалить');
@@ -3433,7 +3480,6 @@ function setupDeleteButtons() {
                 }
             });
 
-            // Закрытие при клике вне модального окна
             confirmModal.addEventListener('click', (e) => {
                 if (e.target === confirmModal) {
                     document.body.removeChild(confirmModal);
