@@ -859,7 +859,7 @@ function showLoadingPreview() {
     const icon = document.querySelector('#previewCard .game-icon');
     if (icon && !icon.dataset.originalSrc) {
         icon.dataset.originalSrc = icon.src;
-        icon.src = 'assets/images/search-loading.gif';  // локальная гифка
+        icon.src = '../../assets/images/search-loading.gif';  // локальная гифка
     }
 }
 
