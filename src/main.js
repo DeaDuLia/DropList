@@ -5,7 +5,7 @@ const path = require('path');
 const https = require('https');
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
-const { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } = require('firebase/auth');
+const { sendPasswordResetEmail, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } = require('firebase/auth');
 
 const LocalDatabase = require('./database/local-database');
 const {fetchSteamAPIData, fetchSteamGameTags, fetchKupikodPriceAPI} = require("./service/search/game-search.js");
@@ -19,7 +19,6 @@ const {syncUserData, syncDirtySections, getValidToken, saveSectionToFirestore, s
     saveExpectedReleasesToFirestore, updateSyncTime, loadExpectedReleasesFromFirestore, getSyncTime,
     loadAllTagsFromFirestore, saveFavoritesToFirestore, loadFavoritesFromFirestore, auth
 } = require("./database/firestore.js");
-
 
 autoUpdater.logger = log;
 
@@ -244,6 +243,15 @@ app.whenReady().then(() => {
     setTimeout(() => {
         updateAllReleaseDates();
     }, 5000);
+
+    setTimeout(() => {
+        const storedUser = getStoredUser();
+        if (storedUser && storedUser.is_authenticated) {
+            sendSyncStatus('idle', 'Синхронизировано');
+        } else {
+            sendSyncStatus('idle', 'Не авторизован');
+        }
+    }, 1000);
 });
 
 setInterval(() => {
@@ -252,11 +260,7 @@ setInterval(() => {
 
 app.on('before-quit', async (event) => {
     event.preventDefault();
-
-    const storedUser = getStoredUser();
-    if (storedUser && storedUser.is_authenticated && storedUser.idToken) {
-        await syncDirtySections(storedUser.uid, storedUser.idToken);
-    }
+    stopBackgroundSync();
 
     LocalDatabase.db.pragma('wal_checkpoint(FULL)');
     LocalDatabase.db.close();
@@ -1073,6 +1077,8 @@ ipcMain.handle('auth-sign-in', async (event, email, password) => {
         const user = userCredential.user;
         const idToken = await user.getIdToken();
         const refreshToken = user.refreshToken; // 👈 ПОЛУЧАЕМ
+        startBackgroundSync();
+        sendSyncStatus('idle', 'Синхронизировано');
 
         saveUserSession(user.email, user.uid, idToken, refreshToken);
 
@@ -1137,6 +1143,8 @@ ipcMain.handle('auth-get-current-user', async () => {
 
 ipcMain.handle('auth-sign-out', async () => {
     try {
+        stopBackgroundSync();
+        sendSyncStatus('idle', 'Не авторизован');
         const storedUser = getStoredUser();
         if (storedUser && storedUser.is_authenticated && storedUser.idToken) {
             syncDirtySections(storedUser.uid, storedUser.idToken);
@@ -1278,3 +1286,281 @@ ipcMain.handle('get-favorites-by-section', (event, section) => {
     return LocalDatabase.getFavoritesBySection(section);
 });
 
+ipcMain.handle('sync-all-dirty', async () => {
+    const storedUser = getStoredUser();
+    if (!storedUser || !storedUser.is_authenticated || !storedUser.idToken) {
+        return { success: false, error: 'Пользователь не авторизован' };
+    }
+
+    try {
+        const freshToken = await getValidToken();
+        if (!freshToken) {
+            return { success: false, error: 'Сессия истекла, войдите заново' };
+        }
+
+        // Синхронизируем все dirty разделы
+        await syncDirtySections(storedUser.uid, freshToken);
+        await performSync();
+        return { success: true };
+    } catch (error) {
+        console.error('[Sync] Error:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+ipcMain.handle('sync-all-dirty-with-progress', async (event) => {
+    const storedUser = getStoredUser();
+    if (!storedUser || !storedUser.is_authenticated || !storedUser.idToken) {
+        return { success: false, error: 'Пользователь не авторизован' };
+    }
+
+    try {
+        const freshToken = await getValidToken();
+        if (!freshToken) {
+            return { success: false, error: 'Сессия истекла, войдите заново' };
+        }
+
+        const sections = ['games', 'movies', 'cartoons', 'serials', 'anime', 'books'];
+        const dirtySections = sections.filter(section => LocalDatabase.isSectionDirty(section));
+
+        // Считаем реальное количество шагов
+        let totalSteps = dirtySections.length;
+        if (LocalDatabase.isTagsDirty()) totalSteps++;
+        if (LocalDatabase.isFavoritesDirty()) totalSteps++;
+
+        const dirtyExpectedReleases = LocalDatabase.statements.isExpectedReleasesDirty.get('dirty_expected_releases');
+        if (dirtyExpectedReleases && dirtyExpectedReleases.value === 'true') totalSteps++;
+
+        // Если ничего не грязное — сразу выходим
+        if (totalSteps === 0) {
+            event.sender.send('sync-progress', { percent: 100, status: 'Ничего не изменилось' });
+            await new Promise(r => setTimeout(r, 300));
+            return { success: true };
+        }
+
+        let completedSteps = 0;
+
+        // Функция отправки прогресса
+        const sendProgress = (step, total, status) => {
+            const percent = Math.round((step / total) * 100);
+            event.sender.send('sync-progress', { percent, status });
+        };
+
+        sendProgress(completedSteps, totalSteps, 'Начинаем синхронизацию...');
+        await new Promise(r => setTimeout(r, 100));
+
+        // 1. Синхронизируем dirty разделы
+        for (const section of dirtySections) {
+            const sectionData = LocalDatabase.statements.getDataBySection.all(section);
+            await saveSectionToFirestore(storedUser.uid, freshToken, section, sectionData);
+            LocalDatabase.clearSectionDirty(section);
+            completedSteps++;
+            sendProgress(completedSteps, totalSteps, `Сохранение раздела: ${section}`);
+            await new Promise(r => setTimeout(r, 50));
+        }
+
+        // 2. Теги
+        if (LocalDatabase.isTagsDirty()) {
+            sendProgress(completedSteps, totalSteps, 'Сохранение тегов...');
+            await saveAllTagsToFirestore(storedUser.uid, freshToken);
+            clearTagsDirty();
+            completedSteps++;
+            await new Promise(r => setTimeout(r, 50));
+        }
+
+        // 3. Ожидаемые релизы
+        if (dirtyExpectedReleases && dirtyExpectedReleases.value === 'true') {
+            sendProgress(completedSteps, totalSteps, 'Сохранение дат релизов...');
+            await saveExpectedReleasesToFirestore(storedUser.uid, freshToken);
+            clearExpectedReleasesDirty();
+            completedSteps++;
+            await new Promise(r => setTimeout(r, 50));
+        }
+
+        // 4. Избранное
+        if (LocalDatabase.isFavoritesDirty()) {
+            sendProgress(completedSteps, totalSteps, 'Сохранение избранного...');
+            await saveFavoritesToFirestore(storedUser.uid, freshToken);
+            clearFavoritesDirty();
+            completedSteps++;
+            await new Promise(r => setTimeout(r, 50));
+        }
+
+        // 5. Финальное обновление времени
+        sendProgress(completedSteps, totalSteps, 'Завершение...');
+        const now = new Date().toISOString();
+        await updateSyncTime(storedUser.uid, freshToken, now);
+        LocalDatabase.statements.setStatistic.run('last_firestore_update', now, now);
+
+        // ✅ ОДИН ФИНАЛЬНЫЙ ВЫЗОВ — 100%
+        sendProgress(totalSteps, totalSteps, 'Готово!');
+        await new Promise(r => setTimeout(r, 300));
+
+        return { success: true };
+    } catch (error) {
+        console.error('[Sync] Error:', error);
+        // Отправляем ошибку в прогресс
+        event.sender.send('sync-progress', {
+            percent: 100,
+            status: '❌ Ошибка: ' + error.message
+        });
+        return { success: false, error: error.message };
+    }
+});
+
+let syncInterval = null;
+let isSyncing = false;
+let consecutiveErrors = 0;
+let hasChanges = false;
+let isAppFocused = true;
+
+function sendSyncStatus(status, message = '') {
+    if (win && !win.isDestroyed()) {
+        win.webContents.send('sync-status', { status, message, timestamp: Date.now() });
+    }
+}
+
+function hasDirtyData() {
+    const sections = ['games', 'movies', 'cartoons', 'serials', 'anime', 'books'];
+    for (const section of sections) {
+        if (LocalDatabase.isSectionDirty(section)) return true;
+    }
+    if (LocalDatabase.isTagsDirty()) return true;
+    if (LocalDatabase.isFavoritesDirty()) return true;
+    return false;
+}
+
+function markChanges() {
+    hasChanges = true;
+}
+
+function getSyncInterval() {
+    // Ошибки — увеличиваем
+    if (consecutiveErrors > 0) {
+        return Math.min(60000 * Math.pow(2, consecutiveErrors - 1), 300000);
+    }
+
+    // Есть изменения — чаще
+    if (hasChanges || hasDirtyData()) {
+        return 60000; // 1 минута
+    }
+
+    // Нет изменений — реже
+    return 120000; // 2 минуты
+}
+
+async function performSync() {
+    if (isSyncing) return;
+
+    const storedUser = getStoredUser();
+    if (!storedUser?.is_authenticated) {
+        sendSyncStatus('idle', 'Не авторизован');
+        return;
+    }
+
+    if (!hasChanges && !hasDirtyData()) {
+        sendSyncStatus('idle', 'Синхронизировано');
+        return;
+    }
+
+    isSyncing = true;
+
+    try {
+        const freshToken = await getValidToken();
+        if (!freshToken) {
+            consecutiveErrors++;
+            sendSyncStatus('error', 'Сессия истекла');
+            return;
+        }
+
+        sendSyncStatus('syncing', 'Синхронизация...');
+        await syncDirtySections(storedUser.uid, freshToken);
+
+        consecutiveErrors = 0;
+        hasChanges = false;
+        sendSyncStatus('success', 'Сохранено ✓');
+
+    } catch (error) {
+        console.error('[Sync] Error:', error);
+        consecutiveErrors++;
+        sendSyncStatus('error', 'Ошибка');
+    } finally {
+        isSyncing = false;
+    }
+}
+
+function startBackgroundSync() {
+    if (syncInterval) return;
+
+    console.log('[Sync] Starting');
+    setTimeout(performSync, 5000);
+
+    const interval = getSyncInterval();
+    syncInterval = setInterval(performSync, interval);
+    console.log(`[Sync] Interval: ${interval}ms`);
+}
+
+function stopBackgroundSync() {
+    if (syncInterval) {
+        clearInterval(syncInterval);
+        syncInterval = null;
+        console.log('[Sync] Stopped');
+    }
+}
+
+win?.on('blur', () => {
+    isAppFocused = false;
+    setTimeout(() => {
+        if (!isAppFocused && syncInterval) {
+            clearInterval(syncInterval);
+            syncInterval = setInterval(performSync, 300000);
+            console.log('[Sync] Interval: 5min (background)');
+        }
+    }, 5000);
+});
+
+win?.on('focus', () => {
+    isAppFocused = true;
+    if (syncInterval) {
+        clearInterval(syncInterval);
+        const interval = getSyncInterval();
+        syncInterval = setInterval(performSync, interval);
+        console.log(`[Sync] Interval: ${interval}ms (restored)`);
+    }
+});
+
+ipcMain.handle('auth-reset-password', async (event, email) => {
+    try {
+        if (!email || !email.trim()) {
+            return { success: false, error: 'Введите email' };
+        }
+
+        await sendPasswordResetEmail(auth, email.trim());
+        console.log(`[i] Password reset email sent to: ${email}`);
+
+        return {
+            success: true,
+            message: 'Письмо для сброса пароля отправлено на указанный email'
+        };
+
+    } catch (error) {
+        console.error('[x] Password reset error:', error);
+
+        let errorMessage;
+        switch (error.code) {
+            case 'auth/user-not-found':
+                errorMessage = 'Пользователь с таким email не найден';
+                break;
+            case 'auth/invalid-email':
+                errorMessage = 'Неверный формат email';
+                break;
+            case 'auth/too-many-requests':
+                errorMessage = 'Слишком много запросов. Попробуйте позже';
+                break;
+            default:
+                errorMessage = 'Ошибка при отправке письма: ' + error.message;
+        }
+
+        return { success: false, error: errorMessage };
+    }
+});

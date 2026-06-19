@@ -1,6 +1,14 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
+    syncAllDirtyWithProgress: () => ipcRenderer.invoke('sync-all-dirty-with-progress'),
+    onSyncProgress: (callback) => {
+        ipcRenderer.on('sync-progress', (event, data) => callback(data));
+    },
+    syncAllDirty: () => ipcRenderer.invoke('sync-all-dirty'),
+    onSyncStatus: (callback) => {
+        ipcRenderer.on('sync-status', (event, data) => callback(data));
+    },
     addFavorite: (cardName, section) => ipcRenderer.invoke('add-favorite', cardName, section),
     removeFavorite: (cardName, section) => ipcRenderer.invoke('remove-favorite', cardName, section),
     isFavorite: (cardName, section) => ipcRenderer.invoke('is-favorite', cardName, section),
@@ -22,6 +30,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     authSignIn: (email, password) => ipcRenderer.invoke('auth-sign-in', email, password),
     authSignUp: (email, password) => ipcRenderer.invoke('auth-sign-up', email, password),
     authSignOut: () => ipcRenderer.invoke('auth-sign-out'),
+    authResetPassword: (email) => ipcRenderer.invoke('auth-reset-password', email),
     authGetCurrentUser: () => ipcRenderer.invoke('auth-get-current-user'),
     onRestoreSession: (callback) => {
         ipcRenderer.on('restore-session', (event, user) => callback(user));

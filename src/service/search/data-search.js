@@ -86,14 +86,14 @@ export async function parseSite(name, searchUrl, targetUrlParser, dataParser, ne
     try {
         trackParsingWindow(hiddenWindow);
         hiddenWindow.loadURL(searchUrl);
-        console.log(name, ' - ', searchUrl);
+
         if (needExtraWait) { await new Promise(r => setTimeout(r, 2000)); }
         await waitForPageLoad();
         if (!hiddenWindow || hiddenWindow.isDestroyed()) {
             return { tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null };
         }
         let targetUrl = await hiddenWindow.webContents.executeJavaScript(targetUrlParser);
-        console.log(name, ' - ', targetUrl);
+
         if (!targetUrl) {
             cleanup();
             return { tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null };
@@ -104,7 +104,6 @@ export async function parseSite(name, searchUrl, targetUrlParser, dataParser, ne
             return { tags: [], description: '', coverUrl: '', fullTitle: '', releaseDate: null };
         }
         let result = await hiddenWindow.webContents.executeJavaScript(dataParser);
-        console.log(name, ' - ', result);
         cleanup();
         return result;
     } catch (error) {
@@ -134,7 +133,6 @@ export async function fetchCardData(cardName, section) {
     switch (section) {
         case 'anime':
             let animeResult = await fetchAnimeGoTags(cardName);
-            console.log('[AnimeGo] DEBUG:', JSON.stringify(animeResult.debug, null, 2)); // 👈 Выводим отладку
             if (animeResult == null || animeResult.tags === null || animeResult.tags.length === 0) {
                 animeResult = await fetchYummyAniTags(cardName);
             }

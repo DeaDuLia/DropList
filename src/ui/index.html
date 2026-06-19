@@ -34,6 +34,11 @@
         <button id="sectionsMenuBtn" class="header-button" title="Управление разделами">
             <span style="font-size: 18px; font-weight: bold; line-height: 1;">⋮</span>
         </button>
+        <div class="sync-lamp" id="syncLamp" title="Синхронизировано">
+            <div class="sync-lamp-bulb" id="syncBulb">
+                <div class="sync-lamp-glow" id="syncGlow"></div>
+            </div>
+        </div>
         <button id="replaceBtn" class="header-button" title="Заменить все данные" style="display: none"><img src="../../assets/icons/synchronyze.svg" alt="🔄" class="button-icon"></button>
         <button id="importBtn" class="header-button" title="Импорт данных" style="display: none"><img src="../../assets/icons/import.svg" alt="" class="button-icon"></button>
         <button id="exportBtn" class="header-button" title="Экспорт данных" style="display: none"><img src="../../assets/icons/export.svg" alt="" class="button-icon"></button>
@@ -146,8 +151,13 @@
                 <input type="password" id="loginPassword" placeholder="Пароль">
             </div>
             <button id="loginBtn" class="modal-button" style="width: 100%; margin-bottom: 10px;">Войти</button>
+
+            <div style="text-align: center; margin: 4px 0 12px 0;">
+                <a href="#" id="showResetPasswordBtn" class="auth-link">Забыли пароль?</a>
+            </div>
+
             <p style="text-align: center; margin: 10px 0;">
-                <a href="#" id="showRegisterBtn" style="color: #a29bfe;">Нет аккаунта? Зарегистрироваться</a>
+                <a href="#" id="showRegisterBtn" class="auth-link">Нет аккаунта? Зарегистрироваться</a>
             </p>
         </div>
         <div id="authRegisterForm" style="display: none;">
@@ -164,6 +174,22 @@
             </p>
         </div>
         <button class="modal-button-close" id="closeAuthModal" style="margin-top: 10px;">Закрыть</button>
+    </div>
+    <div id="resetPasswordModal" class="modal">
+        <div class="modal-content" style="max-width: 380px;">
+            <h3>🔑 Сброс пароля</h3>
+            <p style="font-size: 14px; opacity: 0.7; margin-bottom: 16px;">
+                Введите email, на который зарегистрирован аккаунт. Мы отправим ссылку для сброса пароля.
+            </p>
+            <div class="form-group">
+                <input type="email" id="resetEmail" placeholder="Email" autocomplete="off">
+            </div>
+            <button id="resetPasswordBtn" class="modal-button" style="width: 100%; margin-bottom: 10px;">
+                Отправить
+            </button>
+            <button class="modal-button-close" id="closeResetPasswordModal">Закрыть</button>
+            <div id="resetPasswordMessage" style="margin-top: 12px; font-size: 13px; display: none;"></div>
+        </div>
     </div>
 </div>
 
