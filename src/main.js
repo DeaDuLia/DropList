@@ -20,7 +20,6 @@ const {syncUserData, syncDirtySections, getValidToken, saveSectionToFirestore, s
     loadAllTagsFromFirestore, saveFavoritesToFirestore, loadFavoritesFromFirestore, auth
 } = require("./database/firestore.js");
 
-
 autoUpdater.logger = log;
 
 app.name = 'DropList';
@@ -252,11 +251,6 @@ setInterval(() => {
 
 app.on('before-quit', async (event) => {
     event.preventDefault();
-
-    const storedUser = getStoredUser();
-    if (storedUser && storedUser.is_authenticated && storedUser.idToken) {
-        await syncDirtySections(storedUser.uid, storedUser.idToken);
-    }
 
     LocalDatabase.db.pragma('wal_checkpoint(FULL)');
     LocalDatabase.db.close();
@@ -1276,5 +1270,127 @@ ipcMain.handle('is-favorite', (event, cardName, section) => {
 
 ipcMain.handle('get-favorites-by-section', (event, section) => {
     return LocalDatabase.getFavoritesBySection(section);
+});
+
+ipcMain.handle('sync-all-dirty', async () => {
+    const storedUser = getStoredUser();
+    if (!storedUser || !storedUser.is_authenticated || !storedUser.idToken) {
+        return { success: false, error: 'Пользователь не авторизован' };
+    }
+
+    try {
+        const freshToken = await getValidToken();
+        if (!freshToken) {
+            return { success: false, error: 'Сессия истекла, войдите заново' };
+        }
+
+        // Синхронизируем все dirty разделы
+        await syncDirtySections(storedUser.uid, freshToken);
+
+        return { success: true };
+    } catch (error) {
+        console.error('[Sync] Error:', error);
+        return { success: false, error: error.message };
+    }
+});
+
+ipcMain.handle('sync-all-dirty-with-progress', async (event) => {
+    const storedUser = getStoredUser();
+    if (!storedUser || !storedUser.is_authenticated || !storedUser.idToken) {
+        return { success: false, error: 'Пользователь не авторизован' };
+    }
+
+    try {
+        const freshToken = await getValidToken();
+        if (!freshToken) {
+            return { success: false, error: 'Сессия истекла, войдите заново' };
+        }
+
+        const sections = ['games', 'movies', 'cartoons', 'serials', 'anime', 'books'];
+        const dirtySections = sections.filter(section => LocalDatabase.isSectionDirty(section));
+
+        // Считаем реальное количество шагов
+        let totalSteps = dirtySections.length;
+        if (LocalDatabase.isTagsDirty()) totalSteps++;
+        if (LocalDatabase.isFavoritesDirty()) totalSteps++;
+
+        const dirtyExpectedReleases = LocalDatabase.statements.isExpectedReleasesDirty.get('dirty_expected_releases');
+        if (dirtyExpectedReleases && dirtyExpectedReleases.value === 'true') totalSteps++;
+
+        // Если ничего не грязное — сразу выходим
+        if (totalSteps === 0) {
+            event.sender.send('sync-progress', { percent: 100, status: 'Ничего не изменилось' });
+            await new Promise(r => setTimeout(r, 300));
+            return { success: true };
+        }
+
+        let completedSteps = 0;
+
+        // Функция отправки прогресса
+        const sendProgress = (step, total, status) => {
+            const percent = Math.round((step / total) * 100);
+            event.sender.send('sync-progress', { percent, status });
+        };
+
+        sendProgress(completedSteps, totalSteps, 'Начинаем синхронизацию...');
+        await new Promise(r => setTimeout(r, 100));
+
+        // 1. Синхронизируем dirty разделы
+        for (const section of dirtySections) {
+            const sectionData = LocalDatabase.statements.getDataBySection.all(section);
+            await saveSectionToFirestore(storedUser.uid, freshToken, section, sectionData);
+            LocalDatabase.clearSectionDirty(section);
+            completedSteps++;
+            sendProgress(completedSteps, totalSteps, `Сохранение раздела: ${section}`);
+            await new Promise(r => setTimeout(r, 50));
+        }
+
+        // 2. Теги
+        if (LocalDatabase.isTagsDirty()) {
+            sendProgress(completedSteps, totalSteps, 'Сохранение тегов...');
+            await saveAllTagsToFirestore(storedUser.uid, freshToken);
+            clearTagsDirty();
+            completedSteps++;
+            await new Promise(r => setTimeout(r, 50));
+        }
+
+        // 3. Ожидаемые релизы
+        if (dirtyExpectedReleases && dirtyExpectedReleases.value === 'true') {
+            sendProgress(completedSteps, totalSteps, 'Сохранение дат релизов...');
+            await saveExpectedReleasesToFirestore(storedUser.uid, freshToken);
+            clearExpectedReleasesDirty();
+            completedSteps++;
+            await new Promise(r => setTimeout(r, 50));
+        }
+
+        // 4. Избранное
+        if (LocalDatabase.isFavoritesDirty()) {
+            sendProgress(completedSteps, totalSteps, 'Сохранение избранного...');
+            await saveFavoritesToFirestore(storedUser.uid, freshToken);
+            clearFavoritesDirty();
+            completedSteps++;
+            await new Promise(r => setTimeout(r, 50));
+        }
+
+        // 5. Финальное обновление времени
+        sendProgress(completedSteps, totalSteps, 'Завершение...');
+        const now = new Date().toISOString();
+        await updateSyncTime(storedUser.uid, freshToken, now);
+        LocalDatabase.statements.setStatistic.run('last_firestore_update', now, now);
+
+        // ✅ ОДИН ФИНАЛЬНЫЙ ВЫЗОВ — 100%
+        sendProgress(totalSteps, totalSteps, 'Готово!');
+        await new Promise(r => setTimeout(r, 300));
+
+        return { success: true };
+    } catch (error) {
+        console.error('[Sync] Error:', error);
+        // Отправляем ошибку в прогресс
+        event.sender.send('sync-progress', {
+            percent: 100,
+            status: '❌ Ошибка: ' + error.message
+        });
+        return { success: false, error: error.message };
+    }
 });
 

@@ -1,6 +1,11 @@
 const { contextBridge, ipcRenderer } = require('electron');
 
 contextBridge.exposeInMainWorld('electronAPI', {
+    syncAllDirtyWithProgress: () => ipcRenderer.invoke('sync-all-dirty-with-progress'),
+    onSyncProgress: (callback) => {
+        ipcRenderer.on('sync-progress', (event, data) => callback(data));
+    },
+    syncAllDirty: () => ipcRenderer.invoke('sync-all-dirty'),
     addFavorite: (cardName, section) => ipcRenderer.invoke('add-favorite', cardName, section),
     removeFavorite: (cardName, section) => ipcRenderer.invoke('remove-favorite', cardName, section),
     isFavorite: (cardName, section) => ipcRenderer.invoke('is-favorite', cardName, section),

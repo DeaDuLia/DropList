@@ -16,6 +16,8 @@ let searchTimeout = null;
 let lastValue = '';
 let lastChangeTime = 0;
 
+let isClosing = false;
+let syncOverlay = null;
 
 const exportBtn = document.getElementById('exportBtn');
 const importBtn = document.getElementById('importBtn');
@@ -84,7 +86,131 @@ function getHiddenSections() {
     return all.filter(s => !visible.includes(s));
 }
 
+function showSyncOverlay() {
+    if (!syncOverlay) {
+        syncOverlay = document.createElement('div');
+        syncOverlay.id = 'syncOverlay';
+        syncOverlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(8px);
+            z-index: 99999;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            color: white;
+            font-family: 'Segoe UI', sans-serif;
+        `;
+        syncOverlay.innerHTML = `
+            <div style="text-align: center; max-width: 400px; width: 90%;">
+                <div class="loading-spinner" style="width: 48px; height: 48px; margin: 0 auto 20px;"></div>
+                <h2 id="syncTitle" style="font-weight: 400; margin: 0 0 8px 0;">Синхронизация данных...</h2>
+                <p id="syncSubtitle" style="opacity: 0.6; font-size: 14px; margin: 0 0 20px 0;">Пожалуйста, подождите</p>
+                
+                <!-- Прогресс-бар -->
+                <div style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; margin-bottom: 12px;">
+                    <div id="syncProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #4a9eff, #6c5ce7); border-radius: 4px; transition: width 0.3s ease;"></div>
+                </div>
+                
+                <div style="display: flex; justify-content: space-between; font-size: 12px; opacity: 0.4;">
+                    <span id="syncProgressText">0%</span>
+                    <span id="syncStatusText">Подготовка...</span>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(syncOverlay);
+    }
+    syncOverlay.style.display = 'flex';
 
+    // Сбрасываем прогресс
+    updateSyncProgress(0, 'Подготовка...');
+}
+
+function updateSyncProgress(percent, statusText) {
+    const bar = document.getElementById('syncProgressBar');
+    const text = document.getElementById('syncProgressText');
+    const status = document.getElementById('syncStatusText');
+    const title = document.getElementById('syncTitle');
+
+    if (bar) bar.style.width = Math.min(100, percent) + '%';
+    if (text) text.textContent = Math.min(100, percent) + '%';
+    if (status) status.textContent = statusText || '...';
+
+    // Меняем заголовок на финальной стадии
+    if (title && percent >= 100) {
+        title.textContent = 'Готово!';
+    }
+}
+
+function hideSyncOverlay() {
+    if (syncOverlay) {
+        // Плавное исчезновение
+        syncOverlay.style.transition = 'opacity 0.3s ease';
+        syncOverlay.style.opacity = '0';
+        setTimeout(() => {
+            syncOverlay.style.display = 'none';
+            syncOverlay.style.opacity = '1';
+        }, 300);
+    }
+}
+
+async function syncBeforeClose() {
+    if (!currentUser) {
+        return true;
+    }
+    window.electronAPI.onSyncProgress(({ percent, status }) => {
+        updateSyncProgress(percent, status);
+    });
+
+    try {
+        showSyncOverlay();
+        updateSyncProgress(5, 'Проверка соединения...');
+
+        // Небольшая задержка для отрисовки
+        await new Promise(r => setTimeout(r, 100));
+
+        updateSyncProgress(15, 'Подготовка данных...');
+        const result = await window.electronAPI.syncAllDirtyWithProgress();
+
+        if (!result.success) {
+            console.warn('[Sync] Не удалось синхронизировать:', result.error);
+            updateSyncProgress(100, 'Ошибка синхронизации');
+            await new Promise(r => setTimeout(r, 500));
+
+            const choice = await showConfirmModal(
+                'Ошибка синхронизации',
+                `Не удалось сохранить данные: ${result.error || 'Неизвестная ошибка'}\n\nЗакрыть приложение без сохранения?`,
+                'Закрыть',
+                'Остаться'
+            );
+            return choice;
+        }
+
+        updateSyncProgress(100, 'Готово!');
+        await new Promise(r => setTimeout(r, 400));
+
+        return true;
+    } catch (error) {
+        console.error('[Sync] Ошибка:', error);
+        updateSyncProgress(100, 'Ошибка');
+        await new Promise(r => setTimeout(r, 300));
+
+        const choice = await showConfirmModal(
+            'Ошибка синхронизации',
+            `Произошла ошибка: ${error.message}\n\nЗакрыть приложение без сохранения?`,
+            'Закрыть',
+            'Остаться'
+        );
+        return choice;
+    } finally {
+        hideSyncOverlay();
+    }
+}
 
 // ====== РЕНДЕР НАВИГАЦИИ ======
 
@@ -222,9 +348,6 @@ function closePanel() {
 menuBtn.addEventListener('click', () => {
     isPanelOpen ? closePanel() : openPanel();
 });
-
-// Закрытие по крестику
-closeBtn.addEventListener('click', closePanel);
 
 // Закрытие по Escape
 document.addEventListener('keydown', (e) => {
@@ -505,8 +628,23 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (closeBtn) {
-        closeBtn.addEventListener('click', () => {
-            window.electronAPI.closeWindow();
+        closeBtn.addEventListener('click', async () => {
+            // Защита от двойного клика
+            if (isClosing) return;
+            isClosing = true;
+
+            try {
+                const shouldClose = await syncBeforeClose();
+                if (shouldClose) {
+                    window.electronAPI.closeWindow();
+                }
+            } catch (error) {
+                console.error('[Close] Error:', error);
+                // В случае критической ошибки всё равно закрываем
+                window.electronAPI.closeWindow();
+            } finally {
+                isClosing = false;
+            }
         });
     }
 
@@ -859,7 +997,7 @@ function showLoadingPreview() {
     const icon = document.querySelector('#previewCard .game-icon');
     if (icon && !icon.dataset.originalSrc) {
         icon.dataset.originalSrc = icon.src;
-        icon.src = '../../assets/images/search-loading.gif';  // локальная гифка
+        icon.src = 'assets/images/search-loading.gif';  // локальная гифка
     }
 }
 
@@ -1014,7 +1152,7 @@ function setupEditDescriptionButtons() {
                     
                     <!-- Поле для даты релиза -->
                     <label style="font-size: 12px; opacity: 0.7; margin-bottom: 4px;">Дата релиза</label>
-                    <input type="date" id="editReleaseDate" value="${currentReleaseDate}" style="width: 100%; background: #1e1e1e; border: 1px solid #4a4a4a; border-radius: 8px; color: white; padding: 8px; margin-bottom: 12px; color-scheme: light; accent-color: #0078d4;">
+                    <input type="date" id="editReleaseDate" value="${currentReleaseDate}" style="width: 100%; background: #1e1e1e; border: 1px solid #4a4a4a; border-radius: 8px; color: white; padding: 8px; margin-bottom: 12px;">
                     ${currentReleaseDate ? `<p style="font-size: 11px; opacity: 0.5; margin-top: -8px; margin-bottom: 12px;">Сейчас: ${formattedDate}</p>` : '<p style="font-size: 11px; opacity: 0.5; margin-top: -8px; margin-bottom: 12px;">Оставьте пустым, если нет даты релиза</p>'}
                     
                     <!-- Поле для заметки -->
@@ -3068,70 +3206,28 @@ async function addNewData(section) {
                 return;
             }
 
-            // ===== ЗАМЕНА =====
+            // При замене — сначала удаляем старую карточку с её тегами
             await window.electronAPI.deleteData(section, cardData.name);
-
-            const allIndex = window.allSectionData.findIndex(item => item.name === cardData.name);
-            if (allIndex !== -1) window.allSectionData.splice(allIndex, 1);
-
-            const filteredIndex = window.filteredData.findIndex(item => item.name === cardData.name);
-            if (filteredIndex !== -1) window.filteredData.splice(filteredIndex, 1);
-
-            const oldCard = document.querySelector(`.data-card[data-name="${cardData.name}"]`);
-            if (oldCard) oldCard.remove();
         }
 
-        // ===== ДОБАВЛЕНИЕ =====
+        // Добавляем новую карточку с тегами
         await window.electronAPI.addData(section, cardData);
-
-        const newCard = {
-            name: cardData.name,
-            icoUrl: cardData.icoUrl || '',
-            rating: cardData.rating || '0',
-            status: cardData.status || 'Уточнить',
-            description: '',
-            tags: cardData.tags || [],
-            releaseDate: cardData.releaseDate || null
-        };
-        window.allSectionData.push(newCard);
-        window.filteredData.push(newCard);
-
-        const dataList = document.getElementById('dataList');
-        if (dataList) {
-            const favorites = window._currentFavorites || [];
-            const cardHTML = renderCardList([newCard], favorites);
-            dataList.insertAdjacentHTML('beforeend', cardHTML);
-        }
-
-        updateStats();
         await loadStatusFilter();
-
-        // ===== ОЧИСТКА ФОРМЫ И ЗАКРЫТИЕ =====
-        // ✅ СКРЫВАЕМ ФОРМУ
-        const addForm = document.getElementById('addForm');
-        const overlay = document.querySelector('.add-form-overlay');
-        const toggleBtn = document.getElementById('toggleAddFormBtn');
-
-        if (addForm) addForm.classList.remove('visible');
-        if (overlay) overlay.classList.remove('visible');
-        if (toggleBtn) toggleBtn.textContent = '+ Добавить';
-
-        // Очищаем поля
         if (nameInput) {
-            nameInput.value = '';
             delete nameInput.dataset.fetchedReleaseDate;
         }
-        if (icoInput) icoInput.value = '';
+        let data = await window.electronAPI.getData(section);
+        await renderSection(section, data, true, false, false, true);
+
+        let overlay = document.querySelector('.add-form-overlay');
+        overlay.classList.remove('visible');
+
+        // Очищаем форму
+        nameInput.value = '';
+        icoInput.value = '';
         if (window.clearAddFormTags) {
             window.clearAddFormTags();
         }
-
-        // Сброс рейтинга и статуса на дефолт
-        if (ratingSelect) ratingSelect.value = '0';
-        if (statusSelect) statusSelect.value = 'Уточнить';
-
-        // Обновляем превью
-        updatePreview('Название', '', '0', 'Уточнить');
 
     } catch (error) {
         console.error('Ошибка при добавлении:', error);
@@ -3421,14 +3517,18 @@ function getStatusColor(status) {
     return statusColors[status] || 'var(--rating-not-played)';
 }
 
-// front-script.js
-
 function setupDeleteButtons() {
+    const oldButtons = document.querySelectorAll('.delete-btn');
+    oldButtons.forEach(btn => {
+        btn.replaceWith(btn.cloneNode(true));
+    });
+
     document.querySelectorAll('.delete-btn').forEach(btn => {
         btn.addEventListener('click', async (e) => {
             e.stopPropagation();
             const itemName = btn.dataset.name;
 
+            // Создаем модальное окно подтверждения
             const confirmModal = document.createElement('div');
             confirmModal.className = 'modal';
             confirmModal.style.display = 'block';
@@ -3444,6 +3544,7 @@ function setupDeleteButtons() {
 
             document.body.appendChild(confirmModal);
 
+            // Обработчики для кнопок
             confirmModal.querySelector('.cancel-btn').addEventListener('click', () => {
                 document.body.removeChild(confirmModal);
             });
@@ -3451,28 +3552,18 @@ function setupDeleteButtons() {
             confirmModal.querySelector('.confirm-btn').addEventListener('click', async () => {
                 try {
                     const section = document.querySelector('.nav-item.active')?.dataset.section;
-
-                    // 1. Удаляем из БД
                     await window.electronAPI.deleteData(section, itemName);
-
-                    // 2. Удаляем из массивов
-                    const allIndex = window.allSectionData.findIndex(item => item.name === itemName);
-                    if (allIndex !== -1) window.allSectionData.splice(allIndex, 1);
-
-                    const filteredIndex = window.filteredData.findIndex(item => item.name === itemName);
-                    if (filteredIndex !== -1) window.filteredData.splice(filteredIndex, 1);
-
-                    // 3. Удаляем карточку из DOM (одну!)
+                    // Удаляем карточку из DOM
                     const card = btn.closest('.data-card');
                     if (card) card.remove();
-
-                    // 4. Обновляем статистику и фильтры
-                    updateStats();
-                    await loadStatusFilter();
-
-                    // 5. Закрываем модалку
                     document.body.removeChild(confirmModal);
+                    const itemIndex = window.allSectionData.findIndex(item => item.name === itemName);
+                    if (itemIndex !== -1) window.allSectionData.splice(itemIndex, 1);
 
+                    const filteredIndex = window.filteredData.findIndex(item => item.name === itemName);
+                    if (filteredIndex !== -1) {
+                        window.filteredData.splice(filteredIndex, 1);
+                    }
                 } catch (error) {
                     console.error('Не удалось удалить:', error);
                     await showError('Не удалось удалить');
@@ -3480,6 +3571,7 @@ function setupDeleteButtons() {
                 }
             });
 
+            // Закрытие при клике вне модального окна
             confirmModal.addEventListener('click', (e) => {
                 if (e.target === confirmModal) {
                     document.body.removeChild(confirmModal);
@@ -3700,21 +3792,11 @@ function setupCardClickHandlers() {
         let lastFetchedCard = null;
 
         card.addEventListener('mouseenter', (e) => {
-            if (e.target.closest('.edit-desc-btn') ||
-                e.target.closest('.change-image-btn') ||
-                e.target.closest('.change-category-btn') ||
-                e.target.closest('.delete-btn') ||
-                e.target.closest('.data-title') ||
-                e.target.closest('.editable-field') ||
-                e.target.closest('.fav-btn')) {
-                return;
-            }
             const itemName = card.dataset.name;
             const description = card.dataset.description || '';
             const tags = JSON.parse(card.dataset.tags || '[]');
             const releaseDate = card.dataset.releaseDate || null;
             const section = document.querySelector('.nav-item.active')?.dataset.section;
-
 
             if (priceFetchTimer) clearTimeout(priceFetchTimer);
 
@@ -3844,8 +3926,7 @@ function setupCardClickHandlers() {
                 e.target.closest('.change-category-btn') ||
                 e.target.closest('.delete-btn') ||
                 e.target.closest('.data-title') ||
-                e.target.closest('.editable-field') ||
-                e.target.closest('.fav-btn')) {
+                e.target.closest('.editable-field')) {
                 return;
             }
             const itemName = this.dataset.name;

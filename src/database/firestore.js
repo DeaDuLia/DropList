@@ -600,3 +600,4 @@ export async function loadFavoritesFromFirestore(uid, idToken) {
         return null;
     }
 }
+
