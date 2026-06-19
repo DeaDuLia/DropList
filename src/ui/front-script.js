@@ -16,6 +16,8 @@ let searchTimeout = null;
 let lastValue = '';
 let lastChangeTime = 0;
 
+let isClosing = false;
+let syncOverlay = null;
 
 const exportBtn = document.getElementById('exportBtn');
 const importBtn = document.getElementById('importBtn');
@@ -63,6 +65,8 @@ let isDraggingDown = false;
 let holdTimer = null;
 let isMouseDown = false;
 
+
+
 function getVisibleSections() {
     try {
         const saved = localStorage.getItem('visibleSections');
@@ -84,7 +88,131 @@ function getHiddenSections() {
     return all.filter(s => !visible.includes(s));
 }
 
+function showSyncOverlay() {
+    if (!syncOverlay) {
+        syncOverlay = document.createElement('div');
+        syncOverlay.id = 'syncOverlay';
+        syncOverlay.style.cssText = `
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(8px);
+            z-index: 99999;
+            display: none;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            color: white;
+            font-family: 'Segoe UI', sans-serif;
+        `;
+        syncOverlay.innerHTML = `
+            <div style="text-align: center; max-width: 400px; width: 90%;">
+                <div class="loading-spinner" style="width: 48px; height: 48px; margin: 0 auto 20px;"></div>
+                <h2 id="syncTitle" style="font-weight: 400; margin: 0 0 8px 0;">Синхронизация данных...</h2>
+                <p id="syncSubtitle" style="opacity: 0.6; font-size: 14px; margin: 0 0 20px 0;">Пожалуйста, подождите</p>
+                
+                <!-- Прогресс-бар -->
+                <div style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; margin-bottom: 12px;">
+                    <div id="syncProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #4a9eff, #6c5ce7); border-radius: 4px; transition: width 0.3s ease;"></div>
+                </div>
+                
+                <div style="display: flex; justify-content: space-between; font-size: 12px; opacity: 0.4;">
+                    <span id="syncProgressText">0%</span>
+                    <span id="syncStatusText">Подготовка...</span>
+                </div>
+            </div>
+        `;
+        document.body.appendChild(syncOverlay);
+    }
+    syncOverlay.style.display = 'flex';
 
+    // Сбрасываем прогресс
+    updateSyncProgress(0, 'Подготовка...');
+}
+
+function updateSyncProgress(percent, statusText) {
+    const bar = document.getElementById('syncProgressBar');
+    const text = document.getElementById('syncProgressText');
+    const status = document.getElementById('syncStatusText');
+    const title = document.getElementById('syncTitle');
+
+    if (bar) bar.style.width = Math.min(100, percent) + '%';
+    if (text) text.textContent = Math.min(100, percent) + '%';
+    if (status) status.textContent = statusText || '...';
+
+    // Меняем заголовок на финальной стадии
+    if (title && percent >= 100) {
+        title.textContent = 'Готово!';
+    }
+}
+
+function hideSyncOverlay() {
+    if (syncOverlay) {
+        // Плавное исчезновение
+        syncOverlay.style.transition = 'opacity 0.3s ease';
+        syncOverlay.style.opacity = '0';
+        setTimeout(() => {
+            syncOverlay.style.display = 'none';
+            syncOverlay.style.opacity = '1';
+        }, 300);
+    }
+}
+
+async function syncBeforeClose() {
+    if (!currentUser) {
+        return true;
+    }
+    window.electronAPI.onSyncProgress(({ percent, status }) => {
+        updateSyncProgress(percent, status);
+    });
+
+    try {
+        showSyncOverlay();
+        updateSyncProgress(5, 'Проверка соединения...');
+
+        // Небольшая задержка для отрисовки
+        await new Promise(r => setTimeout(r, 100));
+
+        updateSyncProgress(15, 'Подготовка данных...');
+        const result = await window.electronAPI.syncAllDirtyWithProgress();
+
+        if (!result.success) {
+            console.warn('[Sync] Не удалось синхронизировать:', result.error);
+            updateSyncProgress(100, 'Ошибка синхронизации');
+            await new Promise(r => setTimeout(r, 500));
+
+            const choice = await showConfirmModal(
+                'Ошибка синхронизации',
+                `Не удалось сохранить данные: ${result.error || 'Неизвестная ошибка'}\n\nЗакрыть приложение без сохранения?`,
+                'Закрыть',
+                'Остаться'
+            );
+            return choice;
+        }
+
+        updateSyncProgress(100, 'Готово!');
+        await new Promise(r => setTimeout(r, 400));
+
+        return true;
+    } catch (error) {
+        console.error('[Sync] Ошибка:', error);
+        updateSyncProgress(100, 'Ошибка');
+        await new Promise(r => setTimeout(r, 300));
+
+        const choice = await showConfirmModal(
+            'Ошибка синхронизации',
+            `Произошла ошибка: ${error.message}\n\nЗакрыть приложение без сохранения?`,
+            'Закрыть',
+            'Остаться'
+        );
+        return choice;
+    } finally {
+        hideSyncOverlay();
+    }
+}
 
 // ====== РЕНДЕР НАВИГАЦИИ ======
 
@@ -222,9 +350,6 @@ function closePanel() {
 menuBtn.addEventListener('click', () => {
     isPanelOpen ? closePanel() : openPanel();
 });
-
-// Закрытие по крестику
-closeBtn.addEventListener('click', closePanel);
 
 // Закрытие по Escape
 document.addEventListener('keydown', (e) => {
@@ -486,8 +611,18 @@ function setupDragAndDrop() {
 
 
 
-document.addEventListener('DOMContentLoaded', () => {
+// front-script.js
 
+// ====== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ======
+// ... все переменные ...
+
+// ====== ФУНКЦИИ ======
+// ... все функции (updateLampStatus, showError, и т.д.) ...
+
+// ====== ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ ======
+document.addEventListener('DOMContentLoaded', async () => {
+
+    // ====== 1. УПРАВЛЕНИЕ ОКНОМ ======
     const minimizeBtn = document.getElementById('minimizeBtn');
     const maximizeBtn = document.getElementById('maximizeBtn');
     const closeBtn = document.getElementById('closeBtn');
@@ -505,15 +640,176 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     if (closeBtn) {
-        closeBtn.addEventListener('click', () => {
-            window.electronAPI.closeWindow();
+        closeBtn.addEventListener('click', async () => {
+            if (isClosing) return;
+            isClosing = true;
+            try {
+                updateLampStatus('idle');
+                await new Promise(r => setTimeout(r, 50));
+                const shouldClose = await syncBeforeClose();
+                if (shouldClose) {
+                    window.electronAPI.closeWindow();
+                }
+            } catch (error) {
+                console.error('[Close] Error:', error);
+                window.electronAPI.closeWindow();
+            } finally {
+                isClosing = false;
+            }
         });
     }
 
+    // ====== 2. НАВИГАЦИЯ ======
     renderNavigation();
     setupDragOnHold();
     setupDragAndDrop();
 
+    // ====== 3. АВТОРИЗАЦИЯ ======
+    window.electronAPI.onRestoreSession(async (user) => {
+        if (user) {
+            currentUser = user;
+            updateAuthButton(user.email);
+            updateLampStatus('idle');
+        } else {
+            currentUser = null;
+            updateAuthButton(null);
+            updateLampStatus('idle', 'Не авторизован');
+        }
+    });
+
+    window.electronAPI.onSyncRequired(async (syncData) => {
+        // ... существующий код ...
+    });
+
+    const savedUser = await window.electronAPI.authGetCurrentUser();
+    if (savedUser.isAuthenticated) {
+        currentUser = savedUser;
+        updateAuthButton(savedUser.email);
+        updateLampStatus('idle');
+    } else {
+        updateLampStatus('idle', 'Не авторизован');
+    }
+
+    // ====== 4. ПОДПИСКА НА СТАТУС СИНХРОНИЗАЦИИ ======
+    window.electronAPI.onSyncStatus((data) => {
+        updateLampStatus(data.status, data.message);
+    });
+
+    // ====== 5. ЛАМПОЧКА — КЛИК ДЛЯ РУЧНОЙ СИНХРОНИЗАЦИИ ======
+    const lamp = document.getElementById('syncLamp');
+    if (lamp) {
+        lamp.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (!currentUser) {
+                updateLampStatus('error');
+                setTimeout(() => updateLampStatus('idle'), 3000);
+                return;
+            }
+            if (document.getElementById('syncBulb')?.classList.contains('syncing')) {
+                return;
+            }
+            updateLampStatus('syncing');
+            try {
+                await window.electronAPI.syncAllDirty();
+            } catch (error) {}
+        });
+    }
+
+    // ====== 6. СБРОС ПАРОЛЯ ======
+    const resetPasswordModal = document.getElementById('resetPasswordModal');
+    const closeResetPasswordModal = document.getElementById('closeResetPasswordModal');
+    const showResetPasswordBtn = document.getElementById('showResetPasswordBtn');
+    const resetPasswordBtn = document.getElementById('resetPasswordBtn');
+    const resetEmail = document.getElementById('resetEmail');
+    const resetPasswordMessage = document.getElementById('resetPasswordMessage');
+
+    // Показываем модалку
+    if (showResetPasswordBtn) {
+        showResetPasswordBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (resetPasswordMessage) {
+                resetPasswordMessage.style.display = 'none';
+                resetPasswordMessage.textContent = '';
+            }
+            if (resetEmail) resetEmail.value = '';
+            if (resetPasswordModal) resetPasswordModal.style.display = 'block';
+        });
+    }
+
+    // Закрываем модалку
+    if (closeResetPasswordModal) {
+        closeResetPasswordModal.addEventListener('click', () => {
+            if (resetPasswordModal) resetPasswordModal.style.display = 'none';
+        });
+    }
+
+    if (resetPasswordModal) {
+        resetPasswordModal.addEventListener('click', (e) => {
+            if (e.target === resetPasswordModal) {
+                resetPasswordModal.style.display = 'none';
+            }
+        });
+    }
+
+    // Отправка запроса
+    if (resetPasswordBtn && resetEmail && resetPasswordMessage) {
+        resetPasswordBtn.addEventListener('click', async () => {
+            const email = resetEmail.value.trim();
+
+            if (!email) {
+                resetPasswordMessage.textContent = '❌ Введите email';
+                resetPasswordMessage.style.display = 'block';
+                resetPasswordMessage.style.color = '#e74c3c';
+                return;
+            }
+
+            const originalText = resetPasswordBtn.textContent;
+            resetPasswordBtn.textContent = '⏳ Отправка...';
+            resetPasswordBtn.disabled = true;
+            resetPasswordMessage.style.display = 'none';
+
+            try {
+                const result = await window.electronAPI.authResetPassword(email);
+
+                if (result.success) {
+                    resetPasswordMessage.textContent = '✅ ' + result.message;
+                    resetPasswordMessage.style.display = 'block';
+                    resetPasswordMessage.style.color = '#2ecc71';
+                    resetEmail.value = '';
+                    setTimeout(() => {
+                        if (resetPasswordModal) resetPasswordModal.style.display = 'none';
+                    }, 3000);
+                } else {
+                    resetPasswordMessage.textContent = '❌ ' + result.error;
+                    resetPasswordMessage.style.display = 'block';
+                    resetPasswordMessage.style.color = '#e74c3c';
+                }
+            } catch (error) {
+                console.error('Password reset error:', error);
+                resetPasswordMessage.textContent = '❌ Ошибка при отправке запроса';
+                resetPasswordMessage.style.display = 'block';
+                resetPasswordMessage.style.color = '#e74c3c';
+            } finally {
+                resetPasswordBtn.textContent = originalText;
+                resetPasswordBtn.disabled = false;
+            }
+        });
+
+        // Enter в поле email
+        resetEmail.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                resetPasswordBtn.click();
+            }
+        });
+    }
+
+    // ====== 7. ЗАГРУЗКА ДАННЫХ ======
+    await loadRatings();
+    await loadStatuses();
+    await initUpdateSystem();
+
+    const games = await window.electronAPI.getData('games');
+    await renderSection('games', games);
 });
 
 window.addEventListener('resize', () => {
@@ -891,7 +1187,73 @@ function updateStats() {
     if (totalSpan) totalSpan.textContent = total;
 }
 
+function updateLampStatus(status, message) {
+    const lamp = document.getElementById('syncLamp');
+    const bulb = document.getElementById('syncBulb');
+    const glow = document.getElementById('syncGlow');
 
+    if (!lamp || !bulb || !glow) return;
+
+    // Убираем все классы
+    lamp.className = 'sync-lamp';
+    bulb.className = 'sync-lamp-bulb';
+    glow.className = 'sync-lamp-glow';
+
+    // Добавляем нужные
+    bulb.classList.add(status);
+    glow.classList.add(status);
+
+    if (status === 'syncing' || status === 'error' || status === 'success') {
+        lamp.classList.add('active');
+    } else {
+        lamp.classList.remove('active');
+    }
+
+    // Тултип
+    const tooltips = {
+        idle: 'Синхронизировано',
+        syncing: 'Синхронизация...',
+        success: 'Сохранено ✓',
+        error: 'Ошибка синхронизации'
+    };
+    lamp.title = tooltips[status] || status;
+
+    // Автоматический возврат в idle
+    clearTimeout(window.lampTimeout);
+    if (status === 'success') {
+        window.lampTimeout = setTimeout(() => updateLampStatus('idle'), 2000);
+    }
+    if (status === 'error') {
+        window.lampTimeout = setTimeout(() => updateLampStatus('idle'), 4000);
+    }
+}
+
+// Клик по лампочке — ручная синхронизация
+document.addEventListener('DOMContentLoaded', () => {
+    const lamp = document.getElementById('syncLamp');
+    if (lamp) {
+        lamp.addEventListener('click', async (e) => {
+            e.stopPropagation();
+
+            if (!currentUser) {
+                updateLampStatus('error');
+                setTimeout(() => updateLampStatus('idle'), 3000);
+                return;
+            }
+
+            if (document.getElementById('syncBulb')?.classList.contains('syncing')) {
+                return;
+            }
+
+            updateLampStatus('syncing');
+            try {
+                await window.electronAPI.syncAllDirty();
+            } catch (error) {
+                // Ошибка уже обработана в main.js
+            }
+        });
+    }
+});
 
 
 function createTooltip() {
@@ -1618,6 +1980,7 @@ document.addEventListener('click', (e) => {
 });
 
 window.addEventListener('DOMContentLoaded', () => {
+    // Подписка на статус из main.js
     window.electronAPI.onMessageFromMain(({ imgUrl, name }) => {
         const editIcoInput = document.getElementById('editIcoInput');
         const icoInput = document.getElementById('icoInput');
@@ -1863,13 +2226,22 @@ authModal.addEventListener('click', (e) => {
 
 
 document.addEventListener('DOMContentLoaded', async () => {
+    updateLampStatus('idle', 'Синхр.');
+    window.electronAPI.onSyncStatus((data) => {
+        updateLampStatus(data.status, data.message);
+    });
+
+
+
     window.electronAPI.onRestoreSession(async (user) => {
         if (user) {
             currentUser = user;
             updateAuthButton(user.email);
+            updateLampStatus('idle', 'Синхр.');
         } else {
             currentUser = null;
             updateAuthButton(null);
+            updateLampStatus('idle', 'Не авторизован');
         }
     });
 
@@ -1908,6 +2280,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (savedUser.isAuthenticated) {
         currentUser = savedUser;
         updateAuthButton(savedUser.email);
+        updateLampStatus('idle', 'Синхр.');
+    } else {
+        updateLampStatus('idle', 'Не авторизован');
     }
 
     await loadRatings();
