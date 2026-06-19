@@ -24,7 +24,7 @@
     "appId": "com.deshin.droplist",
     "productName": "DropList",
     "copyright": "Copyright © 2026 Nikita",
-    "icon": "icon.ico",
+    "icon": "build/icon.ico",
     "asar": true,
     "asarUnpack": [
       "node_modules/better-sqlite3/**",
@@ -52,7 +52,7 @@
     "win": {
       "signAndEditExecutable": false,
       "target": "nsis",
-      "icon": "icon.ico",
+      "icon": "build/icon.ico",
       "executableName": "DropList"
     },
     "nsis": {
