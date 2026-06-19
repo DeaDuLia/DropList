@@ -6,6 +6,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
         ipcRenderer.on('sync-progress', (event, data) => callback(data));
     },
     syncAllDirty: () => ipcRenderer.invoke('sync-all-dirty'),
+    onSyncStatus: (callback) => {
+        ipcRenderer.on('sync-status', (event, data) => callback(data));
+    },
     addFavorite: (cardName, section) => ipcRenderer.invoke('add-favorite', cardName, section),
     removeFavorite: (cardName, section) => ipcRenderer.invoke('remove-favorite', cardName, section),
     isFavorite: (cardName, section) => ipcRenderer.invoke('is-favorite', cardName, section),

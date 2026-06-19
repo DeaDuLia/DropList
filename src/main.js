@@ -243,6 +243,15 @@ app.whenReady().then(() => {
     setTimeout(() => {
         updateAllReleaseDates();
     }, 5000);
+
+    setTimeout(() => {
+        const storedUser = getStoredUser();
+        if (storedUser && storedUser.is_authenticated) {
+            sendSyncStatus('idle', 'Синхронизировано');
+        } else {
+            sendSyncStatus('idle', 'Не авторизован');
+        }
+    }, 1000);
 });
 
 setInterval(() => {
@@ -251,6 +260,7 @@ setInterval(() => {
 
 app.on('before-quit', async (event) => {
     event.preventDefault();
+    stopBackgroundSync();
 
     LocalDatabase.db.pragma('wal_checkpoint(FULL)');
     LocalDatabase.db.close();
@@ -1067,6 +1077,8 @@ ipcMain.handle('auth-sign-in', async (event, email, password) => {
         const user = userCredential.user;
         const idToken = await user.getIdToken();
         const refreshToken = user.refreshToken; // 👈 ПОЛУЧАЕМ
+        startBackgroundSync();
+        sendSyncStatus('idle', 'Синхронизировано');
 
         saveUserSession(user.email, user.uid, idToken, refreshToken);
 
@@ -1131,6 +1143,8 @@ ipcMain.handle('auth-get-current-user', async () => {
 
 ipcMain.handle('auth-sign-out', async () => {
     try {
+        stopBackgroundSync();
+        sendSyncStatus('idle', 'Не авторизован');
         const storedUser = getStoredUser();
         if (storedUser && storedUser.is_authenticated && storedUser.idToken) {
             syncDirtySections(storedUser.uid, storedUser.idToken);
@@ -1286,7 +1300,7 @@ ipcMain.handle('sync-all-dirty', async () => {
 
         // Синхронизируем все dirty разделы
         await syncDirtySections(storedUser.uid, freshToken);
-
+        await performSync();
         return { success: true };
     } catch (error) {
         console.error('[Sync] Error:', error);
@@ -1394,3 +1408,123 @@ ipcMain.handle('sync-all-dirty-with-progress', async (event) => {
     }
 });
 
+let syncInterval = null;
+let isSyncing = false;
+let consecutiveErrors = 0;
+let hasChanges = false;
+let isAppFocused = true;
+
+function sendSyncStatus(status, message = '') {
+    if (win && !win.isDestroyed()) {
+        win.webContents.send('sync-status', { status, message, timestamp: Date.now() });
+    }
+}
+
+function hasDirtyData() {
+    const sections = ['games', 'movies', 'cartoons', 'serials', 'anime', 'books'];
+    for (const section of sections) {
+        if (LocalDatabase.isSectionDirty(section)) return true;
+    }
+    if (LocalDatabase.isTagsDirty()) return true;
+    if (LocalDatabase.isFavoritesDirty()) return true;
+    return false;
+}
+
+function markChanges() {
+    hasChanges = true;
+}
+
+function getSyncInterval() {
+    // Ошибки — увеличиваем
+    if (consecutiveErrors > 0) {
+        return Math.min(60000 * Math.pow(2, consecutiveErrors - 1), 300000);
+    }
+
+    // Есть изменения — чаще
+    if (hasChanges || hasDirtyData()) {
+        return 60000; // 1 минута
+    }
+
+    // Нет изменений — реже
+    return 120000; // 2 минуты
+}
+
+async function performSync() {
+    if (isSyncing) return;
+
+    const storedUser = getStoredUser();
+    if (!storedUser?.is_authenticated) {
+        sendSyncStatus('idle', 'Не авторизован');
+        return;
+    }
+
+    if (!hasChanges && !hasDirtyData()) {
+        sendSyncStatus('idle', 'Синхронизировано');
+        return;
+    }
+
+    isSyncing = true;
+
+    try {
+        const freshToken = await getValidToken();
+        if (!freshToken) {
+            consecutiveErrors++;
+            sendSyncStatus('error', 'Сессия истекла');
+            return;
+        }
+
+        sendSyncStatus('syncing', 'Синхронизация...');
+        await syncDirtySections(storedUser.uid, freshToken);
+
+        consecutiveErrors = 0;
+        hasChanges = false;
+        sendSyncStatus('success', 'Сохранено ✓');
+
+    } catch (error) {
+        console.error('[Sync] Error:', error);
+        consecutiveErrors++;
+        sendSyncStatus('error', 'Ошибка');
+    } finally {
+        isSyncing = false;
+    }
+}
+
+function startBackgroundSync() {
+    if (syncInterval) return;
+
+    console.log('[Sync] Starting');
+    setTimeout(performSync, 5000);
+
+    const interval = getSyncInterval();
+    syncInterval = setInterval(performSync, interval);
+    console.log(`[Sync] Interval: ${interval}ms`);
+}
+
+function stopBackgroundSync() {
+    if (syncInterval) {
+        clearInterval(syncInterval);
+        syncInterval = null;
+        console.log('[Sync] Stopped');
+    }
+}
+
+win?.on('blur', () => {
+    isAppFocused = false;
+    setTimeout(() => {
+        if (!isAppFocused && syncInterval) {
+            clearInterval(syncInterval);
+            syncInterval = setInterval(performSync, 300000);
+            console.log('[Sync] Interval: 5min (background)');
+        }
+    }, 5000);
+});
+
+win?.on('focus', () => {
+    isAppFocused = true;
+    if (syncInterval) {
+        clearInterval(syncInterval);
+        const interval = getSyncInterval();
+        syncInterval = setInterval(performSync, interval);
+        console.log(`[Sync] Interval: ${interval}ms (restored)`);
+    }
+});

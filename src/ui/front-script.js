@@ -1029,7 +1029,73 @@ function updateStats() {
     if (totalSpan) totalSpan.textContent = total;
 }
 
+function updateLampStatus(status, message) {
+    const lamp = document.getElementById('syncLamp');
+    const bulb = document.getElementById('syncBulb');
+    const glow = document.getElementById('syncGlow');
 
+    if (!lamp || !bulb || !glow) return;
+
+    // Убираем все классы
+    lamp.className = 'sync-lamp';
+    bulb.className = 'sync-lamp-bulb';
+    glow.className = 'sync-lamp-glow';
+
+    // Добавляем нужные
+    bulb.classList.add(status);
+    glow.classList.add(status);
+
+    if (status === 'syncing' || status === 'error' || status === 'success') {
+        lamp.classList.add('active');
+    } else {
+        lamp.classList.remove('active');
+    }
+
+    // Тултип
+    const tooltips = {
+        idle: 'Синхронизировано',
+        syncing: 'Синхронизация...',
+        success: 'Сохранено ✓',
+        error: 'Ошибка синхронизации'
+    };
+    lamp.title = tooltips[status] || status;
+
+    // Автоматический возврат в idle
+    clearTimeout(window.lampTimeout);
+    if (status === 'success') {
+        window.lampTimeout = setTimeout(() => updateLampStatus('idle'), 2000);
+    }
+    if (status === 'error') {
+        window.lampTimeout = setTimeout(() => updateLampStatus('idle'), 4000);
+    }
+}
+
+// Клик по лампочке — ручная синхронизация
+document.addEventListener('DOMContentLoaded', () => {
+    const lamp = document.getElementById('syncLamp');
+    if (lamp) {
+        lamp.addEventListener('click', async (e) => {
+            e.stopPropagation();
+
+            if (!currentUser) {
+                updateLampStatus('error');
+                setTimeout(() => updateLampStatus('idle'), 3000);
+                return;
+            }
+
+            if (document.getElementById('syncBulb')?.classList.contains('syncing')) {
+                return;
+            }
+
+            updateLampStatus('syncing');
+            try {
+                await window.electronAPI.syncAllDirty();
+            } catch (error) {
+                // Ошибка уже обработана в main.js
+            }
+        });
+    }
+});
 
 
 function createTooltip() {
@@ -1756,6 +1822,7 @@ document.addEventListener('click', (e) => {
 });
 
 window.addEventListener('DOMContentLoaded', () => {
+    // Подписка на статус из main.js
     window.electronAPI.onMessageFromMain(({ imgUrl, name }) => {
         const editIcoInput = document.getElementById('editIcoInput');
         const icoInput = document.getElementById('icoInput');
@@ -2001,13 +2068,20 @@ authModal.addEventListener('click', (e) => {
 
 
 document.addEventListener('DOMContentLoaded', async () => {
+    updateLampStatus('idle', 'Синхр.');
+    window.electronAPI.onSyncStatus((data) => {
+        updateLampStatus(data.status, data.message);
+    });
+
     window.electronAPI.onRestoreSession(async (user) => {
         if (user) {
             currentUser = user;
             updateAuthButton(user.email);
+            updateLampStatus('idle', 'Синхр.');
         } else {
             currentUser = null;
             updateAuthButton(null);
+            updateLampStatus('idle', 'Не авторизован');
         }
     });
 
@@ -2046,6 +2120,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (savedUser.isAuthenticated) {
         currentUser = savedUser;
         updateAuthButton(savedUser.email);
+        updateLampStatus('idle', 'Синхр.');
+    } else {
+        updateLampStatus('idle', 'Не авторизован');
     }
 
     await loadRatings();
