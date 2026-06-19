@@ -5,7 +5,7 @@ const path = require('path');
 const https = require('https');
 const { autoUpdater } = require('electron-updater');
 const log = require('electron-log');
-const { signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } = require('firebase/auth');
+const { sendPasswordResetEmail, signInWithEmailAndPassword, createUserWithEmailAndPassword, signOut } = require('firebase/auth');
 
 const LocalDatabase = require('./database/local-database');
 const {fetchSteamAPIData, fetchSteamGameTags, fetchKupikodPriceAPI} = require("./service/search/game-search.js");
@@ -1526,5 +1526,41 @@ win?.on('focus', () => {
         const interval = getSyncInterval();
         syncInterval = setInterval(performSync, interval);
         console.log(`[Sync] Interval: ${interval}ms (restored)`);
+    }
+});
+
+ipcMain.handle('auth-reset-password', async (event, email) => {
+    try {
+        if (!email || !email.trim()) {
+            return { success: false, error: 'Введите email' };
+        }
+
+        await sendPasswordResetEmail(auth, email.trim());
+        console.log(`[i] Password reset email sent to: ${email}`);
+
+        return {
+            success: true,
+            message: 'Письмо для сброса пароля отправлено на указанный email'
+        };
+
+    } catch (error) {
+        console.error('[x] Password reset error:', error);
+
+        let errorMessage;
+        switch (error.code) {
+            case 'auth/user-not-found':
+                errorMessage = 'Пользователь с таким email не найден';
+                break;
+            case 'auth/invalid-email':
+                errorMessage = 'Неверный формат email';
+                break;
+            case 'auth/too-many-requests':
+                errorMessage = 'Слишком много запросов. Попробуйте позже';
+                break;
+            default:
+                errorMessage = 'Ошибка при отправке письма: ' + error.message;
+        }
+
+        return { success: false, error: errorMessage };
     }
 });

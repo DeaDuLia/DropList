@@ -65,6 +65,8 @@ let isDraggingDown = false;
 let holdTimer = null;
 let isMouseDown = false;
 
+
+
 function getVisibleSections() {
     try {
         const saved = localStorage.getItem('visibleSections');
@@ -609,8 +611,18 @@ function setupDragAndDrop() {
 
 
 
-document.addEventListener('DOMContentLoaded', () => {
+// front-script.js
 
+// ====== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ======
+// ... все переменные ...
+
+// ====== ФУНКЦИИ ======
+// ... все функции (updateLampStatus, showError, и т.д.) ...
+
+// ====== ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ ======
+document.addEventListener('DOMContentLoaded', async () => {
+
+    // ====== 1. УПРАВЛЕНИЕ ОКНОМ ======
     const minimizeBtn = document.getElementById('minimizeBtn');
     const maximizeBtn = document.getElementById('maximizeBtn');
     const closeBtn = document.getElementById('closeBtn');
@@ -629,18 +641,17 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (closeBtn) {
         closeBtn.addEventListener('click', async () => {
-            // Защита от двойного клика
             if (isClosing) return;
             isClosing = true;
-
             try {
+                updateLampStatus('idle');
+                await new Promise(r => setTimeout(r, 50));
                 const shouldClose = await syncBeforeClose();
                 if (shouldClose) {
                     window.electronAPI.closeWindow();
                 }
             } catch (error) {
                 console.error('[Close] Error:', error);
-                // В случае критической ошибки всё равно закрываем
                 window.electronAPI.closeWindow();
             } finally {
                 isClosing = false;
@@ -648,10 +659,157 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // ====== 2. НАВИГАЦИЯ ======
     renderNavigation();
     setupDragOnHold();
     setupDragAndDrop();
 
+    // ====== 3. АВТОРИЗАЦИЯ ======
+    window.electronAPI.onRestoreSession(async (user) => {
+        if (user) {
+            currentUser = user;
+            updateAuthButton(user.email);
+            updateLampStatus('idle');
+        } else {
+            currentUser = null;
+            updateAuthButton(null);
+            updateLampStatus('idle', 'Не авторизован');
+        }
+    });
+
+    window.electronAPI.onSyncRequired(async (syncData) => {
+        // ... существующий код ...
+    });
+
+    const savedUser = await window.electronAPI.authGetCurrentUser();
+    if (savedUser.isAuthenticated) {
+        currentUser = savedUser;
+        updateAuthButton(savedUser.email);
+        updateLampStatus('idle');
+    } else {
+        updateLampStatus('idle', 'Не авторизован');
+    }
+
+    // ====== 4. ПОДПИСКА НА СТАТУС СИНХРОНИЗАЦИИ ======
+    window.electronAPI.onSyncStatus((data) => {
+        updateLampStatus(data.status, data.message);
+    });
+
+    // ====== 5. ЛАМПОЧКА — КЛИК ДЛЯ РУЧНОЙ СИНХРОНИЗАЦИИ ======
+    const lamp = document.getElementById('syncLamp');
+    if (lamp) {
+        lamp.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (!currentUser) {
+                updateLampStatus('error');
+                setTimeout(() => updateLampStatus('idle'), 3000);
+                return;
+            }
+            if (document.getElementById('syncBulb')?.classList.contains('syncing')) {
+                return;
+            }
+            updateLampStatus('syncing');
+            try {
+                await window.electronAPI.syncAllDirty();
+            } catch (error) {}
+        });
+    }
+
+    // ====== 6. СБРОС ПАРОЛЯ ======
+    const resetPasswordModal = document.getElementById('resetPasswordModal');
+    const closeResetPasswordModal = document.getElementById('closeResetPasswordModal');
+    const showResetPasswordBtn = document.getElementById('showResetPasswordBtn');
+    const resetPasswordBtn = document.getElementById('resetPasswordBtn');
+    const resetEmail = document.getElementById('resetEmail');
+    const resetPasswordMessage = document.getElementById('resetPasswordMessage');
+
+    // Показываем модалку
+    if (showResetPasswordBtn) {
+        showResetPasswordBtn.addEventListener('click', (e) => {
+            e.preventDefault();
+            if (resetPasswordMessage) {
+                resetPasswordMessage.style.display = 'none';
+                resetPasswordMessage.textContent = '';
+            }
+            if (resetEmail) resetEmail.value = '';
+            if (resetPasswordModal) resetPasswordModal.style.display = 'block';
+        });
+    }
+
+    // Закрываем модалку
+    if (closeResetPasswordModal) {
+        closeResetPasswordModal.addEventListener('click', () => {
+            if (resetPasswordModal) resetPasswordModal.style.display = 'none';
+        });
+    }
+
+    if (resetPasswordModal) {
+        resetPasswordModal.addEventListener('click', (e) => {
+            if (e.target === resetPasswordModal) {
+                resetPasswordModal.style.display = 'none';
+            }
+        });
+    }
+
+    // Отправка запроса
+    if (resetPasswordBtn && resetEmail && resetPasswordMessage) {
+        resetPasswordBtn.addEventListener('click', async () => {
+            const email = resetEmail.value.trim();
+
+            if (!email) {
+                resetPasswordMessage.textContent = '❌ Введите email';
+                resetPasswordMessage.style.display = 'block';
+                resetPasswordMessage.style.color = '#e74c3c';
+                return;
+            }
+
+            const originalText = resetPasswordBtn.textContent;
+            resetPasswordBtn.textContent = '⏳ Отправка...';
+            resetPasswordBtn.disabled = true;
+            resetPasswordMessage.style.display = 'none';
+
+            try {
+                const result = await window.electronAPI.authResetPassword(email);
+
+                if (result.success) {
+                    resetPasswordMessage.textContent = '✅ ' + result.message;
+                    resetPasswordMessage.style.display = 'block';
+                    resetPasswordMessage.style.color = '#2ecc71';
+                    resetEmail.value = '';
+                    setTimeout(() => {
+                        if (resetPasswordModal) resetPasswordModal.style.display = 'none';
+                    }, 3000);
+                } else {
+                    resetPasswordMessage.textContent = '❌ ' + result.error;
+                    resetPasswordMessage.style.display = 'block';
+                    resetPasswordMessage.style.color = '#e74c3c';
+                }
+            } catch (error) {
+                console.error('Password reset error:', error);
+                resetPasswordMessage.textContent = '❌ Ошибка при отправке запроса';
+                resetPasswordMessage.style.display = 'block';
+                resetPasswordMessage.style.color = '#e74c3c';
+            } finally {
+                resetPasswordBtn.textContent = originalText;
+                resetPasswordBtn.disabled = false;
+            }
+        });
+
+        // Enter в поле email
+        resetEmail.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                resetPasswordBtn.click();
+            }
+        });
+    }
+
+    // ====== 7. ЗАГРУЗКА ДАННЫХ ======
+    await loadRatings();
+    await loadStatuses();
+    await initUpdateSystem();
+
+    const games = await window.electronAPI.getData('games');
+    await renderSection('games', games);
 });
 
 window.addEventListener('resize', () => {
@@ -2072,6 +2230,8 @@ document.addEventListener('DOMContentLoaded', async () => {
     window.electronAPI.onSyncStatus((data) => {
         updateLampStatus(data.status, data.message);
     });
+
+
 
     window.electronAPI.onRestoreSession(async (user) => {
         if (user) {

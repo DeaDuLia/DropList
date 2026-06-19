@@ -30,6 +30,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
     authSignIn: (email, password) => ipcRenderer.invoke('auth-sign-in', email, password),
     authSignUp: (email, password) => ipcRenderer.invoke('auth-sign-up', email, password),
     authSignOut: () => ipcRenderer.invoke('auth-sign-out'),
+    authResetPassword: (email) => ipcRenderer.invoke('auth-reset-password', email),
     authGetCurrentUser: () => ipcRenderer.invoke('auth-get-current-user'),
     onRestoreSession: (callback) => {
         ipcRenderer.on('restore-session', (event, user) => callback(user));
