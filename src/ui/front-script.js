@@ -606,19 +606,6 @@ function setupDragAndDrop() {
 }
 
 
-
-
-
-
-
-// front-script.js
-
-// ====== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ======
-// ... все переменные ...
-
-// ====== ФУНКЦИИ ======
-// ... все функции (updateLampStatus, showError, и т.д.) ...
-
 // ====== ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ ======
 document.addEventListener('DOMContentLoaded', async () => {
 

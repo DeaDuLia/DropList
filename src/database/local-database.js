@@ -128,6 +128,16 @@ export function initializeDatabase() {
             PRIMARY KEY (card_name, section)
         )
     `);
+    db.exec(`
+        CREATE TABLE IF NOT EXISTS logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            section TEXT NOT NULL,
+            entity_name TEXT NOT NULL,
+            action TEXT NOT NULL,
+            date TEXT NOT NULL,
+            UNIQUE(section, entity_name)
+        )
+    `);
 }
 initializeDatabase();
 
@@ -173,7 +183,7 @@ export const statements = {
     getAllStatistics: db.prepare('SELECT info, value, actual_date FROM app_statistics'),
     getAllTags: db.prepare('SELECT name, count FROM tags ORDER BY count DESC'),
     addOrUpdateTag: db.prepare(`
-        INSERT INTO tags (name, count) VALUES (?, 1)
+        INSERT INTO tags (name, count) VALUES (?, ?)
         ON CONFLICT(name) DO UPDATE SET count = count + 1
     `),
     removeTagCount: db.prepare(`
@@ -191,6 +201,8 @@ export const statements = {
     removeTagFromCard: db.prepare(`
         DELETE FROM tags_assign WHERE card_name = ? AND tag_name = ?
     `),
+    clearAllTags: db.prepare('DELETE FROM tags'),
+    getTagCount: db.prepare('SELECT count FROM tags WHERE name = ?'),
     clearCardTags: db.prepare(`
         DELETE FROM tags_assign WHERE card_name = ?
     `),
@@ -262,6 +274,30 @@ export const statements = {
     `),
     deleteFavoritesByCard: db.prepare(`
         DELETE FROM favorites WHERE card_name = ? AND section = ?
+    `),
+    getSectionUpdatedAt: db.prepare(`
+        SELECT value FROM app_statistics WHERE info = ?
+    `),
+
+    setSectionUpdatedAt: db.prepare(`
+        INSERT OR REPLACE INTO app_statistics (info, value, actual_date)
+        VALUES (?, ?, ?)
+    `),
+    addLog: db.prepare(`
+        INSERT OR REPLACE INTO logs (section, entity_name, action, date)
+        VALUES (?, ?, ?, ?)
+    `),
+
+    getLogsBySection: db.prepare(`
+        SELECT * FROM logs WHERE section = ? ORDER BY date ASC
+    `),
+
+    clearLogsBySection: db.prepare(`
+        DELETE FROM logs WHERE section = ?
+    `),
+
+    hasLogsBySection: db.prepare(`
+        SELECT COUNT(*) as count FROM logs WHERE section = ?
     `)
 };
 
@@ -422,3 +458,169 @@ export function removeFavoriteStatus() {
     }
 }
 
+export function getAllTagsLocal() {
+    return statements.getAllTags.all();
+}
+
+export function getTagByName(tagName) {
+    const stmt = db.prepare('SELECT name, count FROM tags WHERE name = ?');
+    return stmt.get(tagName);
+}
+
+export function getAllExpectedReleasesLocal() {
+    return statements.getAllExpectedReleases.all();
+}
+
+export function getExpectedReleaseByName(cardName, sectionName) {
+    return statements.getExpectedRelease.get(cardName, sectionName);
+}
+
+export function isExpectedReleasesDirty() {
+    const dirty = statements.getStatistic.get('dirty_expected_releases');
+    return dirty && dirty.value === 'true';
+}
+
+// ====== ДЛЯ ИЗБРАННОГО ======
+
+export function getAllFavoritesLocal() {
+    return statements.getAllFavorites.all();
+}
+
+export function getFavoriteByName(cardName) {
+    const stmt = db.prepare('SELECT card_name, section FROM favorites WHERE card_name = ?');
+    return stmt.get(cardName);
+}
+
+export function saveLocalTagsData(remoteTags) {
+    // Очищаем существующие теги
+    statements.clearAllTags.run();
+
+    for (const tag of remoteTags) {
+        statements.addOrUpdateTag.run(tag.name, tag.count || 1);
+    }
+}
+
+export function saveLocalExpectedReleasesData(remoteReleases) {
+    // Очищаем существующие даты
+    statements.replaceAllExpectedReleases.run();
+
+    for (const release of remoteReleases) {
+        if (release.last_notification_date) {
+            statements.setExpectedRelease.run(
+                release.card_name,
+                release.section,
+                release.release_date,
+                release.last_notification_date
+            );
+        }
+    }
+}
+
+// ====== СОХРАНЕНИЕ ИЗБРАННОГО ЛОКАЛЬНО ======
+
+export function saveLocalFavoritesData(remoteFavorites) {
+    // Очищаем существующее избранное
+    statements.clearFavorites.run();
+
+    for (const fav of remoteFavorites) {
+        statements.addFavorite.run(fav.card_name, fav.section);
+    }
+}
+
+
+export function saveLocalCardsData(section, cards) {
+    // ✅ 1. СНАЧАЛА удаляем ВСЕ связи тегов для карточек в этом разделе
+    const deleteTagsStmt = db.prepare(`
+        DELETE FROM tags_assign 
+        WHERE card_name IN (SELECT name FROM data_cards WHERE section = ?)
+    `);
+    deleteTagsStmt.run(section);
+
+    // ✅ 2. Удаляем все карточки в разделе
+    const deleteCardsStmt = db.prepare('DELETE FROM data_cards WHERE section = ?');
+    deleteCardsStmt.run(section);
+
+    // ✅ 3. Вставляем новые карточки
+    for (const card of cards) {
+        statements.addData.run(
+            card.name,
+            section,
+            card.icoUrl || null,
+            card.rating || '0',
+            card.status || 'Уточнить',
+            card.description || ''
+        );
+
+        // ✅ 4. Добавляем теги для карточки
+        if (card.tags && Array.isArray(card.tags)) {
+            for (const tag of card.tags) {
+                statements.addTagToCard.run(card.name, tag);
+                statements.addOrUpdateTag.run(tag, 1);
+            }
+        }
+    }
+
+    console.log(`✅ Saved ${cards.length} cards in ${section}`);
+}
+
+export function getLocalUpdatedAt(section) {
+    const info = `meta_${section}_updated_at`;
+    const result = statements.getSectionUpdatedAt.get(info);
+    return result ? result.value : null;
+}
+
+export function updateLocalUpdatedAt(section, updatedAt) {
+    const info = `meta_${section}_updated_at`;
+    const now = new Date().toISOString();
+    statements.setSectionUpdatedAt.run(info, updatedAt, now);
+}
+
+export function getAllCardsBySection(section) {
+    return statements.getDataBySection.all(section);
+}
+
+export function clearLogs(section) {
+    statements.clearLogsBySection.run(section);
+    console.log(`🧹 Logs cleared for ${section}`);
+}
+
+export function getLogs(section) {
+    return statements.getLogsBySection.all(section);
+}
+
+export function getCardByNameAndSection(section, cardName) {
+    const stmt = db.prepare(`
+        SELECT 
+            name, 
+            ico_url as icoUrl, 
+            rating, 
+            status, 
+            description,
+            (SELECT GROUP_CONCAT(tag_name, ',') FROM tags_assign WHERE card_name = data_cards.name) as tags
+        FROM data_cards 
+        WHERE section = ? AND name = ?
+    `);
+    return stmt.get(section, cardName);
+}
+
+export function writeLog(section, entityName, action) {
+    const date = new Date().toISOString();
+
+    // 1. Пишем лог (замена, если уже есть)
+    statements.addLog.run(section, entityName, action, date);
+
+    // 2. Обновляем updated_at для этой секции
+    const allSections = [
+        'games', 'movies', 'books', 'serials', 'anime', 'cartoons',
+        'tags',
+        'expected_releases',
+        'favorites'
+    ];
+
+    if (allSections.includes(section)) {
+        const info = `meta_${section}_updated_at`;
+        statements.setSectionUpdatedAt.run(info, date, date);
+    }
+
+    console.log(`📝 Log: ${action} ${entityName} in ${section}`);
+}

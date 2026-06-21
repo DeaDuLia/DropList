@@ -23,61 +23,7 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 export const auth = getAuth(firebaseApp);
 
-export async function syncUserData(uid, idToken) {
-    try {
-        const localLastSync = statements.getStatistic.get('last_firestore_update');
-        const localSyncTime = localLastSync ? localLastSync.value : null;
-
-        const remoteSyncTime = await getSyncTime(uid, idToken);
-
-        if (!remoteSyncTime) {
-            const localData = getAllLocalData();
-            const sections = ['games', 'movies', 'cartoons', 'serials', 'anime', 'books'];
-            for (const section of sections) {
-                await saveSectionToFirestore(uid, idToken, section, localData[section] || []);
-            }
-            await saveAllTagsToFirestore();
-            await saveFavoritesToFirestore(uid, idToken);
-            const now = new Date().toISOString();
-            await updateSyncTime(uid, idToken, now);
-            statements.setStatistic.run('last_firestore_update', now, now);
-            return { action: 'local_to_cloud', success: true };
-        }
-
-        // Сравниваем времена
-        const localTime = localSyncTime ? new Date(localSyncTime) : null;
-        const remoteTime = new Date(remoteSyncTime);
-
-        if (localTime && Math.abs(localTime - remoteTime) < 5000) {
-            console.log('[+] Data synced');
-            return { action: 'synced', success: true };
-        }
-
-        // Конфликт — загружаем все данные для выбора
-        const localData = getAllLocalData();
-        const sections = ['games', 'movies', 'cartoons', 'serials', 'anime', 'books'];
-        const remoteData = {};
-
-        for (const section of sections) {
-            remoteData[section] = await getSectionFromFirestore(uid, idToken, section);
-        }
-
-        return {
-            success: true,
-            needChoice: true,
-            localData: localData,
-            remoteData: remoteData,
-            localSyncTime: localSyncTime,
-            remoteSyncTime: remoteSyncTime
-        };
-
-    } catch (error) {
-        console.error('Sync error:', error);
-        return { success: false, error: error.message };
-    }
-}
-
-async function getSectionFromFirestore(uid, idToken, section) {
+export async function getSectionFromFirestore(uid, idToken, section) {
     const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/sections/${section}`;
 
     try {
@@ -599,5 +545,84 @@ export async function loadFavoritesFromFirestore(uid, idToken) {
         console.error('Error loading favorites:', error);
         return null;
     }
+}
+
+export async function getSectionMeta(uid, idToken, section) {
+    const meta = await getMeta(uid, idToken);
+    const value = meta[section]?.stringValue || null;
+    return { _updatedAt: value };
+}
+
+export async function getMeta(uid, idToken) {
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/sections/META`;
+
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${idToken}` }
+        });
+
+        if (response.status === 404) {
+            return { fields: {} };
+        }
+
+        if (!response.ok) {
+            console.log(`HTTP ${response.status}`);
+            return { fields: {} };
+        }
+
+        const data = await response.json();
+        return data.fields || {};
+    } catch (error) {
+        console.error('Error getting meta:', error);
+        return { fields: {} };
+    }
+}
+
+export async function updateMeta(uid, idToken, section, updatedAt) {
+    // 1. Получаем текущий документ целиком
+    const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/sections/META`;
+
+    let existingFields = {};
+
+    try {
+        const response = await fetch(url, {
+            method: 'GET',
+            headers: { 'Authorization': `Bearer ${idToken}` }
+        });
+
+        if (response.ok) {
+            const data = await response.json();
+            existingFields = data.fields || {};
+        }
+    } catch (e) {
+        // Документа нет — ок
+    }
+
+    // 2. Добавляем/обновляем поле для секции
+    existingFields[section] = { stringValue: updatedAt };
+
+    console.log(`[updateMeta] Saving ${Object.keys(existingFields).length} fields:`, Object.keys(existingFields).join(', '));
+
+    // 3. Отправляем ВСЕ ПОЛЯ
+    const body = { fields: existingFields };
+
+    const response = await fetch(url, {
+        method: 'PATCH',
+        headers: {
+            'Authorization': `Bearer ${idToken}`,
+            'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(body)
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        console.error(`[updateMeta] Error: ${errorText}`);
+        throw new Error(`HTTP ${response.status}: ${errorText}`);
+    }
+
+    console.log(`✅ Meta updated for ${section}: ${updatedAt}`);
+    return true;
 }
 

@@ -15,10 +15,16 @@ const {fetchCardData, updateAllReleaseDates, closeAllParsingWindows} = require("
 const {getStoredUser, clearUserSession, clearTagsDirty, clearExpectedReleasesDirty, markSectionDirty, markTagsDirty,
     markExpectedReleasesDirty, saveUserSession, markFavoritesDirty, clearFavoritesDirty
 } = require("./database/local-database.js");
-const {syncUserData, syncDirtySections, getValidToken, saveSectionToFirestore, saveAllTagsToFirestore,
+const {syncDirtySections, getValidToken, saveSectionToFirestore, saveAllTagsToFirestore,
     saveExpectedReleasesToFirestore, updateSyncTime, loadExpectedReleasesFromFirestore, getSyncTime,
     loadAllTagsFromFirestore, saveFavoritesToFirestore, loadFavoritesFromFirestore, auth
 } = require("./database/firestore.js");
+const {getAllTagsLocal, getTagByName, isTagsDirty, getAllExpectedReleasesLocal, getExpectedReleaseByName,
+    isExpectedReleasesDirty, getAllFavoritesLocal, getFavoriteByName, isFavoritesDirty, isSectionDirty,
+    saveLocalCardsData, getLocalUpdatedAt, updateLocalUpdatedAt, saveLocalExpectedReleasesData, saveLocalFavoritesData,
+    getAllCardsBySection, clearLogs, getLogs, getCardByNameAndSection, saveLocalTagsData, writeLog
+} = require("./database/local-database");
+const {updateMeta, getSectionMeta, getSectionFromFirestore} = require("./database/firestore");
 
 autoUpdater.logger = log;
 
@@ -206,11 +212,8 @@ async function createWindow() {
         const freshToken = await getValidToken();
         if (freshToken) {
             console.log('[i] Token valid on startup');
-            syncUserData(storedUser.uid, freshToken).then(syncResult => {
-                if (win && syncResult.needChoice) {
-                    win.webContents.send('sync-required', syncResult);
-                }
-            });
+            startBackgroundSync();
+            sendSyncStatus('idle', 'Синхронизировано');
         } else {
             console.log('[!] Session expired on startup');
             clearUserSession();
@@ -509,6 +512,7 @@ ipcMain.handle('sync-all-sections-to-cloud', async () => {
 ipcMain.handle('update-data-description', async (event, section, name, description) => {
     const stmt = LocalDatabase.db.prepare('UPDATE data_cards SET description = ? WHERE name = ? AND section = ?');
     const result = stmt.run(description, name, section);
+    writeLog(section, name, 'update');
     markSectionDirty(section);
     const now = new Date().toISOString();
     LocalDatabase.statements.setStatistic.run('last_firestore_update', now, now);
@@ -540,12 +544,20 @@ ipcMain.handle('update-card-tags', async (event, section, cardName, newTags) => 
     for (const tag of removedTags) {
         LocalDatabase.statements.removeTagCount.run(tag);
         LocalDatabase.statements.deleteTagIfZero.run(tag);
+        const count = LocalDatabase.statements.getTagCount?.get(tag);
+        if (count && count.count <= 1) {
+            writeLog('tags', tag, 'delete');
+        } else {
+            writeLog('tags', tag, 'update');
+        }
     }
 
     for (const tag of addedTags) {
         LocalDatabase.statements.addOrUpdateTag.run(tag);
+        writeLog('tags', tag, 'update');
     }
 
+    writeLog(section, cardName, 'update');
     markSectionDirty(section);
     markTagsDirty();
     const now = new Date().toISOString();
@@ -649,12 +661,14 @@ ipcMain.handle('add-data', async (event, section, data) => {
         data.status || 'Уточнить',
         data.description || ''
     );
+    writeLog(section, data.name, 'update');
 
     // Добавляем теги
     if (data.tags && Array.isArray(data.tags) && data.tags.length > 0) {
         for (const tag of data.tags) {
             LocalDatabase.statements.addTagToCard.run(data.name, tag);
             LocalDatabase.statements.addOrUpdateTag.run(tag);
+            writeLog('tags', tag, 'update');
         }
         markTagsDirty();
     }
@@ -662,6 +676,7 @@ ipcMain.handle('add-data', async (event, section, data) => {
     // Сохраняем дату релиза, если передана
     if (data.releaseDate) {
         LocalDatabase.statements.setExpectedRelease.run(data.name, section, data.releaseDate, null);
+        writeLog('expected_releases', data.name, 'update');
         markExpectedReleasesDirty();
         console.log(`[AddData] Saved release date for "${data.name}": ${data.releaseDate}`);
     }
@@ -676,8 +691,9 @@ ipcMain.handle('add-data', async (event, section, data) => {
 ipcMain.handle('delete-data', async (event, section, dataName) => {
     // Сначала получаем теги карточки
     const tags = LocalDatabase.statements.getTagsByCard.all(dataName).map(row => row.tag_name);
-
+    writeLog(section, dataName, 'delete');
     // Удаляем связи тегов
+
     LocalDatabase.statements.clearCardTags.run(dataName);
     LocalDatabase.statements.deleteExpectedRelease.run(dataName, section);
 
@@ -689,8 +705,15 @@ ipcMain.handle('delete-data', async (event, section, dataName) => {
     for (const tag of tags) {
         LocalDatabase.statements.removeTagCount.run(tag);
         LocalDatabase.statements.deleteTagIfZero.run(tag);
+        const count = LocalDatabase.statements.getTagCount?.get(tag);
+        if (count && count.count <= 1) {
+            writeLog('tags', tag, 'delete');
+        } else {
+            writeLog('tags', tag, 'update');
+        }
     }
     LocalDatabase.statements.deleteFavoritesByCard.run(dataName, section);
+    writeLog('expected_releases', dataName, 'delete');
     markFavoritesDirty();
 
     markSectionDirty(section);
@@ -715,6 +738,8 @@ ipcMain.handle('move-to-category', async (event, data) => {
         markFavoritesDirty();
     }
 
+    writeLog(data.oldCategory, data.name, 'delete');
+    writeLog(data.newCategory, data.name, 'update');
     markSectionDirty(data.newCategory);
     markSectionDirty(data.oldCategory);
     const now = new Date().toISOString();
@@ -725,6 +750,7 @@ ipcMain.handle('move-to-category', async (event, data) => {
 
 ipcMain.handle('update-data', async (event, section, oldName, newName, newIcoUrl) => {
     const result = LocalDatabase.statements.updateData.run(newName, newIcoUrl, oldName, section);
+    writeLog(section, newName, 'update');
     markSectionDirty(section);
     // Обновляем локальное время синхронизации
     const now = new Date().toISOString();
@@ -735,6 +761,7 @@ ipcMain.handle('update-data', async (event, section, oldName, newName, newIcoUrl
 
 ipcMain.handle('update-data-rating', async (event, section, dataName, rating) => {
     const result = LocalDatabase.statements.updateDataRating.run(rating, dataName, section);
+    writeLog(section, dataName, 'update');
     markSectionDirty(section);
     // Обновляем локальное время синхронизации
     const now = new Date().toISOString();
@@ -746,12 +773,14 @@ ipcMain.handle('update-data-rating', async (event, section, dataName, rating) =>
 ipcMain.handle('update-data-status', async (event, section, dataName, status) => {
     const oldStatus = LocalDatabase.statements.getStatusByNameAndSection.get(dataName, section)?.status;
     const result = LocalDatabase.statements.updateDataStatus.run(status, dataName, section);
+    writeLog(section, dataName, 'update');
 
     if ((status === 'Ожидается' || status === 'В процессе') && oldStatus !== status) {
         // Запускаем в фоне
         fetchCardData(dataName, section).then(cardData => {
             if (cardData.releaseDate) {
                 LocalDatabase.statements.setExpectedRelease.run(dataName, section, cardData.releaseDate, null);
+                writeLog('expected_releases', dataName, 'update');
                 markExpectedReleasesDirty();
                 if (win) {
                     win.webContents.send('release-date-updated', { cardName: dataName, section, releaseDate: cardData.releaseDate });
@@ -760,6 +789,7 @@ ipcMain.handle('update-data-status', async (event, section, dataName, status) =>
         }).catch(err => console.error('Failed to fetch release date:', err));
     } else if ((oldStatus === 'Ожидается' || oldStatus === 'В процессе') && status !== 'Ожидается' && status !== 'В процессе') {
         LocalDatabase.statements.deleteExpectedRelease.run(dataName, section);
+        writeLog('expected_releases', dataName, 'delete');
         markExpectedReleasesDirty();
     }
 
@@ -1082,12 +1112,7 @@ ipcMain.handle('auth-sign-in', async (event, email, password) => {
 
         saveUserSession(user.email, user.uid, idToken, refreshToken);
 
-        // Запускаем синхронизацию в фоне
-        syncUserData(user.uid, idToken).then(syncResult => {
-            if (win && syncResult.needChoice) {
-                win.webContents.send('sync-required', syncResult);
-            }
-        });
+
 
         return { success: true, email: user.email, uid: user.uid };
     } catch (error) {
@@ -1112,12 +1137,8 @@ ipcMain.handle('auth-sign-up', async (event, email, password) => {
         const refreshToken = user.refreshToken; // 👈 ПОЛУЧАЕМ
 
         saveUserSession(user.email, user.uid, idToken, refreshToken);
-
-        syncUserData(user.uid, idToken).then(syncResult => {
-            if (win && syncResult.needChoice) {
-                win.webContents.send('sync-required', syncResult);
-            }
-        });
+        startBackgroundSync();
+        sendSyncStatus('idle', 'Синхронизировано');
 
         return { success: true, email: user.email, uid: user.uid };
     } catch (error) {
@@ -1179,6 +1200,7 @@ ipcMain.handle('save-release-date', async (event, cardName, section, releaseDate
     if (card) {
         // Если статус подходящий — сохраняем/обновляем в expected_releases
         const existing = LocalDatabase.statements.getExpectedRelease.get(cardName, section);
+        writeLog('expected_releases', cardName, 'update');
         if (existing) {
             LocalDatabase.statements.setExpectedRelease.run(cardName, section, releaseDate, existing.last_notification_date);
         } else {
@@ -1193,6 +1215,7 @@ ipcMain.handle('save-release-date', async (event, cardName, section, releaseDate
 
 ipcMain.handle('delete-release-date', async (event, cardName, section) => {
     LocalDatabase.statements.deleteExpectedRelease.run(cardName, section);
+    writeLog('expected_releases', cardName, 'delete');
     markExpectedReleasesDirty();
     return { success: true };
 });
@@ -1268,12 +1291,14 @@ ipcMain.handle('stop-info-searching', async () => {
 
 ipcMain.handle('add-favorite', (event, cardName, section) => {
     const result = LocalDatabase.statements.addFavorite.run(cardName, section);
+    writeLog('favorites', cardName, 'update');
     LocalDatabase.markFavoritesDirty();
     return result;
 });
 
 ipcMain.handle('remove-favorite', (event, cardName, section) => {
     const result = LocalDatabase.statements.removeFavorite.run(cardName, section);
+    writeLog('favorites', cardName, 'delete');
     LocalDatabase.markFavoritesDirty();
     return result;
 });
@@ -1299,7 +1324,7 @@ ipcMain.handle('sync-all-dirty', async () => {
         }
 
         // Синхронизируем все dirty разделы
-        await syncDirtySections(storedUser.uid, freshToken);
+        //await syncDirtySections(storedUser.uid, freshToken);
         await performSync();
         return { success: true };
     } catch (error) {
@@ -1458,11 +1483,6 @@ async function performSync() {
         return;
     }
 
-    if (!hasChanges && !hasDirtyData()) {
-        sendSyncStatus('idle', 'Синхронизировано');
-        return;
-    }
-
     isSyncing = true;
 
     try {
@@ -1474,7 +1494,18 @@ async function performSync() {
         }
 
         sendSyncStatus('syncing', 'Синхронизация...');
-        await syncDirtySections(storedUser.uid, freshToken);
+
+        // ✅ 1. КАРТОЧКИ (с логами)
+        await syncAllSectionsWithLogs(storedUser.uid, freshToken);
+
+        // ✅ 2. ТЕГИ
+        await syncTags(storedUser.uid, freshToken);
+
+        // ✅ 3. ДАТЫ РЕЛИЗА
+        await syncExpectedReleases(storedUser.uid, freshToken);
+
+        // ✅ 4. ИЗБРАННОЕ
+        await syncFavorites(storedUser.uid, freshToken);
 
         consecutiveErrors = 0;
         hasChanges = false;
@@ -1564,3 +1595,414 @@ ipcMain.handle('auth-reset-password', async (event, email) => {
         return { success: false, error: errorMessage };
     }
 });
+
+async function syncAllSectionsWithLogs(uid, idToken) {
+    const sections = ['games', 'movies', 'books', 'serials', 'anime', 'cartoons'];
+
+    for (const section of sections) {
+        await syncSection(uid, idToken, section);
+    }
+
+    console.log('All sections synced with logs');
+}
+
+async function syncSection(uid, idToken, section) {
+    try {
+        console.log(`🔄 Syncing ${section}...`);
+
+        // 1. Получаем мету
+        const remoteMeta = await getSectionMeta(uid, idToken, section);
+        const localUpdatedAt = getLocalUpdatedAt(section);
+
+        // 2. Если в облаке ничего нет → отправляем локальные
+        if (remoteMeta._updatedAt === null) {
+            console.log(`📤 No remote data for ${section}, creating...`);
+            const localData = getAllCardsBySection(section);
+            await saveSectionToFirestore(uid, idToken, section, localData);
+            const now = new Date().toISOString();
+            await updateMeta(uid, idToken, section, now);
+            updateLocalUpdatedAt(section, now);
+            clearLogs(section);
+            return;
+        }
+
+        const remoteTime = new Date(remoteMeta._updatedAt);
+        const localTime = localUpdatedAt ? new Date(localUpdatedAt) : null;
+
+        // 3. Если время одинаковое → ничего не делаем
+        if (localTime && remoteTime.getTime() === localTime.getTime()) {
+            console.log(`✅ ${section} is in sync`);
+            return;
+        }
+
+        // 4. Если НЕ ГРЯЗНЫЙ → просто забираем из облака
+        if (!isSectionDirty(section)) {
+            console.log(`📥 Pulling ${section} (clean, remote newer)...`);
+
+            const remoteData = await getSectionFromFirestore(uid, idToken, section);
+            saveLocalCardsData(section, remoteData);
+            updateLocalUpdatedAt(section, remoteMeta._updatedAt);
+
+            console.log(`✅ ${section} pulled (clean)`);
+            return;
+        }
+
+        // 5. ГРЯЗНЫЙ → мержим
+        console.log(`Pulling ${section} (dirty, merging with logs)...`);
+
+        const remoteData = await getSectionFromFirestore(uid, idToken, section);
+        const localLogs = getLogs(section);
+
+        let mergedData = remoteData || [];
+
+        // Применяем логи (update/delete для карточек)
+        for (const log of localLogs) {
+            const logTime = new Date(log.date);
+
+            // Применяем только логи, которые новее облачных данных
+            if (logTime > remoteTime) {
+                const localCard = getCardByNameAndSection(section, log.entity_name);
+
+                switch (log.action) {
+                    case 'update': {
+                        if (localCard) {
+                            const exists = mergedData.some(c => c.name === log.entity_name);
+                            if (exists) {
+                                const index = mergedData.findIndex(c => c.name === log.entity_name);
+                                mergedData[index] = localCard;
+                            } else {
+                                mergedData.push(localCard);
+                            }
+                        }
+                        break;
+                    }
+                    case 'delete': {
+                        mergedData = mergedData.filter(c => c.name !== log.entity_name);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // ✅ СОХРАНЯЕМ ЛОКАЛЬНО
+        saveLocalCardsData(section, mergedData);
+
+        // ✅ ОБНОВЛЯЕМ ЛОКАЛЬНОЕ ВРЕМЯ
+        const now = new Date().toISOString();
+        updateLocalUpdatedAt(section, now);
+
+        // ✅ ОЧИЩАЕМ ЛОГИ
+        clearLogs(section);
+
+        // ✅ ОТПРАВЛЯЕМ В ОБЛАКО
+        await saveSectionToFirestore(uid, idToken, section, mergedData);
+        await updateMeta(uid, idToken, section, now);
+
+        console.log(`✅ ${section} pulled and merged (dirty)`);
+        return;
+
+    } catch (error) {
+        console.error(`❌ Sync error for ${section}:`, error);
+    }
+}
+
+async function syncTags(uid, idToken) {
+    const section = 'tags';
+
+    try {
+        console.log(`Syncing ${section}...`);
+
+        // 1. Получаем мету
+        const remoteMeta = await getSectionMeta(uid, idToken, section);
+        const localUpdatedAt = getLocalUpdatedAt(section);
+
+        // 2. Если в облаке ничего нет → отправляем локальные
+        if (remoteMeta._updatedAt === null) {
+            console.log(`No remote data for ${section}, pushing...`);
+            const localData = getAllTagsLocal();
+            await saveSectionToFirestore(uid, idToken, section, localData);
+            const now = new Date().toISOString();
+            await updateMeta(uid, idToken, section, now);
+            updateLocalUpdatedAt(section, now);
+            clearLogs(section);
+            clearTagsDirty();
+            return;
+        }
+
+        const remoteTime = new Date(remoteMeta._updatedAt);
+        const localTime = localUpdatedAt ? new Date(localUpdatedAt) : null;
+
+        // 3. Если время одинаковое → ничего не делаем
+        if (localTime && remoteTime.getTime() === localTime.getTime()) {
+            console.log(`${section} is in sync`);
+            return;
+        }
+
+        // 4. Если НЕ ГРЯЗНЫЙ → просто забираем из облака
+        if (!isTagsDirty()) {
+            console.log(`Pulling ${section} (clean, remote newer)...`);
+
+            const remoteData = await getSectionFromFirestore(uid, idToken, section);
+            saveLocalTagsData(remoteData);
+            updateLocalUpdatedAt(section, remoteMeta._updatedAt);
+
+            console.log(`✅ ${section} pulled (clean)`);
+            return;
+        }
+
+        // 5. ГРЯЗНЫЙ → мержим
+        console.log(`Pulling ${section} (dirty, merging with logs)...`);
+
+        const remoteData = await getSectionFromFirestore(uid, idToken, section);
+        const localLogs = getLogs(section);
+
+        let mergedData = remoteData || [];
+
+        // Применяем логи (update/delete для тегов)
+        for (const log of localLogs) {
+            const logTime = new Date(log.date);
+
+            // Применяем только логи, которые новее облачных данных
+            if (logTime > remoteTime) {
+                switch (log.action) {
+                    case 'update': {
+                        const localTag = getTagByName(log.entity_name);
+                        if (localTag) {
+                            const exists = mergedData.some(t => t.name === log.entity_name);
+                            if (exists) {
+                                const index = mergedData.findIndex(t => t.name === log.entity_name);
+                                mergedData[index] = localTag;
+                            } else {
+                                mergedData.push(localTag);
+                            }
+                        }
+                        break;
+                    }
+                    case 'delete': {
+                        mergedData = mergedData.filter(t => t.name !== log.entity_name);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // ✅ СОХРАНЯЕМ ЛОКАЛЬНО
+        saveLocalTagsData(mergedData);
+
+        // ✅ ОБНОВЛЯЕМ ЛОКАЛЬНОЕ ВРЕМЯ
+        const now = new Date().toISOString();
+        updateLocalUpdatedAt(section, now);
+
+        // ✅ ОЧИЩАЕМ ЛОГИ И DIRTY
+        clearLogs(section);
+        clearTagsDirty();
+
+        // ✅ ОТПРАВЛЯЕМ В ОБЛАКО (чтобы другие устройства получили обновлённые данные)
+        await saveSectionToFirestore(uid, idToken, section, mergedData);
+        await updateMeta(uid, idToken, section, now);
+
+        console.log(`✅ ${section} pulled and merged (dirty)`);
+        return;
+
+    } catch (error) {
+        console.error(`❌ Sync error for ${section}:`, error);
+    }
+}
+
+async function syncExpectedReleases(uid, idToken) {
+    const section = 'expected_releases';
+
+    try {
+        console.log(`🔄 Syncing ${section}...`);
+
+        const remoteMeta = await getSectionMeta(uid, idToken, section);
+        const localUpdatedAt = getLocalUpdatedAt(section);
+
+        if (remoteMeta._updatedAt === null) {
+            console.log(`📤 No remote data for ${section}, pushing...`);
+            const localData = getAllExpectedReleasesLocal();
+            await saveSectionToFirestore(uid, idToken, section, localData);
+            const now = new Date().toISOString();
+            await updateMeta(uid, idToken, section, now);
+            updateLocalUpdatedAt(section, now);
+            clearLogs(section);
+            clearExpectedReleasesDirty();
+            return;
+        }
+
+        const remoteTime = new Date(remoteMeta._updatedAt);
+        const localTime = localUpdatedAt ? new Date(localUpdatedAt) : null;
+
+        if (localTime && remoteTime.getTime() === localTime.getTime()) {
+            console.log(`✅ ${section} is in sync`);
+            return;
+        }
+
+        // НЕ ГРЯЗНЫЙ → просто забираем
+        if (!isExpectedReleasesDirty()) {
+            console.log(`📥 Pulling ${section} (clean, remote newer)...`);
+
+            const remoteData = await getSectionFromFirestore(uid, idToken, section);
+            // ✅ СОХРАНЯЕМ ЛОКАЛЬНО
+            saveLocalExpectedReleasesData(remoteData);
+            updateLocalUpdatedAt(section, remoteMeta._updatedAt);
+
+            console.log(`✅ ${section} pulled (clean)`);
+            return;
+        }
+
+        // ГРЯЗНЫЙ → мержим
+        console.log(`📥 Pulling ${section} (dirty, merging with logs)...`);
+
+        const remoteData = await getSectionFromFirestore(uid, idToken, section);
+        const localLogs = getLogs(section);
+
+        let mergedData = remoteData || [];
+
+        for (const log of localLogs) {
+            const logTime = new Date(log.date);
+
+            if (logTime > remoteTime) {
+                switch (log.action) {
+                    case 'update': {
+                        const localRelease = getExpectedReleaseByName(log.entity_name, log.section);
+                        if (localRelease) {
+                            const exists = mergedData.some(r => r.card_name === log.entity_name);
+                            if (exists) {
+                                const index = mergedData.findIndex(r => r.card_name === log.entity_name);
+                                mergedData[index] = localRelease;
+                            } else {
+                                mergedData.push(localRelease);
+                            }
+                        }
+                        break;
+                    }
+                    case 'delete': {
+                        mergedData = mergedData.filter(r => r.card_name !== log.entity_name);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // ✅ СОХРАНЯЕМ ЛОКАЛЬНО
+        saveLocalExpectedReleasesData(mergedData);
+
+        // ✅ ОБНОВЛЯЕМ ЛОКАЛЬНОЕ ВРЕМЯ
+        const now = new Date().toISOString();
+        updateLocalUpdatedAt(section, now);
+
+        // ✅ ОЧИЩАЕМ ЛОГИ И DIRTY
+        clearLogs(section);
+        clearExpectedReleasesDirty();
+
+        // ✅ ОТПРАВЛЯЕМ В ОБЛАКО
+        await saveSectionToFirestore(uid, idToken, section, mergedData);
+        await updateMeta(uid, idToken, section, now);
+
+        console.log(`✅ ${section} pulled and merged (dirty)`);
+        return;
+
+    } catch (error) {
+        console.error(`❌ Sync error for ${section}:`, error);
+    }
+}
+
+async function syncFavorites(uid, idToken) {
+    const section = 'favorites';
+
+    try {
+        console.log(`🔄 Syncing ${section}...`);
+
+        const remoteMeta = await getSectionMeta(uid, idToken, section);
+        const localUpdatedAt = getLocalUpdatedAt(section);
+
+        if (remoteMeta._updatedAt === null) {
+            console.log(`📤 No remote data for ${section}, pushing...`);
+            const localData = getAllFavoritesLocal();
+            await saveSectionToFirestore(uid, idToken, section, localData);
+            const now = new Date().toISOString();
+            await updateMeta(uid, idToken, section, now);
+            updateLocalUpdatedAt(section, now);
+            clearLogs(section);
+            clearFavoritesDirty();
+            return;
+        }
+
+        const remoteTime = new Date(remoteMeta._updatedAt);
+        const localTime = localUpdatedAt ? new Date(localUpdatedAt) : null;
+
+        if (localTime && remoteTime.getTime() === localTime.getTime()) {
+            console.log(`✅ ${section} is in sync`);
+            return;
+        }
+
+        // НЕ ГРЯЗНЫЙ → просто забираем
+        if (!isFavoritesDirty()) {
+            console.log(`📥 Pulling ${section} (clean, remote newer)...`);
+
+            const remoteData = await getSectionFromFirestore(uid, idToken, section);
+            // ✅ СОХРАНЯЕМ ЛОКАЛЬНО
+            saveLocalFavoritesData(remoteData);
+            updateLocalUpdatedAt(section, remoteMeta._updatedAt);
+
+            console.log(`✅ ${section} pulled (clean)`);
+            return;
+        }
+
+        // ГРЯЗНЫЙ → мержим
+        console.log(`📥 Pulling ${section} (dirty, merging with logs)...`);
+
+        const remoteData = await getSectionFromFirestore(uid, idToken, section);
+        const localLogs = getLogs(section);
+
+        let mergedData = remoteData || [];
+
+        for (const log of localLogs) {
+            const logTime = new Date(log.date);
+
+            if (logTime > remoteTime) {
+                switch (log.action) {
+                    case 'update': {
+                        const localFav = getFavoriteByName(log.entity_name);
+                        if (localFav) {
+                            const exists = mergedData.some(f => f.card_name === log.entity_name);
+                            if (exists) {
+                                const index = mergedData.findIndex(f => f.card_name === log.entity_name);
+                                mergedData[index] = localFav;
+                            } else {
+                                mergedData.push(localFav);
+                            }
+                        }
+                        break;
+                    }
+                    case 'delete': {
+                        mergedData = mergedData.filter(f => f.card_name !== log.entity_name);
+                        break;
+                    }
+                }
+            }
+        }
+
+        // ✅ СОХРАНЯЕМ ЛОКАЛЬНО
+        saveLocalFavoritesData(mergedData);
+
+        // ✅ ОБНОВЛЯЕМ ЛОКАЛЬНОЕ ВРЕМЯ
+        const now = new Date().toISOString();
+        updateLocalUpdatedAt(section, now);
+
+        // ✅ ОЧИЩАЕМ ЛОГИ И DIRTY
+        clearLogs(section);
+        clearFavoritesDirty();
+
+        // ✅ ОТПРАВЛЯЕМ В ОБЛАКО
+        await saveSectionToFirestore(uid, idToken, section, mergedData);
+        await updateMeta(uid, idToken, section, now);
+
+        console.log(`✅ ${section} pulled and merged (dirty)`);
+        return;
+
+    } catch (error) {
+        console.error(`❌ Sync error for ${section}:`, error);
+    }
+}
