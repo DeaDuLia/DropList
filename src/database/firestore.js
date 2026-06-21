@@ -23,6 +23,7 @@ const firebaseConfig = {
 const firebaseApp = initializeApp(firebaseConfig);
 export const auth = getAuth(firebaseApp);
 
+
 export async function getSectionFromFirestore(uid, idToken, section) {
     const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/sections/${section}`;
 
@@ -34,7 +35,7 @@ export async function getSectionFromFirestore(uid, idToken, section) {
 
         if (response.status === 404) return [];
         if (!response.ok) {
-            console.log(`HTTP ${response.status}`)
+            console.log(`HTTP ${response.status}`);
             return null;
         }
 
@@ -45,20 +46,20 @@ export async function getSectionFromFirestore(uid, idToken, section) {
             const values = data.fields.items.arrayValue.values || [];
             for (const item of values) {
                 const fields = item.mapValue.fields;
-                // Читаем теги из массива
-                let tags = [];
-                if (fields.tags && fields.tags.arrayValue) {
-                    tags = (fields.tags.arrayValue.values || []).map(v => v.stringValue);
-                }
 
-                items.push({
-                    name: fields.name?.stringValue || '',
-                    icoUrl: fields.icoUrl?.stringValue || '',
-                    rating: fields.rating?.stringValue || '0',
-                    status: fields.status?.stringValue || 'Уточнить',
-                    description: fields.description?.stringValue || '',
-                    tags: tags
-                });
+                // ✅ УНИВЕРСАЛЬНО: собираем все поля, которые есть
+                const entry = {};
+                for (const [key, value] of Object.entries(fields)) {
+                    // Определяем тип поля
+                    if (value.stringValue !== undefined) {
+                        entry[key] = value.stringValue;
+                    } else if (value.integerValue !== undefined) {
+                        entry[key] = value.integerValue;
+                    } else if (value.arrayValue !== undefined) {
+                        entry[key] = (value.arrayValue.values || []).map(v => v.stringValue);
+                    }
+                }
+                items.push(entry);
             }
         }
 
@@ -164,36 +165,66 @@ export async function updateSyncTime(uid, idToken, timestamp) {
 export async function saveSectionToFirestore(uid, idToken, section, items) {
     const url = `https://firestore.googleapis.com/v1/projects/${firebaseConfig.projectId}/databases/(default)/documents/users/${uid}/sections/${section}`;
 
+    // ✅ Определяем, какие поля использовать в зависимости от секции
+    const isCardsSection = ['games', 'movies', 'books', 'serials', 'anime', 'cartoons'].includes(section);
+    const isFavorites = section === 'favorites';
+    const isTags = section === 'tags';
+    const isExpectedReleases = section === 'expected_releases';
+
     const body = {
         fields: {
             items: {
                 arrayValue: {
                     values: items.map(item => {
-                        // Преобразуем tags из строки в массив
-                        let tagsArray = [];
-                        if (item.tags) {
-                            if (typeof item.tags === 'string') {
-                                tagsArray = item.tags.split(',').filter(t => t);
-                            } else if (Array.isArray(item.tags)) {
-                                tagsArray = item.tags;
+                        let fields = {};
+
+                        if (isCardsSection) {
+                            // ✅ КАРТОЧКИ
+                            let tagsArray = [];
+                            if (item.tags) {
+                                if (typeof item.tags === 'string') {
+                                    tagsArray = item.tags.split(',').filter(t => t);
+                                } else if (Array.isArray(item.tags)) {
+                                    tagsArray = item.tags;
+                                }
                             }
+
+                            fields = {
+                                name: { stringValue: item.name || '' },
+                                icoUrl: { stringValue: item.icoUrl || '' },
+                                rating: { stringValue: item.rating || '0' },
+                                status: { stringValue: item.status || 'Уточнить' },
+                                description: { stringValue: item.description || '' },
+                                tags: {
+                                    arrayValue: {
+                                        values: tagsArray.map(tag => ({ stringValue: tag }))
+                                    }
+                                }
+                            };
+                        } else if (isFavorites) {
+                            // ✅ ИЗБРАННОЕ
+                            fields = {
+                                card_name: { stringValue: item.card_name || '' },
+                                section: { stringValue: item.section || '' }
+                            };
+                        } else if (isTags) {
+                            // ✅ ТЕГИ
+                            fields = {
+                                name: { stringValue: item.name || '' },
+                                count: { integerValue: item.count || 1 }
+                            };
+                        } else if (isExpectedReleases) {
+                            // ✅ ДАТЫ РЕЛИЗА
+                            fields = {
+                                card_name: { stringValue: item.card_name || '' },
+                                section: { stringValue: item.section || '' },
+                                release_date: { stringValue: item.release_date || '' },
+                                last_notification_date: { stringValue: item.last_notification_date || '' }
+                            };
                         }
 
                         return {
-                            mapValue: {
-                                fields: {
-                                    name: { stringValue: item.name || '' },
-                                    icoUrl: { stringValue: item.icoUrl || '' },
-                                    rating: { stringValue: item.rating || '0' },
-                                    status: { stringValue: item.status || 'Уточнить' },
-                                    description: { stringValue: item.description || '' },
-                                    tags: {
-                                        arrayValue: {
-                                            values: tagsArray.map(tag => ({ stringValue: tag }))
-                                        }
-                                    }
-                                }
-                            }
+                            mapValue: { fields }
                         };
                     })
                 }

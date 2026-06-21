@@ -133,6 +133,7 @@ export function initializeDatabase() {
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             section TEXT NOT NULL,
             entity_name TEXT NOT NULL,
+            entity_section TEXT, 
             action TEXT NOT NULL,
             date TEXT NOT NULL,
             UNIQUE(section, entity_name)
@@ -284,8 +285,8 @@ export const statements = {
         VALUES (?, ?, ?)
     `),
     addLog: db.prepare(`
-        INSERT OR REPLACE INTO logs (section, entity_name, action, date)
-        VALUES (?, ?, ?, ?)
+        INSERT OR REPLACE INTO logs (section, entity_name, entity_section, action, date)
+        VALUES (?, ?, ?, ?, ?)
     `),
 
     getLogsBySection: db.prepare(`
@@ -339,7 +340,7 @@ export function saveAllLocalData(allData) {
                     if (item.tags && Array.isArray(item.tags)) {
                         for (const tag of item.tags) {
                             statements.addTagToCard.run(item.name, tag);
-                            statements.addOrUpdateTag.run(tag);
+                            statements.addOrUpdateTag.run(tag, 1);
                         }
                     }
                 }
@@ -550,10 +551,16 @@ export function saveLocalCardsData(section, cards) {
             card.status || 'Уточнить',
             card.description || ''
         );
+        let tagsArray = card.tags;
+        if (typeof tagsArray === 'string') {
+            // Если это строка — разбиваем по запятой
+            tagsArray = tagsArray.split(',').map(t => t.trim()).filter(t => t);
+        } else if (!Array.isArray(tagsArray)) {
+            tagsArray = [];
+        }
 
-        // ✅ 4. Добавляем теги для карточки
-        if (card.tags && Array.isArray(card.tags)) {
-            for (const tag of card.tags) {
+        for (const tag of tagsArray) {
+            if (tag) {
                 statements.addTagToCard.run(card.name, tag);
                 statements.addOrUpdateTag.run(tag, 1);
             }
@@ -603,11 +610,11 @@ export function getCardByNameAndSection(section, cardName) {
     return stmt.get(section, cardName);
 }
 
-export function writeLog(section, entityName, action) {
+export function writeLog(section, entityName, action, entitySection = null) {
     const date = new Date().toISOString();
 
     // 1. Пишем лог (замена, если уже есть)
-    statements.addLog.run(section, entityName, action, date);
+    statements.addLog.run(section, entityName, entitySection, action, date);
 
     // 2. Обновляем updated_at для этой секции
     const allSections = [
@@ -623,4 +630,8 @@ export function writeLog(section, entityName, action) {
     }
 
     console.log(`📝 Log: ${action} ${entityName} in ${section}`);
+}
+
+export function getExpectedReleaseByNameAndSection(cardName, section) {
+    return statements.getExpectedRelease.get(cardName, section);
 }
