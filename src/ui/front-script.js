@@ -116,7 +116,7 @@ function showSyncOverlay() {
                 
                 <!-- Прогресс-бар -->
                 <div style="width: 100%; height: 4px; background: rgba(255,255,255,0.1); border-radius: 4px; overflow: hidden; margin-bottom: 12px;">
-                    <div id="syncProgressBar" style="width: 0%; height: 100%; background: linear-gradient(90deg, #4a9eff, #6c5ce7); border-radius: 4px; transition: width 0.3s ease;"></div>
+                    <div id="syncProgressBar" style="width: 0; height: 100%; background: linear-gradient(90deg, #4a9eff, #6c5ce7); border-radius: 4px; transition: width 0.3s ease;"></div>
                 </div>
                 
                 <div style="display: flex; justify-content: space-between; font-size: 12px; opacity: 0.4;">
@@ -151,13 +151,15 @@ function updateSyncProgress(percent, statusText) {
 
 function hideSyncOverlay() {
     if (syncOverlay) {
-        // Плавное исчезновение
-        syncOverlay.style.transition = 'opacity 0.3s ease';
-        syncOverlay.style.opacity = '0';
+        // ✅ Даём время на отображение финального статуса
         setTimeout(() => {
-            syncOverlay.style.display = 'none';
-            syncOverlay.style.opacity = '1';
-        }, 300);
+            syncOverlay.style.transition = 'opacity 0.3s ease';
+            syncOverlay.style.opacity = '0';
+            setTimeout(() => {
+                syncOverlay.style.display = 'none';
+                syncOverlay.style.opacity = '1';
+            }, 300);
+        }, 500);
     }
 }
 
@@ -165,40 +167,38 @@ async function syncBeforeClose() {
     if (!currentUser) {
         return true;
     }
+
+    // ✅ Подписываемся на прогресс
     window.electronAPI.onSyncProgress(({ percent, status }) => {
         updateSyncProgress(percent, status);
     });
 
     try {
-        showSyncOverlay();
-        updateSyncProgress(5, 'Проверка соединения...');
+        updateSyncProgress(10, 'Проверка соединения...');
+        await new Promise(r => setTimeout(r, 50));
 
-        // Небольшая задержка для отрисовки
-        await new Promise(r => setTimeout(r, 100));
-
-        updateSyncProgress(15, 'Подготовка данных...');
+        updateSyncProgress(20, 'Подготовка данных...');
         const result = await window.electronAPI.syncAllDirtyWithProgress();
 
         if (!result.success) {
-            console.warn('[Sync] Не удалось синхронизировать:', result.error);
+            console.warn('[Sync] Sync failed:', result.error);
             updateSyncProgress(100, 'Ошибка синхронизации');
             await new Promise(r => setTimeout(r, 500));
 
-            const choice = await showConfirmModal(
+            return await showConfirmModal(
                 'Ошибка синхронизации',
                 `Не удалось сохранить данные: ${result.error || 'Неизвестная ошибка'}\n\nЗакрыть приложение без сохранения?`,
                 'Закрыть',
                 'Остаться'
             );
-            return choice;
         }
 
         updateSyncProgress(100, 'Готово!');
-        await new Promise(r => setTimeout(r, 400));
+        await new Promise(r => setTimeout(r, 300));
 
         return true;
     } catch (error) {
-        console.error('[Sync] Ошибка:', error);
+        console.error('[Sync] Error:', error);
         updateSyncProgress(100, 'Ошибка');
         await new Promise(r => setTimeout(r, 300));
 
@@ -208,9 +208,8 @@ async function syncBeforeClose() {
             'Закрыть',
             'Остаться'
         );
+
         return choice;
-    } finally {
-        hideSyncOverlay();
     }
 }
 
@@ -297,7 +296,6 @@ function renderHiddenSections() {
 
 const panel = document.getElementById('hiddenSectionsPanel');
 const menuBtn = document.getElementById('sectionsMenuBtn');
-const closeBtn = document.getElementById('closeHiddenPanel');
 
 
 function openPanel() {
@@ -465,7 +463,6 @@ function setupDragAndDrop() {
 
     document.addEventListener('dragover', (e) => {
         if (!isPanelOpen) {
-            // Если панель закрыта — запрещаем drop
             e.preventDefault();
             return;
         }
@@ -606,19 +603,6 @@ function setupDragAndDrop() {
 }
 
 
-
-
-
-
-
-// front-script.js
-
-// ====== ГЛОБАЛЬНЫЕ ПЕРЕМЕННЫЕ ======
-// ... все переменные ...
-
-// ====== ФУНКЦИИ ======
-// ... все функции (updateLampStatus, showError, и т.д.) ...
-
 // ====== ИНИЦИАЛИЗАЦИЯ ПРИ ЗАГРУЗКЕ ======
 document.addEventListener('DOMContentLoaded', async () => {
 
@@ -639,19 +623,39 @@ document.addEventListener('DOMContentLoaded', async () => {
         });
     }
 
+    // front-script.js
+
     if (closeBtn) {
         closeBtn.addEventListener('click', async () => {
             if (isClosing) return;
             isClosing = true;
+
+            console.log('[Close] Starting close process...');
+
             try {
-                updateLampStatus('idle');
-                await new Promise(r => setTimeout(r, 50));
+                showSyncOverlay();
+                updateSyncProgress(5, 'Подготовка к закрытию...');
+                await new Promise(r => setTimeout(r, 100));
+
                 const shouldClose = await syncBeforeClose();
+                console.log('[Close] shouldClose:', shouldClose);
+
                 if (shouldClose) {
+                    console.log('[Close] Closing window...');
+                    updateSyncProgress(100, 'Закрытие...');
+                    await new Promise(r => setTimeout(r, 300));
+                    hideSyncOverlay();
+
+
                     window.electronAPI.closeWindow();
+                } else {
+                    console.log('[Close] User cancelled close');
+                    hideSyncOverlay();
+                    isClosing = false;
                 }
             } catch (error) {
                 console.error('[Close] Error:', error);
+                hideSyncOverlay();
                 window.electronAPI.closeWindow();
             } finally {
                 isClosing = false;
@@ -669,16 +673,16 @@ document.addEventListener('DOMContentLoaded', async () => {
         if (user) {
             currentUser = user;
             updateAuthButton(user.email);
-            updateLampStatus('idle');
+            updateLampStatus('idle', 'Синхронизировано');
+            console.log('[Auth] User restored:', user.email);
         } else {
             currentUser = null;
             updateAuthButton(null);
             updateLampStatus('idle', 'Не авторизован');
-        }
-    });
+            showError('Сессия истекла. Пожалуйста, авторизуйтесь заново.');
 
-    window.electronAPI.onSyncRequired(async (syncData) => {
-        // ... существующий код ...
+
+        }
     });
 
     const savedUser = await window.electronAPI.authGetCurrentUser();
@@ -1155,7 +1159,7 @@ function showLoadingPreview() {
     const icon = document.querySelector('#previewCard .game-icon');
     if (icon && !icon.dataset.originalSrc) {
         icon.dataset.originalSrc = icon.src;
-        icon.src = 'assets/images/search-loading.gif';  // локальная гифка
+        icon.src = '../../assets/images/search-loading.gif';  // локальная гифка
     }
 }
 
@@ -2231,20 +2235,6 @@ document.addEventListener('DOMContentLoaded', async () => {
         updateLampStatus(data.status, data.message);
     });
 
-
-
-    window.electronAPI.onRestoreSession(async (user) => {
-        if (user) {
-            currentUser = user;
-            updateAuthButton(user.email);
-            updateLampStatus('idle', 'Синхр.');
-        } else {
-            currentUser = null;
-            updateAuthButton(null);
-            updateLampStatus('idle', 'Не авторизован');
-        }
-    });
-
     window.electronAPI.onSyncRequired(async (syncData) => {
         if (syncData.needChoice && syncData.localData && syncData.remoteData) {
             const { choice, modal } = await showSyncChoiceModal(
@@ -2941,7 +2931,7 @@ function showCategoryChangeModal(oldSection, itemName, icoUrl, status, rating, o
                 <option value="anime">Аниме</option>
                 <option value="books">Книги</option>
             </select>
-            <div style="margin-top: 20px; display: flex; justify-content: space-between;">
+            <div class="modal-actions">
                 <button class="modal-button cancel-btn">Отмена</button>
                 <button class="modal-button confirm-btn">Сохранить</button>
             </div>
@@ -3483,7 +3473,7 @@ function showConfirmModal(title, message, confirmText, cancelText) {
             <div class="modal-content" style="max-width: 400px;">
                 ${title ? `<h3>${title}</h3>` : ''}
                 <p>${message}</p>
-                <div style="margin-top: 20px; display: flex; justify-content: space-between;">
+                <div class="modal-actions">
                     <button class="modal-button cancel-btn">${cancelText}</button>
                     <button class="modal-button confirm-btn">${confirmText}</button>
                 </div>
@@ -3772,9 +3762,9 @@ function setupDeleteButtons() {
             confirmModal.innerHTML = `
                 <div class="modal-content" style="max-width: 300px;">
                     <p>Вы уверены, что хотите удалить "${itemName}"?</p>
-                    <div style="margin-top: 20px; display: flex; justify-content: space-between;">
+                    <div class="modal-actions">
                         <button class="modal-button cancel-btn delete-bt">Отмена</button>
-                        <button class="modal-button confirm-btn delete-bt" style="background-color: #e74c3c;">Удалить</button>
+                        <button class="modal-button confirm-btn delete-bt"">Удалить</button>
                     </div>
                 </div>
             `;
