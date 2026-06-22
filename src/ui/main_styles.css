@@ -211,6 +211,7 @@ body {
     overflow-y: auto; /* Включаем вертикальный скролл */
     overflow-x: hidden; /* Отключаем горизонтальный скролл */
     min-height: 500px;
+    padding: 5px;
 }
 
 /* Адаптация для мобильных устройств */
@@ -802,49 +803,60 @@ body {
 .modal {
     display: none;
     position: fixed;
-    z-index: 100;
+    z-index: 100000;  /* 👈 БЫЛО 100, СТАЛО 100000 */
     left: 0;
     top: 0;
     width: 100%;
     height: 100%;
     background-color: var(--dark-modal-back);
 }
+
+#authModal {
+    z-index: 100 !important;
+}
+
 /* Контейнер модального окна*/
 .modal-content {
     padding: 16px 20px;
     background-color: var(--dark-modal-background);
     margin: 15% auto;
     border-radius: 12px;
-    max-width: 320px;
-    min-width: 250px;
+
     text-align: center;
 }
 
+.modal-actions {
+    display: flex;
+    gap: 10px;
+    margin-top: 16px;
+    justify-content: flex-end;
+}
+
+.modal-button {
+    padding: 8px 20px;
+    border: none;
+    border-radius: 6px !important;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.15s ease;
+    height: 26px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    white-space: nowrap;
+    background: #2d2d2d;
+    color: #e0e0e0;
+
+    margin-top: 12px;
+    letter-spacing: 0.3px;
+
+}
 
 /* Внутри контейнера */
-.modal-button {
-    background: #2d2d2d;
-    border: 1px solid #4a4a4a;
-    border-radius: 6px !important;
-    padding: 6px 12px !important;
-    color: #e0e0e0;
-    font-size: 12px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-}
 
-.modal-button-close {
-    background: #2d2d2d;
-    border: 1px solid #4a4a4a;
-    border-radius: 6px !important;
-    padding: 6px 12px;
-    color: #e0e0e0;
-    font-size: 12px;
-    cursor: pointer;
-    transition: all 0.2s ease;
-    width: 100%;
-    margin-top: 12px;
-}
+
+
 .modal-button:hover {
     opacity: 0.8;
 }
@@ -862,10 +874,14 @@ body {
 }
 /* Для удаления */
 .modal-button.confirm-btn.delete-bt {
-    background-color: #8B0000;
+    background: #c80000;
+    color: white;
+    border: none;
+    box-shadow: 0 2px 8px rgba(200, 0, 0, 0.3);
 }
 .modal-button.confirm-btn.delete-bt:hover {
-    background-color: #A52A2A;
+    background: #e00000;
+    box-shadow: 0 4px 12px rgba(200, 0, 0, 0.4);
 }
 .modal-button.cancel-btn.delete-bt {
     background-color: #aaaaaa;

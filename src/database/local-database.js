@@ -94,9 +94,9 @@ export function initializeDatabase() {
     db.exec(`
         CREATE TABLE IF NOT EXISTS tags_assign (
             card_name TEXT,
+            section TEXT,
             tag_name TEXT,
-            PRIMARY KEY (card_name, tag_name),
-            FOREIGN KEY (card_name) REFERENCES data_cards (name)
+            PRIMARY KEY (card_name, section, tag_name)
         )
     `);
     db.exec(`
@@ -139,6 +139,21 @@ export function initializeDatabase() {
             UNIQUE(section, entity_name)
         )
     `);
+
+    //TODO: удалить после Лисы
+    try {
+        const tableInfo = db.prepare(`PRAGMA table_info(tags_assign)`).all();
+        const hasSectionColumn = tableInfo.some(col => col.name === 'section');
+
+        if (!hasSectionColumn) {
+            console.log('[DB] Adding section column...');
+            db.exec(`ALTER TABLE tags_assign ADD COLUMN section TEXT`);
+
+            console.log('[DB] Section column added and populated');
+        }
+    } catch (error) {
+        console.error('[DB] Error:', error);
+    }
 }
 initializeDatabase();
 
@@ -152,13 +167,15 @@ export const statements = {
         (name, section, ico_url, rating, status, description) 
         VALUES (?, ?, ?, ?, ?, ?)`),
     getDataBySection: db.prepare(`
-    SELECT 
+        SELECT 
             name, 
             ico_url as icoUrl, 
             rating, 
             status, 
             description,
-            (SELECT GROUP_CONCAT(tag_name, ',') FROM tags_assign WHERE card_name = data_cards.name) as tags
+            (SELECT GROUP_CONCAT(tag_name, ',') 
+             FROM tags_assign 
+             WHERE card_name = data_cards.name AND section = data_cards.section) as tags
         FROM data_cards 
         WHERE section = ?
     `),
@@ -194,18 +211,25 @@ export const statements = {
         DELETE FROM tags WHERE name = ? AND count <= 0
     `),
     getTagsByCard: db.prepare(`
-        SELECT tag_name FROM tags_assign WHERE card_name = ?
+        SELECT tag_name FROM tags_assign WHERE card_name = ? AND section = ?
+    `),
+    updateTagsCardName: db.prepare(`
+        UPDATE tags_assign SET card_name = ? WHERE card_name = ? AND section = ?
+    `),
+    deleteTagsBySection: db.prepare(`
+        DELETE FROM tags_assign WHERE section = ?
     `),
     addTagToCard: db.prepare(`
-        INSERT OR IGNORE INTO tags_assign (card_name, tag_name) VALUES (?, ?)
+        INSERT OR IGNORE INTO tags_assign (card_name, section, tag_name)
+        VALUES (?, ?, ?)
     `),
     removeTagFromCard: db.prepare(`
-        DELETE FROM tags_assign WHERE card_name = ? AND tag_name = ?
+        DELETE FROM tags_assign WHERE card_name = ? AND section = ? AND tag_name = ?
     `),
     clearAllTags: db.prepare('DELETE FROM tags'),
     getTagCount: db.prepare('SELECT count FROM tags WHERE name = ?'),
     clearCardTags: db.prepare(`
-        DELETE FROM tags_assign WHERE card_name = ?
+        DELETE FROM tags_assign WHERE card_name = ? AND section = ?
     `),
     searchTags: db.prepare(`
         SELECT name FROM tags WHERE name LIKE ? ORDER BY count DESC LIMIT 10
@@ -215,7 +239,7 @@ export const statements = {
         INSERT OR REPLACE INTO expected_releases (card_name, section, release_date, last_notification_date)
         VALUES (?, ?, ?, ?)
     `),
-    deleteExpectedRelease: db.prepare('DELETE FROM expected_releases WHERE card_name = ? AND section = ?'),  // ← ЭТОТ ОТСУТСТВОВАЛ
+    deleteExpectedRelease: db.prepare('DELETE FROM expected_releases WHERE card_name = ? AND section = ?'),
 
     getExpectedReleasesBySection: db.prepare(`
         SELECT er.*, dc.status, dc.section 
@@ -339,7 +363,7 @@ export function saveAllLocalData(allData) {
                     // Добавляем теги для карточки
                     if (item.tags && Array.isArray(item.tags)) {
                         for (const tag of item.tags) {
-                            statements.addTagToCard.run(item.name, tag);
+                            statements.addTagToCard.run(item.name, section, tag);
                             statements.addOrUpdateTag.run(tag, 1);
                         }
                     }
@@ -528,20 +552,23 @@ export function saveLocalFavoritesData(remoteFavorites) {
     }
 }
 
+// database/local-database.js
 
 export function saveLocalCardsData(section, cards) {
-    // ✅ 1. СНАЧАЛА удаляем ВСЕ связи тегов для карточек в этом разделе
-    const deleteTagsStmt = db.prepare(`
-        DELETE FROM tags_assign 
-        WHERE card_name IN (SELECT name FROM data_cards WHERE section = ?)
-    `);
-    deleteTagsStmt.run(section);
+    statements.deleteTagsBySection.run(section);
 
-    // ✅ 2. Удаляем все карточки в разделе
+    const deleteFavoritesStmt = db.prepare('DELETE FROM favorites WHERE section = ?');
+    deleteFavoritesStmt.run(section);
+
+
+    const deleteReleasesStmt = db.prepare('DELETE FROM expected_releases WHERE section = ?');
+    deleteReleasesStmt.run(section);
+
+
     const deleteCardsStmt = db.prepare('DELETE FROM data_cards WHERE section = ?');
     deleteCardsStmt.run(section);
 
-    // ✅ 3. Вставляем новые карточки
+    // 5. Вставляем карточки
     for (const card of cards) {
         statements.addData.run(
             card.name,
@@ -551,23 +578,17 @@ export function saveLocalCardsData(section, cards) {
             card.status || 'Уточнить',
             card.description || ''
         );
-        let tagsArray = card.tags;
-        if (typeof tagsArray === 'string') {
-            // Если это строка — разбиваем по запятой
-            tagsArray = tagsArray.split(',').map(t => t.trim()).filter(t => t);
-        } else if (!Array.isArray(tagsArray)) {
-            tagsArray = [];
-        }
 
-        for (const tag of tagsArray) {
-            if (tag) {
-                statements.addTagToCard.run(card.name, tag);
+        // 6. Добавляем теги с section
+        if (card.tags && Array.isArray(card.tags)) {
+            for (const tag of card.tags) {
+                statements.addTagToCard.run(card.name, section, tag);
                 statements.addOrUpdateTag.run(tag, 1);
             }
         }
     }
 
-    console.log(`✅ Saved ${cards.length} cards in ${section}`);
+    console.log(`Saved ${cards.length} cards in ${section}`);
 }
 
 export function getLocalUpdatedAt(section) {
@@ -583,7 +604,17 @@ export function updateLocalUpdatedAt(section, updatedAt) {
 }
 
 export function getAllCardsBySection(section) {
-    return statements.getDataBySection.all(section);
+    const cards = statements.getDataBySection.all(section);
+
+    for (const card of cards) {
+        if (card.tags) {
+            card.tags = card.tags.split(',').filter(t => t);
+        } else {
+            card.tags = [];
+        }
+    }
+
+    return cards;
 }
 
 export function clearLogs(section) {
@@ -603,11 +634,21 @@ export function getCardByNameAndSection(section, cardName) {
             rating, 
             status, 
             description,
-            (SELECT GROUP_CONCAT(tag_name, ',') FROM tags_assign WHERE card_name = data_cards.name) as tags
+            (SELECT GROUP_CONCAT(tag_name, ',') 
+             FROM tags_assign 
+             WHERE card_name = ? AND section = ?) as tags
         FROM data_cards 
         WHERE section = ? AND name = ?
     `);
-    return stmt.get(section, cardName);
+    const result = stmt.get(cardName, section, section, cardName);
+
+    if (result && result.tags) {
+        result.tags = result.tags.split(',').filter(t => t);
+    } else if (result) {
+        result.tags = [];
+    }
+
+    return result;
 }
 
 export function writeLog(section, entityName, action, entitySection = null) {

@@ -200,6 +200,6 @@ export async function updateAllReleaseDates() {
         await new Promise(resolve => setTimeout(resolve, 1000));
     }
 
-    LocalDatabase.statements.setStatistic.run('last_release_update', now.toISOString(), now.toISOString());
+    statements.setStatistic.run('last_release_update', now.toISOString(), now.toISOString());
     console.log('[Release] Update completed');
 }

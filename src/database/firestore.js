@@ -11,6 +11,7 @@ import {
     statements
 } from "./local-database.js";
 
+
 const firebaseConfig = {
     apiKey: "AIzaSyALdaI9VkFIkN_gTTJKohahnAcdZqCxgRQ",
     authDomain: "droplist-3fa8b.firebaseapp.com",
@@ -373,9 +374,8 @@ export async function getValidToken() {
             return idToken;
         } catch (error) {
             console.error('[x] Failed to refresh token:', error);
-            // Токен не обновился — нужно перелогиниваться
+            global.mainWindow.webContents.send('restore-session', null);
             clearUserSession();
-            return null;
         }
     }
 
